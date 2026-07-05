@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+pipeline/venv/
+pipeline/.venv/
+
+# Pipeline data (large, fetched — not committed)
+pipeline/data/raw/
+pipeline/data/snapshots/
+pipeline/data/build/
+*.db
+*.sqlite
+*.sqlite3
+
+# Android / Gradle
+app/.gradle/
+app/build/
+app/*/build/
+app/local.properties
+app/.idea/
+app/*.iml
+app/captures/
+app/.cxx/
+
+# Secrets
+.secrets/
+*.env
+.env*
+
+# OS
+.DS_Store
