@@ -12,8 +12,16 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   the SQLite data packs the app consumes. Intended to be split out into its own publicly
   published repo once the dataset is ready to release (spec §5, §8.7).
 - `app/` — Kotlin/Compose Android app (added later, per milestone order in spec §12).
+- `docs/ATTRIBUTIONS.md` — per-source license/attribution, read this before publishing anything.
+- `LICENSES/` — full text of every license the bundled data carries.
 
 ## Status
 
-M0 (pipeline PoC) in progress: ingest 5 core sources, build SQLite for ~1,000 characters,
-validate the phonetic detector against Dong Chinese's human-verified top-1000.
+- **M0 (pipeline PoC)** — done: ingest 5 core sources, phonetic detector validated against
+  Dong Chinese's human-verified etymologies.
+- **M1 (data pack v0.1)** — engineering done: full T1/T2 coverage (~42.8k characters, ~11.8k
+  with Middle+Old Chinese data), 3-stratum phonetic detector (pinyin/MC/OC), QA gates green,
+  core.db/ids.db license-layered split + FTS5 + open JSONL dump built. **Not yet done:**
+  actually publishing the dataset repo publicly — see `docs/ATTRIBUTIONS.md` first, in
+  particular the makemeahanzi LGPL-3.0 correction, which the spec's original source table
+  didn't flag.
