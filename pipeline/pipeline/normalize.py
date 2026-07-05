@@ -113,6 +113,20 @@ def build_entities(snapshot_paths: dict[str, Path]) -> dict[int, GlyphEntity]:
         e.opencc_traditional_of = opencc_st.get(cp, [])
 
         e.wiktextract_entries = wiktextract.get(cp, [])
+        for entry in e.wiktextract_entries:
+            for sound in entry.get("sounds", []):
+                tags = set(sound.get("tags", []))
+                value = sound.get("zh_pron")
+                if not value:
+                    continue
+                if tags == {"Middle-Chinese"}:
+                    e.readings.append(RawReading("mc_baxter", value, None, "wiktextract"))
+                elif tags == {"Old-Chinese", "Zhengzhang"}:
+                    e.readings.append(RawReading("oc_zz", value, None, "wiktextract"))
+                elif tags == {"Old-Chinese", "Baxter-Sagart"}:
+                    # stored for future display only; not used by the phonetic detector
+                    # (see oc_notation.py docstring for why Zhengzhang drives comparison)
+                    e.readings.append(RawReading("oc_bs", value, None, "wiktextract"))
 
         entities[cp] = e
 

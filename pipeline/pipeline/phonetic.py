@@ -1,19 +1,28 @@
-"""Phonetic detector (pinyin stratum) + series reliability rollup, spec §8.5.
+"""Phonetic detector (pinyin -> MC -> OC strata) + series reliability rollup, spec §8.5.
 
-Compares each direct component's own pinyin reading(s) against the parent
-character's, independent of makemeahanzi's editorial semantic/phonetic labels —
-the two are computed and displayed side by side (merge.component_function_claim
-carries the editorial version; this module carries the computed one).
+Compares each direct component's own reading(s) against the parent character's,
+independent of makemeahanzi's editorial semantic/phonetic labels — the two are
+computed and displayed side by side (merge.component_function_claim carries the
+editorial version; this module carries the computed one).
 
-MC/OC strata are deferred: those need dedicated Baxter/Baxter-Sagart notation
-parsers, called out in spec §15 as separate remaining engineering work. So for
-every row produced here, best_stratum is always "pinyin".
+Strata are tried modern-to-ancient (pinyin, then Middle Chinese, then Old
+Chinese) and the search stops at the first one that matches — that's the
+"last stratum where the link held" per spec §8.5, i.e. the drift explanation:
+a character whose phonetic connection only shows up in Old Chinese but not
+pinyin has clearly drifted apart since; one that still matches in pinyin
+hasn't. Per the schema's own match_class vocabulary (exact|tone|initial|
+rime|oc_only|opaque), a pinyin or MC match gets a real tier; an OC-only match
+is just flagged "oc_only" rather than sub-classified, since at that stratum
+the precise tier matters less than the "this is a historical/drifted
+connection" signal itself. Confidence is scaled down per stratum — a modern
+pinyin match is more legible/certain to a reader than a reconstruction-backed
+one.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pipeline import pinyin
+from pipeline import mc_notation, oc_notation, pinyin
 from pipeline.merge import ResolvedDecomposition, direct_component_ids
 from pipeline.normalize import GlyphEntity
 
@@ -27,15 +36,38 @@ class ComponentUseRow:
     match_class: str | None
     confidence: float | None
     resolution: str       # computed|single_source
+    stratum: str | None = None  # pinyin|mc|oc — internal bookkeeping for the series rollup
 
 
-def _pinyin_readings(e: GlyphEntity | None) -> list[str]:
+def _readings(e: GlyphEntity | None, system: str) -> list[str]:
     if e is None:
         return []
-    return [r.value for r in e.readings if r.system == "pinyin"]
+    return [r.value for r in e.readings if r.system == system]
 
 
-CONFIDENCE_BY_MATCH = {"exact": 0.95, "tone": 0.8, "initial": 0.55, "rime": 0.55}
+PINYIN_CONFIDENCE = {"exact": 0.95, "tone": 0.8, "initial": 0.55, "rime": 0.55}
+MC_CONFIDENCE = {"exact": 0.75, "tone": 0.65, "initial": 0.45, "rime": 0.45}
+OC_CONFIDENCE = 0.35
+
+
+def _detect_phonetic_match(parent: GlyphEntity | None, component_cp: int, entities: dict[int, GlyphEntity]) -> tuple[str, float, str] | None:
+    """Returns (match_class, confidence, stratum) for the first stratum (modern to
+    ancient) where the component's reading matches the parent's, or None."""
+    comp = entities.get(component_cp)
+
+    tier = pinyin.best_match(_readings(parent, "pinyin"), _readings(comp, "pinyin"))
+    if tier:
+        return tier, PINYIN_CONFIDENCE[tier], "pinyin"
+
+    tier = mc_notation.best_match(_readings(parent, "mc_baxter"), _readings(comp, "mc_baxter"))
+    if tier:
+        return tier, MC_CONFIDENCE[tier], "mc"
+
+    tier = oc_notation.best_match(_readings(parent, "oc_zz"), _readings(comp, "oc_zz"))
+    if tier:
+        return "oc_only", OC_CONFIDENCE, "oc"
+
+    return None
 
 
 def compute_component_use(
@@ -44,14 +76,15 @@ def compute_component_use(
     resolved: ResolvedDecomposition,
     semantic_claim_component: str | None,
 ) -> list[ComponentUseRow]:
-    parent_readings = _pinyin_readings(entities.get(glyph_cp))
+    parent = entities.get(glyph_cp)
     component_refs = direct_component_ids(resolved)
 
     rows: list[ComponentUseRow] = []
     for position, comp_ref in enumerate(component_refs):
+        is_semantic_claim = semantic_claim_component == comp_ref
+
         if comp_ref.startswith("ids:"):
             # unencoded compound sub-component: no reading of its own to compare.
-            is_semantic_claim = semantic_claim_component == comp_ref
             rows.append(ComponentUseRow(
                 glyph_id=glyph_cp, component_id=comp_ref, position=position,
                 function="semantic" if is_semantic_claim else "unknown",
@@ -61,22 +94,21 @@ def compute_component_use(
             continue
 
         comp_cp = ord(comp_ref)
-        comp_readings = _pinyin_readings(entities.get(comp_cp))
-        match_class = pinyin.best_match(parent_readings, comp_readings) if comp_readings else None
-        is_semantic_claim = semantic_claim_component == comp_ref
+        match = _detect_phonetic_match(parent, comp_cp, entities)
 
-        if match_class:
+        if match:
+            match_class, confidence, stratum = match
             function = "both" if is_semantic_claim else "phonetic"
-            confidence = CONFIDENCE_BY_MATCH[match_class]
             resolution = "computed"
         elif is_semantic_claim:
-            function, match_class, confidence, resolution = "semantic", None, 0.5, "single_source"
+            function, match_class, confidence, resolution, stratum = "semantic", None, 0.5, "single_source", None
         else:
-            function, confidence, resolution = "unknown", None, "computed"
+            function, match_class, confidence, resolution, stratum = "unknown", None, None, "computed", None
 
         rows.append(ComponentUseRow(
             glyph_id=glyph_cp, component_id=comp_ref, position=position,
-            function=function, match_class=match_class, confidence=confidence, resolution=resolution,
+            function=function, match_class=match_class, confidence=confidence,
+            resolution=resolution, stratum=stratum,
         ))
     return rows
 
@@ -86,12 +118,16 @@ class PhoneticSeriesRow:
     component_id: str
     member_count: int
     reliability: float
-    best_stratum: str = "pinyin"
+    best_stratum: str
+
+
+_STRATUM_RANK = {"pinyin": 3, "mc": 2, "oc": 1}
 
 
 def compute_phonetic_series(all_component_use_rows: list[ComponentUseRow], freq_rank: dict[int, int]) -> list[PhoneticSeriesRow]:
     """Frequency-weighted rollup of member match_classes for components acting as
-    phonetics in >=2 characters (a 'series' of one member isn't a series)."""
+    phonetics in >=2 characters (a 'series' of one member isn't a series).
+    best_stratum is the most modern stratum any member matched at."""
     by_component: dict[str, list[ComponentUseRow]] = {}
     for row in all_component_use_rows:
         if row.function in ("phonetic", "both") and row.match_class:
@@ -103,11 +139,16 @@ def compute_phonetic_series(all_component_use_rows: list[ComponentUseRow], freq_
             continue
         total_weight = 0.0
         weighted_sum = 0.0
+        best_stratum = "oc"
         for m in members:
-            glyph_cp = m.glyph_id
-            weight = 1.0 / max(1, freq_rank.get(glyph_cp, 10_000))
+            weight = 1.0 / max(1, freq_rank.get(m.glyph_id, 10_000))
             total_weight += weight
             weighted_sum += weight * (m.confidence or 0.0)
+            if m.stratum and _STRATUM_RANK[m.stratum] > _STRATUM_RANK[best_stratum]:
+                best_stratum = m.stratum
         reliability = weighted_sum / total_weight if total_weight else 0.0
-        out.append(PhoneticSeriesRow(component_id=component_id, member_count=len(members), reliability=reliability))
+        out.append(PhoneticSeriesRow(
+            component_id=component_id, member_count=len(members),
+            reliability=reliability, best_stratum=best_stratum,
+        ))
     return out

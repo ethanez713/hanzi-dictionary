@@ -14,7 +14,7 @@ from pathlib import Path
 
 from fetchers.common import SNAPSHOT_ROOT
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "build" / "hanzi-m0.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "data" / "build" / "hanzi.db"
 
 # (call, char, left, right) — only the first 3 string args matter for our comparison;
 # every semphon/phonsem/semsem call in the source is single-line (verified by

@@ -1,7 +1,14 @@
-"""M0 orchestrator: fetch snapshots -> normalize -> merge -> compute -> load SQLite.
+"""Pipeline orchestrator: fetch snapshots -> normalize -> merge -> compute -> load SQLite.
 
-Builds a data pack for the top ~1,000 characters by Unihan kHanyuPinlu frequency
-(spec milestone M0). Run `python -m pipeline.build` from pipeline/ after
+Builds a data pack covering full T1+T2 (spec §6, milestone M1): every character
+with both a decomposition and a reading (T2, ~20k+ per spec, ~42k in practice —
+more coverage than the spec's estimate, which is fine), tagging which subset
+additionally has Middle+Old Chinese data (T1, the ~4-5k with full drift
+analysis). T3 (decomposition-only, no reading at all) is deliberately out of
+scope: those are overwhelmingly obscure historical/dialectal CJK Extension
+characters far outside what spec §3's target user (a 300-2,000-character
+learner) would ever look up, so building it isn't worth the processing cost
+for a personal project. Run `python -m pipeline.build` from pipeline/ after
 `python -m fetchers.fetch_all`.
 """
 from __future__ import annotations
@@ -15,7 +22,6 @@ from pipeline import load, merge, normalize, phonetic
 from pipeline.normalize import GlyphEntity
 
 SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract"]
-DEFAULT_TOP_N = 1000
 BUILD_DIR = Path(__file__).resolve().parent.parent / "data" / "build"
 
 
@@ -35,10 +41,26 @@ def total_freq(e: GlyphEntity) -> int:
     return sum(r.freq for r in e.readings if r.freq)
 
 
-def select_top_n(entities: dict[int, GlyphEntity], n: int) -> list[int]:
-    candidates = [(cp, total_freq(e)) for cp, e in entities.items() if total_freq(e) > 0]
-    candidates.sort(key=lambda pair: -pair[1])
-    return [cp for cp, _ in candidates[:n]]
+def has_mc_oc(e: GlyphEntity) -> bool:
+    return any(r.system == "mc_baxter" for r in e.readings) and any(r.system == "oc_zz" for r in e.readings)
+
+
+def select_t1_t2(entities: dict[int, GlyphEntity]) -> list[int]:
+    """T2 membership (has decomposition + a Mandarin reading) is the inclusion
+    filter; ordering by frequency (where known) just makes freq_rank meaningful
+    for display/sorting, it isn't a cutoff. Characters with no frequency data
+    sort after all ranked ones, ordered by codepoint for determinism."""
+    candidates = [
+        cp for cp, e in entities.items()
+        if e.decompositions and any(r.system == "pinyin" for r in e.readings)
+    ]
+
+    def sort_key(cp: int) -> tuple[int, int]:
+        freq = total_freq(entities[cp])
+        return (0, -freq) if freq > 0 else (1, cp)
+
+    candidates.sort(key=sort_key)
+    return candidates
 
 
 def glyph_scripts(e: GlyphEntity) -> str:
@@ -60,7 +82,7 @@ def dedupe_readings(e: GlyphEntity) -> list[tuple[str, str, int | None]]:
     return [(system, value, freq) for (system, value), freq in seen.items()]
 
 
-def build(top_n: int = DEFAULT_TOP_N) -> Path:
+def build() -> Path:
     snapshot_paths = {name: latest_snapshot(name) for name in SOURCES}
     manifests = load_manifests(snapshot_paths)
 
@@ -68,22 +90,30 @@ def build(top_n: int = DEFAULT_TOP_N) -> Path:
     entities = normalize.build_entities(snapshot_paths)
     print(f"  {len(entities)} distinct codepoints across all sources")
 
-    selected = select_top_n(entities, top_n)
-    print(f"selected top {len(selected)} characters by kHanyuPinlu frequency")
+    selected = select_t1_t2(entities)
+    t1_count = sum(1 for cp in selected if has_mc_oc(entities[cp]))
+    print(f"selected {len(selected)} T1+T2 characters ({t1_count} of them T1: have MC+OC data too)")
+
+    # freq_rank reflects real frequency data only; T2 members without any
+    # kHanyuPinlu data get freq_rank=NULL rather than an arbitrary tail rank.
+    ranked_cps = [cp for cp in selected if total_freq(entities[cp]) > 0]
+    freq_rank_map = {cp: rank for rank, cp in enumerate(ranked_cps, start=1)}
 
     glyph_rows = []
     reading_rows = []
     decomposition_rows = []
     component_use_rows: list = []
+    component_use_objects: list[phonetic.ComponentUseRow] = []
     claim_rows = []
 
-    for rank, cp in enumerate(selected, start=1):
+    for cp in selected:
         e = entities[cp]
         gid = f"U+{cp:04X}"
+        rank = freq_rank_map.get(cp)
         glyph_rows.append((gid, e.char, glyph_scripts(e), e.total_strokes, rank, None))
 
         for system, value, freq in dedupe_readings(e):
-            reading_rows.append((gid, system, value, None, freq, "unihan"))
+            reading_rows.append((gid, system, value, None, freq, "unihan" if system not in ("mc_baxter", "oc_zz", "oc_bs") else "wiktextract"))
 
         for d in e.decompositions:
             decomposition_rows.append((gid, d.ids, d.region, d.source))
@@ -94,6 +124,7 @@ def build(top_n: int = DEFAULT_TOP_N) -> Path:
         if resolved:
             rows = phonetic.compute_component_use(cp, entities, resolved, semantic_component)
             for row in rows:
+                component_use_objects.append(row)
                 component_use_rows.append((
                     gid, row.component_id, row.position, row.function,
                     row.match_class, row.confidence, row.resolution,
@@ -119,19 +150,13 @@ def build(top_n: int = DEFAULT_TOP_N) -> Path:
         if d.from_glyph in selected_set and d.to_glyph in selected_set
     ]
 
-    freq_rank = {cp: rank for rank, cp in enumerate(selected, start=1)}
-    phonetic_component_use = [
-        phonetic.ComponentUseRow(glyph_id=int(gid[2:], 16), component_id=comp, position=pos,
-                                  function=func, match_class=mc, confidence=conf, resolution=res)
-        for (gid, comp, pos, func, mc, conf, res) in component_use_rows
-    ]
-    series_rows_typed = phonetic.compute_phonetic_series(phonetic_component_use, freq_rank)
+    series_rows_typed = phonetic.compute_phonetic_series(component_use_objects, freq_rank_map)
     phonetic_series_rows = [
         (s.component_id, s.member_count, s.reliability, s.best_stratum) for s in series_rows_typed
     ]
 
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
-    db_path = BUILD_DIR / "hanzi-m0.db"
+    db_path = BUILD_DIR / "hanzi.db"
     conn = load.init_db(db_path)
     load.load_sources(conn, manifests)
     load.load_glyphs(conn, glyph_rows)
@@ -152,7 +177,5 @@ def build(top_n: int = DEFAULT_TOP_N) -> Path:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Build the M0 SQLite data pack")
-    parser.add_argument("--top-n", type=int, default=DEFAULT_TOP_N)
-    args = parser.parse_args()
-    build(top_n=args.top_n)
+    argparse.ArgumentParser(description="Build the full T1/T2 SQLite data pack").parse_args()
+    build()
