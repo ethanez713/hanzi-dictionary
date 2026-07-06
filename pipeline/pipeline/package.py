@@ -21,6 +21,11 @@ CORE_DB = BUILD_DIR / "core.db"
 IDS_DB = BUILD_DIR / "ids.db"
 JSONL_DUMP = BUILD_DIR / "hanzi-dataset.jsonl"
 
+# Must match HanziDatabase.Schema.version in the app's SQLDelight-generated code, so
+# Android's SupportSQLiteOpenHelper opens the prebuilt pack without firing onCreate/
+# onUpgrade against it (the app ships these read-only, never migrates them).
+SCHEMA_USER_VERSION = 1
+
 DECOMPOSITION_DDL = """
 CREATE TABLE decomposition (
     glyph_id  TEXT NOT NULL,
@@ -48,6 +53,7 @@ def _copy_schema_and_data(src: sqlite3.Connection, dest_path: Path, tables: list
         if rows:
             placeholders = ",".join("?" * len(rows[0]))
             dest.executemany(f"INSERT INTO {table} VALUES ({placeholders})", rows)
+    dest.execute(f"PRAGMA user_version = {SCHEMA_USER_VERSION}")
     dest.commit()
     dest.close()
 
@@ -58,6 +64,7 @@ def build_ids_db(src: sqlite3.Connection) -> None:
     dest.executescript(DECOMPOSITION_DDL)
     rows = src.execute("SELECT glyph_id, ids, region, source_id FROM decomposition WHERE source_id='cjkvi-ids'").fetchall()
     dest.executemany("INSERT INTO decomposition VALUES (?,?,?,?)", rows)
+    dest.execute(f"PRAGMA user_version = {SCHEMA_USER_VERSION}")
     dest.commit()
     dest.close()
     print(f"ids.db: {len(rows)} cjkvi-ids decomposition rows (GPL)")

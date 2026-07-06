@@ -1,0 +1,85 @@
+package com.hanzidictionary.core
+
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import java.io.File
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+/**
+ * Exercises the repository against the real pipeline-built packs (not a synthetic
+ * fixture) so it doubles as an integration check that the shipped schema, the FTS5
+ * index, and the two-file core/ids split all line up with what the code expects.
+ * Requires `python -m pipeline.build && python -m pipeline.package` to have run.
+ */
+class HanziRepositoryTest {
+    private lateinit var coreDriver: JdbcSqliteDriver
+    private lateinit var idsDriver: JdbcSqliteDriver
+    private lateinit var repo: HanziRepository
+
+    @BeforeTest
+    fun setup() {
+        val buildDir = File("../../pipeline/data/build")
+        val core = File(buildDir, "core.db")
+        val ids = File(buildDir, "ids.db")
+        assertTrue(core.exists(), "core.db missing at ${core.absolutePath}; run pipeline.build + pipeline.package")
+        assertTrue(ids.exists(), "ids.db missing at ${ids.absolutePath}; run pipeline.package")
+        coreDriver = JdbcSqliteDriver("jdbc:sqlite:${core.absolutePath}")
+        idsDriver = JdbcSqliteDriver("jdbc:sqlite:${ids.absolutePath}")
+        repo = HanziRepository(coreDriver, idsDriver)
+    }
+
+    @AfterTest
+    fun teardown() {
+        coreDriver.close()
+        idsDriver.close()
+    }
+
+    @Test
+    fun searchByPinyinPrefixFoldsTones() {
+        val results = repo.search("qing")
+        assertTrue(results.isNotEmpty(), "qing should return results")
+        assertTrue(results.any { it.char == "请" || it.char == "青" }, "expected 请/青 among qing results")
+    }
+
+    @Test
+    fun searchBySingleCharRanksExactFirst() {
+        val results = repo.search("请")
+        assertEquals("请", results.first().char)
+    }
+
+    @Test
+    fun characterPageComputesPhoneticComponent() {
+        val page = repo.characterPageByChar("请")
+        assertNotNull(page)
+        assertTrue(page.readings.any { it.system == "pinyin" && it.value.startsWith("q") })
+        val phon = page.breakdown.firstOrNull { it.componentId == "青" }
+        assertNotNull(phon, "青 should appear as a component of 请")
+        assertEquals("phonetic", phon.function)
+    }
+
+    @Test
+    fun characterPageResolvesIdsFromIdsDb() {
+        val page = repo.characterPageByChar("请")
+        assertNotNull(page)
+        assertNotNull(page.ids, "请 should have a resolved decomposition")
+        assertTrue(page.ids!!.contains("青"), "请 decomposition should contain 青, got ${page.ids}")
+    }
+
+    @Test
+    fun componentPageListsPhoneticMembers() {
+        val page = repo.componentPage("青")
+        assertTrue(page.memberCount >= 2, "青 should be a phonetic series with multiple members")
+        assertTrue(page.phoneticMembers.any { it.char == "请" }, "请 should be a phonetic member of 青")
+    }
+
+    @Test
+    fun sourcesArePresentForProvenance() {
+        val sources = repo.sources()
+        assertTrue(sources.any { it.id == "makemeahanzi" && it.license.contains("LGPL") })
+        assertTrue(sources.any { it.id == "cjkvi-ids" })
+    }
+}

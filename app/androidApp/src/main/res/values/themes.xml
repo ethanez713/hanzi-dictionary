@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose supplies the real theming (Material 3 dynamic color in AppTheme); this
+         is just the launch/base theme the manifest points at. -->
+    <style name="Theme.HanziDictionary" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

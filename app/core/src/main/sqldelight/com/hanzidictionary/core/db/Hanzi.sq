@@ -1,0 +1,124 @@
+-- Schema mirrors the pipeline's schema.sql (spec §7). The app ships a prebuilt pack,
+-- so SQLDelight never runs these CREATE statements at runtime — they exist only so it
+-- can type the queries below. The FTS5 table (glyph_fts) is intentionally NOT declared
+-- here; it's queried via a raw driver call in the repository so SQLDelight's schema
+-- parser never has to deal with the virtual-table syntax.
+
+CREATE TABLE source (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    license     TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    version     TEXT NOT NULL,
+    ingest_date TEXT NOT NULL
+);
+
+CREATE TABLE glyph (
+    id           TEXT PRIMARY KEY,
+    char         TEXT NOT NULL,
+    scripts      TEXT NOT NULL,
+    stroke_count INTEGER,
+    freq_rank    INTEGER,
+    hsk          INTEGER
+);
+
+CREATE TABLE reading (
+    glyph_id   TEXT NOT NULL,
+    system     TEXT NOT NULL,
+    value      TEXT NOT NULL,
+    sense_hint TEXT,
+    freq       INTEGER,
+    source_id  TEXT NOT NULL
+);
+
+CREATE TABLE decomposition (
+    glyph_id  TEXT NOT NULL,
+    ids       TEXT NOT NULL,
+    region    TEXT,
+    source_id TEXT NOT NULL
+);
+
+CREATE TABLE component_use (
+    glyph_id     TEXT NOT NULL,
+    component_id TEXT NOT NULL,
+    position     INTEGER NOT NULL,
+    function     TEXT NOT NULL,
+    match_class  TEXT,
+    confidence   REAL,
+    resolution   TEXT NOT NULL
+);
+
+CREATE TABLE claim (
+    subject_id   TEXT NOT NULL,
+    predicate    TEXT NOT NULL,
+    value        TEXT NOT NULL,
+    source_id    TEXT NOT NULL,
+    source_ref   TEXT,
+    confidence   REAL,
+    retrieved_at TEXT NOT NULL
+);
+
+CREATE TABLE variant_edge (
+    from_glyph      TEXT NOT NULL,
+    to_glyph        TEXT NOT NULL,
+    relation        TEXT NOT NULL,
+    mapping_type    TEXT,
+    sense_condition TEXT,
+    source_id       TEXT NOT NULL
+);
+
+CREATE TABLE phonetic_series (
+    component_id TEXT PRIMARY KEY,
+    member_count INTEGER NOT NULL,
+    reliability  REAL NOT NULL,
+    best_stratum TEXT NOT NULL
+);
+
+-- ---- queries ----
+
+glyphByChar:
+SELECT * FROM glyph WHERE char = :char;
+
+glyphById:
+SELECT * FROM glyph WHERE id = :id;
+
+glyphsByIds:
+SELECT * FROM glyph WHERE id IN :ids;
+
+readingsForGlyph:
+SELECT * FROM reading WHERE glyph_id = :glyphId;
+
+decompositionsForGlyph:
+SELECT * FROM decomposition WHERE glyph_id = :glyphId;
+
+componentUseForGlyph:
+SELECT * FROM component_use WHERE glyph_id = :glyphId ORDER BY position;
+
+claimsForSubject:
+SELECT * FROM claim WHERE subject_id = :subjectId;
+
+variantsFrom:
+SELECT * FROM variant_edge WHERE from_glyph = :glyphId;
+
+variantsTo:
+SELECT * FROM variant_edge WHERE to_glyph = :glyphId;
+
+phoneticSeriesFor:
+SELECT * FROM phonetic_series WHERE component_id = :componentId;
+
+-- Characters that use :componentId, with the glyph's char + frequency for
+-- known-first / frequency ordering on the component page (spec §9).
+charactersUsingComponent:
+SELECT cu.glyph_id AS glyphId,
+       cu.function AS function,
+       cu.match_class AS matchClass,
+       cu.confidence AS confidence,
+       g.char AS char,
+       g.freq_rank AS freqRank
+FROM component_use cu
+JOIN glyph g ON g.id = cu.glyph_id
+WHERE cu.component_id = :componentId
+ORDER BY (g.freq_rank IS NULL), g.freq_rank;
+
+allSources:
+SELECT * FROM source;

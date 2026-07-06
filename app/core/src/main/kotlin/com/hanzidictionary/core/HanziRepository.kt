@@ -1,0 +1,248 @@
+package com.hanzidictionary.core
+
+import app.cash.sqldelight.db.QueryResult
+import app.cash.sqldelight.db.SqlCursor
+import app.cash.sqldelight.db.SqlDriver
+import com.hanzidictionary.core.db.HanziDatabase
+
+/**
+ * Read-only access over a prebuilt pack. The platform supplies a [SqlDriver] pointed at
+ * core.db and, optionally, a second [idsDriver] pointed at ids.db (cjkvi-ids
+ * decompositions, kept in a separate file so the GPL layer stays separate per spec §15).
+ *
+ * ids.db is opened as its own driver rather than ATTACHed, deliberately: both Android's
+ * SQLiteDatabase and SQLDelight's JDBC driver pool connections, and ATTACH does not
+ * reliably propagate across a connection pool — a query can land on a connection that
+ * never saw the ATTACH. Two drivers merged in Kotlin sidesteps that entirely, and keeps
+ * the two license layers physically separate (they are never combined into one file).
+ *
+ * FTS5 search and the ids.decomposition lookup go through raw driver queries; everything
+ * else uses generated SQLDelight queries.
+ */
+class HanziRepository(
+    private val driver: SqlDriver,
+    private val idsDriver: SqlDriver? = null,
+) {
+    private val db = HanziDatabase(driver)
+
+    // ---- search ----
+
+    fun search(query: String, limit: Int = 50): List<SearchResult> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+
+        val ordered = LinkedHashMap<String, SearchResult>()
+
+        // 1. exact single-character hit ranks first (spec §9 "exact char > word > pinyin")
+        if (q.length <= 2 && isSingleCjk(q)) {
+            db.hanziQueries.glyphByChar(q).executeAsList().forEach { g ->
+                ordered.putIfAbsent(g.id, g.toSearchResult())
+            }
+        }
+
+        // 2. FTS: pinyin prefix and/or char, then rank by frequency (nulls last)
+        val ftsMatch = buildFtsMatch(q) ?: return ordered.values.toList()
+        val ftsGlyphIds = ftsQuery(ftsMatch, limit * 4)
+        if (ftsGlyphIds.isNotEmpty()) {
+            val glyphs = db.hanziQueries.glyphsByIds(ftsGlyphIds).executeAsList()
+                .sortedWith(compareBy({ it.freq_rank == null }, { it.freq_rank }))
+            for (g in glyphs) ordered.putIfAbsent(g.id, g.toSearchResult())
+        }
+
+        return ordered.values.take(limit).toList()
+    }
+
+    private fun buildFtsMatch(q: String): String? {
+        val hasLatin = q.any { it in 'a'..'z' || it in 'A'..'Z' }
+        val hasCjk = q.any { isCjkChar(it) }
+        val clauses = mutableListOf<String>()
+        if (hasLatin) clauses += "pinyin:${sanitizeFts(q)}*"
+        if (hasCjk) clauses += "char:${sanitizeFts(q)}"
+        return clauses.joinToString(" OR ").ifEmpty { null }
+    }
+
+    private fun ftsQuery(match: String, limit: Int): Collection<String> {
+        val ids = LinkedHashSet<String>()
+        driver.executeQuery(
+            identifier = null,
+            sql = "SELECT glyph_id FROM glyph_fts WHERE glyph_fts MATCH ? LIMIT ?",
+            mapper = { cursor: SqlCursor ->
+                while (cursor.next().value) {
+                    cursor.getString(0)?.let { ids.add(it) }
+                }
+                QueryResult.Value(Unit)
+            },
+            parameters = 2,
+        ) {
+            bindString(0, match)
+            bindLong(1, limit.toLong())
+        }.value
+        return ids
+    }
+
+    // ---- character page ----
+
+    fun characterPage(glyphId: String): CharacterPage? {
+        val g = db.hanziQueries.glyphById(glyphId).executeAsOneOrNull() ?: return null
+
+        val readings = db.hanziQueries.readingsForGlyph(glyphId).executeAsList()
+            .map { ReadingView(it.system, it.value_, it.freq) }
+            .sortedWith(compareBy({ systemOrder(it.system) }, { it.freq?.let { f -> -f } ?: 0L }))
+
+        val breakdown = db.hanziQueries.componentUseForGlyph(glyphId).executeAsList().map { cu ->
+            val isPseudo = cu.component_id.startsWith("ids:")
+            ComponentBreakdown(
+                componentId = cu.component_id,
+                displayChar = if (isPseudo) null else cu.component_id,
+                position = cu.position.toInt(),
+                function = cu.function,
+                matchClass = cu.match_class,
+                confidence = cu.confidence,
+                navigable = !isPseudo,
+            )
+        }
+
+        val claims = db.hanziQueries.claimsForSubject(glyphId).executeAsList()
+            .map { ClaimView(it.predicate, it.value_, it.source_id, it.confidence) }
+
+        val variants = buildVariants(glyphId)
+
+        return CharacterPage(
+            glyphId = g.id,
+            char = g.char,
+            scripts = g.scripts,
+            strokeCount = g.stroke_count,
+            freqRank = g.freq_rank,
+            hsk = g.hsk,
+            readings = readings,
+            ids = resolvedIds(glyphId),
+            breakdown = breakdown,
+            claims = claims,
+            variants = variants,
+        )
+    }
+
+    fun characterPageByChar(char: String): CharacterPage? {
+        val g = db.hanziQueries.glyphByChar(char).executeAsList().firstOrNull() ?: return null
+        return characterPage(g.id)
+    }
+
+    private fun buildVariants(glyphId: String): List<VariantView> {
+        val edges = (db.hanziQueries.variantsFrom(glyphId).executeAsList() +
+            db.hanziQueries.variantsTo(glyphId).executeAsList()).distinct()
+        return edges.map { e ->
+            VariantView(
+                fromGlyph = e.from_glyph,
+                toGlyph = e.to_glyph,
+                fromChar = charOfGlyphId(e.from_glyph),
+                toChar = charOfGlyphId(e.to_glyph),
+                mappingType = e.mapping_type,
+            )
+        }
+    }
+
+    /** Prefer the cjkvi-ids decomposition (ids.db) matching pipeline merge priority;
+     * fall back to the makemeahanzi rows carried in core.db. */
+    private fun resolvedIds(glyphId: String): String? {
+        idsDriver?.let { d ->
+            rawSingleString(d, "SELECT ids FROM decomposition WHERE glyph_id = ? LIMIT 1", glyphId)
+                ?.let { return it }
+        }
+        return db.hanziQueries.decompositionsForGlyph(glyphId).executeAsList().firstOrNull()?.ids
+    }
+
+    // ---- component page ----
+
+    fun componentPage(componentId: String): ComponentPage {
+        val members = db.hanziQueries.charactersUsingComponent(componentId).executeAsList()
+        val phonetic = members.filter { it.function == "phonetic" || it.function == "both" }
+            .map { SeriesMember(it.glyphId, it.char, it.function, it.matchClass, it.freqRank) }
+        val semantic = members.filter { it.function == "semantic" || it.function == "both" }
+            .map { SeriesMember(it.glyphId, it.char, it.function, it.matchClass, it.freqRank) }
+
+        val series = db.hanziQueries.phoneticSeriesFor(componentId).executeAsOneOrNull()
+
+        val isPseudo = componentId.startsWith("ids:")
+        val ownReadings = if (isPseudo) emptyList() else {
+            db.hanziQueries.glyphByChar(componentId).executeAsList().firstOrNull()?.let { g ->
+                db.hanziQueries.readingsForGlyph(g.id).executeAsList()
+                    .map { ReadingView(it.system, it.value_, it.freq) }
+                    .sortedWith(compareBy({ systemOrder(it.system) }, { it.freq?.let { f -> -f } ?: 0L }))
+            } ?: emptyList()
+        }
+
+        return ComponentPage(
+            componentId = componentId,
+            char = if (isPseudo) null else componentId,
+            ownReadings = ownReadings,
+            memberCount = series?.member_count?.toInt() ?: members.size,
+            reliability = series?.reliability,
+            bestStratum = series?.best_stratum,
+            phoneticMembers = phonetic,
+            semanticMembers = semantic,
+        )
+    }
+
+    // ---- sources / provenance ----
+
+    fun sources(): List<SourceInfo> =
+        db.hanziQueries.allSources().executeAsList()
+            .map { SourceInfo(it.id, it.name, it.license, it.url, it.version) }
+
+    // ---- helpers ----
+
+    private fun rawSingleString(target: SqlDriver, sql: String, arg: String): String? {
+        var result: String? = null
+        target.executeQuery(
+            identifier = null,
+            sql = sql,
+            mapper = { cursor: SqlCursor ->
+                if (cursor.next().value) result = cursor.getString(0)
+                QueryResult.Value(Unit)
+            },
+            parameters = 1,
+        ) { bindString(0, arg) }.value
+        return result
+    }
+
+    private fun com.hanzidictionary.core.db.Glyph.toSearchResult(): SearchResult {
+        val py = db.hanziQueries.readingsForGlyph(id).executeAsList()
+            .filter { it.system == "pinyin" }
+            .maxByOrNull { it.freq ?: 0L }?.value_
+        return SearchResult(id, char, py, freq_rank)
+    }
+}
+
+// ---- pure helpers (no driver / no Android) ----
+
+fun charOfGlyphId(glyphId: String): String {
+    val cp = glyphId.removePrefix("U+").toInt(16)
+    return String(Character.toChars(cp))
+}
+
+fun glyphIdOfChar(char: String): String {
+    val cp = char.codePointAt(0)
+    return "U+%04X".format(cp)
+}
+
+private fun isCjkChar(c: Char): Boolean {
+    val block = Character.UnicodeBlock.of(c)
+    return block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS ||
+        block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A ||
+        block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS
+}
+
+private fun isSingleCjk(s: String): Boolean =
+    s.codePointCount(0, s.length) == 1 && s.codePointAt(0) >= 0x3400
+
+/** FTS5 is fed a bareword; strip anything that could be read as query syntax. */
+private fun sanitizeFts(q: String): String = q.filter { it.isLetterOrDigit() || isCjkChar(it) }
+
+private fun systemOrder(system: String): Int = when (system) {
+    "pinyin" -> 0
+    "jyutping" -> 1
+    "mc_baxter" -> 2
+    "oc_zz" -> 3
+    "oc_bs" -> 4
+    else -> 5
+}

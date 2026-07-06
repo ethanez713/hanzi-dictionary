@@ -25,3 +25,7 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   actually publishing the dataset repo publicly — see `docs/ATTRIBUTIONS.md` first, in
   particular the makemeahanzi LGPL-3.0 correction, which the spec's original source table
   didn't flag.
+- **M2 (app alpha)** — in progress: Kotlin/Compose app (`app/`) with search + character
+  page + component page over the offline pack. Core repository unit-tested against the real
+  pack (6/6), debug APK builds (~37 MB). Not yet done: camera OCR, imports, confusables,
+  audio (those are M3). See `app/README.md`.
