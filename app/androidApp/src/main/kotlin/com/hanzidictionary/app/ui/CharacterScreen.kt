@@ -32,8 +32,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.hanzidictionary.app.audio.SyllableAudioPlayer
 import com.hanzidictionary.core.CharacterPage
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.ReadingView
 import com.hanzidictionary.core.UserRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -45,6 +47,7 @@ import org.json.JSONObject
 fun CharacterScreen(
     repository: HanziRepository,
     userRepository: UserRepository,
+    audioPlayer: SyllableAudioPlayer,
     glyphId: String,
     onOpenComponent: (String) -> Unit,
     onOpenCharacter: (String) -> Unit,
@@ -80,7 +83,7 @@ fun CharacterScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            Header(p)
+            Header(p, audioPlayer)
             FilterChip(
                 selected = known,
                 onClick = {
@@ -100,17 +103,38 @@ fun CharacterScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Header(p: CharacterPage) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+private fun Header(p: CharacterPage, audioPlayer: SyllableAudioPlayer) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(p.char, fontSize = 72.sp)
-        val pinyin = p.readings.filter { it.system == "pinyin" }.joinToString("  ") { it.value }
-        if (pinyin.isNotEmpty()) Text(pinyin, fontSize = 22.sp)
+        // Every reading (多音字: all of them, spec §15) as its own tappable, audible chip.
+        val pinyinReadings = p.readings.filter { it.system == "pinyin" }.distinctBy { it.value }
+        if (pinyinReadings.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (r in pinyinReadings) ReadingChip(r, audioPlayer)
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             p.freqRank?.let { Chip("freq #$it") }
             p.hsk?.let { Chip("HSK $it") }
             Chip(scriptLabel(p.scripts))
             p.strokeCount?.let { Chip("$it strokes") }
+        }
+    }
+}
+
+@Composable
+private fun ReadingChip(reading: ReadingView, audioPlayer: SyllableAudioPlayer) {
+    val playable = audioPlayer.hasClip(reading.value)
+    Card(modifier = if (playable) Modifier.clickable { audioPlayer.play(reading.value) } else Modifier) {
+        Row(
+            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(reading.value, fontSize = 20.sp)
+            if (playable) Text("🔊", fontSize = 16.sp)
         }
     }
 }

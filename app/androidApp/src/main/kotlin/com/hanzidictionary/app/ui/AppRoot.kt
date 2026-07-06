@@ -6,6 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.hanzidictionary.app.audio.SyllableAudioPlayer
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.UserRepository
 import java.net.URLDecoder
@@ -21,6 +22,7 @@ fun AppRoot(
     repository: HanziRepository,
     userRepository: UserRepository,
     hskLevels: Map<Int, List<String>>,
+    audioPlayer: SyllableAudioPlayer,
 ) {
     val nav = rememberNavController()
 
@@ -41,6 +43,7 @@ fun AppRoot(
             CharacterScreen(
                 repository = repository,
                 userRepository = userRepository,
+                audioPlayer = audioPlayer,
                 glyphId = glyphId,
                 onOpenComponent = { componentId -> nav.navigate("component/${enc(componentId)}") },
                 onOpenCharacter = { gid -> nav.navigate("character/${enc(gid)}") },

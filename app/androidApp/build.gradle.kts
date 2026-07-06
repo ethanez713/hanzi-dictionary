@@ -39,10 +39,10 @@ android {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
 
-    // The bundled SQLite packs are already compact binary; don't let AAPT recompress
-    // them (it can corrupt random-access reads and wastes build time).
+    // SQLite packs are already-compact binary (don't recompress); WAV clips must stay
+    // uncompressed so they can be opened as asset file descriptors for playback.
     androidResources {
-        noCompress += listOf("db")
+        noCompress += listOf("db", "wav")
     }
 
     packaging {
