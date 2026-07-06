@@ -21,12 +21,17 @@ class HanziApp : Application() {
         UserRepository(AndroidSqliteDriver(UserRepository.Schema, this, "user.db"))
     }
 
+    /** One app-lifetime ML Kit recognizer: each getClient() call allocates a native
+     * client that is never closed here, so re-creating one per scan would leak. Lazy so
+     * ML Kit is only touched after the user opens the photos screen. */
+    private val textRecognizer by lazy { MlKitTextRecognizer(this) }
+
     /** Photo-library scanner bound to MediaStore + ML Kit. Built on demand (only after
      * the user grants photo permission and opens the photos screen). */
     fun createPhotoScanner(): PhotoScanner =
         PhotoScanner(
             source = MediaStorePhotoSource(this),
-            recognizer = MlKitTextRecognizer(this),
+            recognizer = textRecognizer,
             user = userRepository,
         )
 

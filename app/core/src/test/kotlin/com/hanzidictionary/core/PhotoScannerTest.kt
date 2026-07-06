@@ -87,5 +87,7 @@ class PhotoScannerTest {
     fun extractHanziKeepsOnlyDistinctCjkInOrder() {
         assertEquals(listOf("你", "好"), extractHanzi("你好, hello! 你"))
         assertEquals(emptyList(), extractHanzi("hello 123 !?"))
+        // supplementary-plane (Extension B) chars survive intact, Hangul is excluded
+        assertEquals(listOf("𠀀", "好"), extractHanzi("𠀀한好"))
     }
 }

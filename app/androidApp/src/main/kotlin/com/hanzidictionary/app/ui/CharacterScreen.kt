@@ -54,8 +54,12 @@ fun CharacterScreen(
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    // null page is ambiguous (still loading vs. not in the pack), so track load completion
+    // separately to give the not-found case its own state (spec §15 empty states).
+    var loaded by remember(glyphId) { mutableStateOf(false) }
     val page by produceState<CharacterPage?>(initialValue = null, glyphId) {
         value = withContext(Dispatchers.IO) { repository.characterPage(glyphId) }
+        loaded = true
     }
     var known by remember { mutableStateOf(false) }
     LaunchedEffect(glyphId) {
@@ -75,7 +79,10 @@ fun CharacterScreen(
     ) { padding ->
         val p = page
         if (p == null) {
-            Text("Loading…", Modifier.padding(padding).padding(16.dp))
+            Text(
+                if (loaded) "This character isn't in the data pack." else "Loading…",
+                Modifier.padding(padding).padding(16.dp),
+            )
             return@Scaffold
         }
         Column(

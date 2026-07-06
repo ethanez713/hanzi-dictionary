@@ -67,9 +67,9 @@ dependencies {
     implementation("app.cash.sqldelight:android-driver:2.0.2")
 
     // Unbundled ML Kit Chinese text recognition (model downloaded via Play Services, keeps
-    // the APK small per spec §9/§13). coroutines-play-services bridges its Task API.
+    // the APK small per spec §9/§13). Its Task API is consumed via blocking Tasks.await
+    // (play-services-tasks, pulled in transitively).
     implementation("com.google.android.gms:play-services-mlkit-text-recognition-chinese:16.0.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.charOfGlyphId
+import com.hanzidictionary.core.extractHanzi
 import com.hanzidictionary.core.glyphIdOfChar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -96,9 +97,7 @@ fun KnownScreen(
             Button(
                 enabled = pasteText.isNotBlank(),
                 onClick = {
-                    val ids = pasteText.mapNotNull { ch ->
-                        if (ch.code >= 0x3400) runCatching { glyphIdOfChar(ch.toString()) }.getOrNull() else null
-                    }.distinct()
+                    val ids = extractHanzi(pasteText).map { glyphIdOfChar(it) }
                     scope.launch {
                         withContext(Dispatchers.IO) { userRepository.importKnown(ids) }
                         pasteText = ""
