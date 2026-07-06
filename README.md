@@ -28,9 +28,12 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
 - **M2 (app alpha)** — done: Kotlin/Compose app (`app/`) with search + character page +
   component page over the offline pack. Core repository unit-tested against the real pack,
   debug APK builds (~37.5 MB). See `app/README.md`.
-- **M3 (beta)** — partially done. Done + verified: HSK levels (glyph.hsk + import picker),
-  confusables (Unihan kSpoofingVariant), and the known-characters model (on-device user DB,
+- **M3 (beta)** — mostly done. Verified in-sandbox: HSK levels (glyph.hsk + import picker),
+  confusables (Unihan kSpoofingVariant), the known-characters model (on-device user DB,
   "I know this", My Characters + HSK/paste import, known-first series ordering — the spec's
-  headline differentiator). Core suite 10/10. **Deferred pending device/perceptual
-  verification:** camera OCR (needs a camera; ML Kit) and the audio syllable bank (needs
-  ears to check tone correctness). Anki .apkg import deferred (needs a sample file).
+  headline differentiator), and photo-library scanning (scan recent camera-roll photos for
+  hanzi via ML Kit, watermark dedup — workflow logic unit-tested with fakes). Core suite
+  15/15. Audio syllable bank (Piper TTS, 1,559 clips) generated + wired to tappable
+  readings; structurally verified, **pending the user's ear-check for tone correctness**.
+  Live camera OCR dropped in favor of photo scanning. Anki .apkg import deferred (needs a
+  sample file).
