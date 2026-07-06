@@ -1,4 +1,4 @@
-# Hanzi Component Dictionary — Product Spec v1.1 (reviewed)
+# Hanzi Component Dictionary — Product Spec v1.2 (reviewed)
 
 ## 1. Overview
 
@@ -169,6 +169,7 @@ Default **off**; single onboarding toggle enables Firebase Analytics + Crashlyti
 - **M1 — Data pack v0.1:** full T1/T2 coverage, QA gates green, dataset repo public.
 - **M2 — App alpha:** search + character/component pages, offline pack install.
 - **M3 — Beta:** camera OCR, imports, confusables, audio, merger cards.
+- **M3.5 — Definitions & attributions:** CC-CEDICT ingested (character-page glosses, `word`/`word_char` populated, word search + word pages per §15); in-app attributions element live (§16).
 - **M4 — Launch:** Play listing, dataset docs, contribution templates, opt-in telemetry live.
 
 ## 13. Risks & Mitigations
@@ -198,3 +199,8 @@ SRS reviews with "component reunion" sessions, confusable quizzes seeded by `con
 - **UI language:** English-only v1; strings externalized for later localization.
 - **Accessibility & states:** TalkBack labels on breakdown strips and audio buttons; defined empty/error states for search-no-result, OCR-no-text, pack-download-failure.
 - **Remaining work that is engineering, not design:** deterministic parsers for Baxter MC notation and B-S OC notation (onset/rime extraction); phonetic detector compares against *all* readings of a component and takes the best match.
+
+## 16. v1.2 Addenda
+
+- **Definitions are an explicit v1 requirement, not implied.** M2/M3 shipped with `word`/`word_char` empty, so the app had no English glosses anywhere — unacceptable for a dictionary. Required: ingest CC-CEDICT; the character-page header's "top glosses" (§9 IA item 1) come from the character's own CC-CEDICT entries; populated `word`/`word_char` power "In your words" (§9 IA item 6), word-level search ranking (§9), and word pages (§15). Tracked as milestone M3.5.
+- **Attributions UI element.** The §15 "in-app attributions screen" is satisfied by a lightweight ⓘ info button (e.g. in the search screen's top bar) opening a dialog or simple screen that lists every `source` row — name, license, version, URL (`HanziRepository.sources()` already returns exactly this) — with access to the full license texts already collected in `LICENSES/`. Required before any public/Play release; the sideloaded alpha may ship without it, but M3.5 includes it so it isn't forgotten.

@@ -37,3 +37,6 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   readings; structurally verified, **pending the user's ear-check for tone correctness**.
   Live camera OCR dropped in favor of photo scanning. Anki .apkg import deferred (needs a
   sample file).
+- **M3.5 (definitions & attributions)** — added in spec v1.2: CC-CEDICT ingestion (the
+  `word`/`word_char` tables are currently empty, so the app shows no English glosses) plus
+  an in-app ⓘ attributions element (spec §16). Not started.
