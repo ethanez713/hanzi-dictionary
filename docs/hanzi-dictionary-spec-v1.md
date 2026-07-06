@@ -165,12 +165,18 @@ Default **off**; single onboarding toggle enables Firebase Analytics + Crashlyti
 
 ## 12. Milestones
 
+**Milestones are the complete work plan.** Every v1 requirement in this spec belongs to exactly one milestone below, so an implementer can work through the milestones without re-reading every section hunting for stragglers. If you find a spec requirement no milestone names, add it to a milestone before implementing — that drift is how definitions were missed the first time.
+
 - **M0 — Pipeline PoC:** ingest 5 core sources; SQLite for 1,000 chars; phonetic detector validated by **automated agreement check against Dong Chinese's human-verified top-1000** (private QA use — no license needed), with manual review only of disagreements.
 - **M1 — Data pack v0.1:** full T1/T2 coverage, QA gates green, dataset repo public.
 - **M2 — App alpha:** search + character/component pages, offline pack install.
-- **M3 — Beta:** camera OCR, imports, confusables, audio, merger cards.
-- **M3.5 — Definitions & attributions:** CC-CEDICT ingested (character-page glosses, `word`/`word_char` populated, word search + word pages per §15); in-app attributions element live (§16).
-- **M4 — Launch:** Play listing, dataset docs, contribution templates, opt-in telemetry live.
+- **M3 — Beta:** photo-library scanning (revised from live camera OCR, §16), HSK/paste imports, confusables, syllable audio bank, merger cards.
+- **M3.5 — Definitions & attributions:** CC-CEDICT ingested — character-page glosses, `word`/`word_char` populated, word search + word pages (§15), English FTS in the search ranking (§9), sense↔reading pairing shown where present (§15); in-app ⓘ attributions element (§16).
+- **M3.6 — Scholarly & component depth:** GlyphWiki script forms ingested (`script_form`) + the expandable scholarly tier on the character page (oracle→seal forms, OC/MC readings display, §9 IA item 4); component spoken names (~200 rows, §15) on breakdown strips and component pages; component-page positional variants (水/氵/氺) and function distribution (§9); coverage-tier / `resolution` honesty badges surfaced in the UI (§6, §7); prefer Wikimedia Commons syllable recordings where kaikki surfaces them (§9 Audio).
+- **M3.7 — Capture & search completion:** SEND-intent share target; paste-on-open; component-compose search off the IDS index as a search mode chip; fuzzy-search fallback (§9).
+- **M3.8 — App polish:** bundled subsetted Noto Sans SC + TC with explicit per-script typefaces (§9); stroke rendering from makemeahanzi medians via Compose Canvas (§9); confusables side-by-side diff highlighting + compare screen (§9); series browser (§9); Settings screen — script preference, explanation-depth default, pack updates (telemetry toggle lands with M4) (§9); TalkBack labels on breakdown strips and audio buttons + remaining defined empty/error states (§15); strings externalized (§15); provenance footer's prefilled GitHub-issue report link (§9); Anki `.apkg` and Pleco-export imports (§7).
+- **M3.9 — Pack updates:** semver data packs on GitHub Releases; delta downloads; manifest with SHA-256 + signature verified before install (§15); pack-download-failure state (§15); app fully offline afterward (§9).
+- **M4 — Launch:** Play listing + Data Safety disclosure (§10); dataset docs + contribution templates; conflict queue → GitHub issues loop on the dataset repo (§8); licensing/counsel review of the published merged dump and Baxter-Sagart ingestion path (§5, §13); opt-in telemetry (Firebase Analytics + Crashlytics, single toggle) live (§10).
 
 ## 13. Risks & Mitigations
 
@@ -204,3 +210,4 @@ SRS reviews with "component reunion" sessions, confusable quizzes seeded by `con
 
 - **Definitions are an explicit v1 requirement, not implied.** M2/M3 shipped with `word`/`word_char` empty, so the app had no English glosses anywhere — unacceptable for a dictionary. Required: ingest CC-CEDICT; the character-page header's "top glosses" (§9 IA item 1) come from the character's own CC-CEDICT entries; populated `word`/`word_char` power "In your words" (§9 IA item 6), word-level search ranking (§9), and word pages (§15). Tracked as milestone M3.5.
 - **Attributions UI element.** The §15 "in-app attributions screen" is satisfied by a lightweight ⓘ info button (e.g. in the search screen's top bar) opening a dialog or simple screen that lists every `source` row — name, license, version, URL (`HanziRepository.sources()` already returns exactly this) — with access to the full license texts already collected in `LICENSES/`. Required before any public/Play release; the sideloaded alpha may ship without it, but M3.5 includes it so it isn't forgotten.
+- **Capture revision (decided during M3).** Live camera OCR — viewfinder, single-character crop mode, N-best candidates — is replaced by **photo-library scanning**: the app OCRs the most recent camera-roll photos (watermark-deduped, READ_MEDIA_IMAGES) and surfaces found characters in a "From your photos" feed. §9's Capture paragraph is superseded to that extent; the SEND-intent share target, paste-on-open, system handwriting IME, and component-compose search entries remain (M3.7).

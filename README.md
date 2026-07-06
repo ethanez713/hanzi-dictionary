@@ -40,3 +40,6 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
 - **M3.5 (definitions & attributions)** — added in spec v1.2: CC-CEDICT ingestion (the
   `word`/`word_char` tables are currently empty, so the app shows no English glosses) plus
   an in-app ⓘ attributions element (spec §16). Not started.
+- **M3.6–M3.9** — added in spec v1.2: scholarly & component depth, capture/search
+  completion, app polish, and pack updates. Spec §12 is now the complete work plan —
+  every spec requirement belongs to exactly one milestone. None started.
