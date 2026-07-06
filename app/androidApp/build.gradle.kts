@@ -53,6 +53,8 @@ android {
 dependencies {
     implementation(project(":core"))
 
+    implementation("androidx.core:core-ktx:1.13.1")
+
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
@@ -63,6 +65,11 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     implementation("app.cash.sqldelight:android-driver:2.0.2")
+
+    // Unbundled ML Kit Chinese text recognition (model downloaded via Play Services, keeps
+    // the APK small per spec §9/§13). coroutines-play-services bridges its Task API.
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-chinese:16.0.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

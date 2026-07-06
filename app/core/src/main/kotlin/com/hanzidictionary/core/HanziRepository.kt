@@ -203,6 +203,13 @@ class HanziRepository(
         )
     }
 
+    /** Of [ids], the subset that exist as glyphs in the pack — used to drop dead links
+     * (e.g. an OCR'd character outside the T1/T2 coverage) before showing them. */
+    fun existingGlyphIds(ids: Collection<String>): Set<String> {
+        if (ids.isEmpty()) return emptySet()
+        return db.hanziQueries.glyphsByIds(ids.toList()).executeAsList().map { it.id }.toSet()
+    }
+
     // ---- sources / provenance ----
 
     fun sources(): List<SourceInfo> =

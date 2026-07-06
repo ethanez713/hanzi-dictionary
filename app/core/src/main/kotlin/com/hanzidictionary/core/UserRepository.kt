@@ -35,6 +35,19 @@ class UserRepository(driver: SqlDriver) {
 
     fun logLookup(glyphId: String) = q.logLookup(glyphId, now())
 
+    // ---- photo scan state ----
+
+    fun lastScanTimestamp(): Long = q.getLastScanTimestamp().executeAsOneOrNull() ?: 0L
+
+    fun setLastScanTimestamp(ts: Long) = q.setLastScanTimestamp(ts)
+
+    fun recordPhotoFind(glyphId: String, photoId: String, foundAt: Long) =
+        q.insertPhotoFind(glyphId, photoId, foundAt)
+
+    /** Distinct characters found in photos, most-recently-seen first. */
+    fun recentPhotoFinds(limit: Long = 200): List<PhotoFindRow> =
+        q.recentPhotoFinds(limit).executeAsList().map { PhotoFindRow(it.glyph_id, it.found_at ?: 0L) }
+
     private fun now(): Long = System.currentTimeMillis()
 
     companion object {

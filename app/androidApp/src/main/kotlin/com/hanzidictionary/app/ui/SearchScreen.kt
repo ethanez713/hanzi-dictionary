@@ -38,6 +38,7 @@ fun SearchScreen(
     repository: HanziRepository,
     onOpenCharacter: (String) -> Unit,
     onOpenKnown: () -> Unit,
+    onOpenPhotos: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
 
@@ -51,7 +52,10 @@ fun SearchScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Hanzi Dictionary") },
-                actions = { TextButton(onClick = onOpenKnown) { Text("My Characters") } },
+                actions = {
+                    TextButton(onClick = onOpenPhotos) { Text("Photos") }
+                    TextButton(onClick = onOpenKnown) { Text("Known") }
+                },
             )
         },
     ) { padding ->

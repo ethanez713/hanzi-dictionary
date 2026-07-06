@@ -20,6 +20,21 @@ CREATE TABLE confusion_event (
     ts      INTEGER NOT NULL
 );
 
+-- Watermark for the photo-library scan: the newest photo timestamp already scanned,
+-- so we never re-OCR photos taken before the last scan (single row, id = 0).
+CREATE TABLE scan_state (
+    id                   INTEGER NOT NULL PRIMARY KEY,
+    last_photo_timestamp INTEGER NOT NULL
+);
+
+-- Chinese characters recognized in the user's photos, powering the "From your photos"
+-- feed. A char can be found in several photos; this is an append log, deduped at read.
+CREATE TABLE photo_find (
+    glyph_id TEXT NOT NULL,
+    photo_id TEXT NOT NULL,
+    found_at INTEGER NOT NULL
+);
+
 -- ---- queries ----
 
 upsertKnown:
@@ -42,3 +57,16 @@ INSERT INTO lookup_event(item_id, ts) VALUES (?, ?);
 
 logConfusion:
 INSERT INTO confusion_event(glyph_a, glyph_b, ts) VALUES (?, ?, ?);
+
+getLastScanTimestamp:
+SELECT last_photo_timestamp FROM scan_state WHERE id = 0;
+
+setLastScanTimestamp:
+INSERT OR REPLACE INTO scan_state(id, last_photo_timestamp) VALUES (0, ?);
+
+insertPhotoFind:
+INSERT INTO photo_find(glyph_id, photo_id, found_at) VALUES (?, ?, ?);
+
+recentPhotoFinds:
+SELECT glyph_id, MAX(found_at) AS found_at FROM photo_find
+GROUP BY glyph_id ORDER BY found_at DESC LIMIT :limit;

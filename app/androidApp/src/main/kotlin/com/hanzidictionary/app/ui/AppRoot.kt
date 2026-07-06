@@ -30,6 +30,7 @@ fun AppRoot(
                 repository = repository,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onOpenKnown = { nav.navigate("known") },
+                onOpenPhotos = { nav.navigate("photos") },
             )
         }
         composable(
@@ -63,6 +64,14 @@ fun AppRoot(
             KnownScreen(
                 userRepository = userRepository,
                 hskLevels = hskLevels,
+                onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable("photos") {
+            PhotosScreen(
+                repository = repository,
+                userRepository = userRepository,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onBack = { nav.popBackStack() },
             )

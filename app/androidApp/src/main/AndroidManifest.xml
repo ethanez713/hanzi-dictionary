@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Persistent read access to the photo library for scanning recent photos.
+         READ_MEDIA_IMAGES is the API 33+ scoped-media permission; older devices fall
+         back to READ_EXTERNAL_STORAGE (capped so it isn't requested on 33+). -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <application
         android:name=".HanziApp"
         android:allowBackup="true"

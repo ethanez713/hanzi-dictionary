@@ -2,7 +2,10 @@ package com.hanzidictionary.app
 
 import android.app.Application
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import com.hanzidictionary.app.photo.MediaStorePhotoSource
+import com.hanzidictionary.app.photo.MlKitTextRecognizer
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.PhotoScanner
 import com.hanzidictionary.core.UserRepository
 import org.json.JSONObject
 
@@ -14,6 +17,15 @@ class HanziApp : Application() {
     val userRepository: UserRepository by lazy {
         UserRepository(AndroidSqliteDriver(UserRepository.Schema, this, "user.db"))
     }
+
+    /** Photo-library scanner bound to MediaStore + ML Kit. Built on demand (only after
+     * the user grants photo permission and opens the photos screen). */
+    fun createPhotoScanner(): PhotoScanner =
+        PhotoScanner(
+            source = MediaStorePhotoSource(this),
+            recognizer = MlKitTextRecognizer(this),
+            user = userRepository,
+        )
 
     /** HSK level -> glyph ids, from the bundled hsk-levels.json asset, for the import
      * picker (spec §7). Loaded once, lazily. */
