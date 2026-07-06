@@ -21,7 +21,7 @@ from fetchers.common import SNAPSHOT_ROOT
 from pipeline import load, merge, normalize, phonetic
 from pipeline.normalize import GlyphEntity
 
-SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract"]
+SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract", "hsk"]
 BUILD_DIR = Path(__file__).resolve().parent.parent / "data" / "build"
 
 
@@ -110,7 +110,7 @@ def build() -> Path:
         e = entities[cp]
         gid = f"U+{cp:04X}"
         rank = freq_rank_map.get(cp)
-        glyph_rows.append((gid, e.char, glyph_scripts(e), e.total_strokes, rank, None))
+        glyph_rows.append((gid, e.char, glyph_scripts(e), e.total_strokes, rank, e.hsk))
 
         for system, value, freq in dedupe_readings(e):
             reading_rows.append((gid, system, value, None, freq, "unihan" if system not in ("mc_baxter", "oc_zz", "oc_bs") else "wiktextract"))
@@ -155,6 +155,24 @@ def build() -> Path:
         (s.component_id, s.member_count, s.reliability, s.best_stratum) for s in series_rows_typed
     ]
 
+    # Confusables from Unihan kSpoofingVariant (authoritative visually-confusable pairs,
+    # Unicode-licensed). This replaces the spec's proposed stroke-median + IDS-differs-by-one
+    # computation: a bare IDS-differs-by-one marks every same-radical char (江/河) as
+    # confusable, which is noise, and doing it precisely needs the stroke-median (visual)
+    # signal from makemeahanzi's graphics.txt (Arphic PL), not yet ingested. kSpoofingVariant
+    # is the same product signal (spec §9 IA item 8) from a clean, authoritative source.
+    confusable_seen: set[tuple[int, int]] = set()
+    confusable_rows = []
+    for cp in selected:
+        for other in entities[cp].spoofing_variants:
+            if other not in selected_set:
+                continue
+            lo, hi = sorted((cp, other))
+            if (lo, hi) in confusable_seen:
+                continue
+            confusable_seen.add((lo, hi))
+            confusable_rows.append((f"U+{lo:04X}", f"U+{hi:04X}", "visual", None))
+
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     db_path = BUILD_DIR / "hanzi.db"
     conn = load.init_db(db_path)
@@ -166,13 +184,14 @@ def build() -> Path:
     load.load_claims(conn, claim_rows)
     load.load_variant_edges(conn, variant_edge_rows)
     load.load_phonetic_series(conn, phonetic_series_rows)
+    load.load_confusables(conn, confusable_rows)
     conn.commit()
     conn.close()
 
     print(f"built {db_path}")
     print(f"  glyphs={len(glyph_rows)} readings={len(reading_rows)} decompositions={len(decomposition_rows)}")
     print(f"  component_use={len(component_use_rows)} claims={len(claim_rows)}")
-    print(f"  variant_edges={len(variant_edge_rows)} phonetic_series={len(phonetic_series_rows)}")
+    print(f"  variant_edges={len(variant_edge_rows)} phonetic_series={len(phonetic_series_rows)} confusables={len(confusable_rows)}")
     return db_path
 
 

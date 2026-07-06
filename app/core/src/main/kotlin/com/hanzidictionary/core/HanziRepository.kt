@@ -106,6 +106,7 @@ class HanziRepository(
             .map { ClaimView(it.predicate, it.value_, it.source_id, it.confidence) }
 
         val variants = buildVariants(glyphId)
+        val confusables = buildConfusables(glyphId)
 
         return CharacterPage(
             glyphId = g.id,
@@ -119,8 +120,15 @@ class HanziRepository(
             breakdown = breakdown,
             claims = claims,
             variants = variants,
+            confusables = confusables,
         )
     }
+
+    private fun buildConfusables(glyphId: String): List<ConfusableView> =
+        db.hanziQueries.confusablesFor(glyphId).executeAsList().map { row ->
+            val otherId = if (row.glyph_a == glyphId) row.glyph_b else row.glyph_a
+            ConfusableView(otherId, charOfGlyphId(otherId), row.kind)
+        }
 
     fun characterPageByChar(char: String): CharacterPage? {
         val g = db.hanziQueries.glyphByChar(char).executeAsList().firstOrNull() ?: return null
@@ -153,12 +161,24 @@ class HanziRepository(
 
     // ---- component page ----
 
-    fun componentPage(componentId: String): ComponentPage {
+    /** [knownIds] reorders each series known-first (spec §1, §9): characters the user
+     * already knows float to the front, then by frequency. */
+    fun componentPage(componentId: String, knownIds: Set<String> = emptySet()): ComponentPage {
         val members = db.hanziQueries.charactersUsingComponent(componentId).executeAsList()
+
+        // known first (false sorts before true), then known freq rank, nulls last
+        val order = compareBy<SeriesMember>(
+            { it.glyphId !in knownIds },
+            { it.freqRank == null },
+            { it.freqRank ?: Long.MAX_VALUE },
+        )
+
         val phonetic = members.filter { it.function == "phonetic" || it.function == "both" }
             .map { SeriesMember(it.glyphId, it.char, it.function, it.matchClass, it.freqRank) }
+            .sortedWith(order)
         val semantic = members.filter { it.function == "semantic" || it.function == "both" }
             .map { SeriesMember(it.glyphId, it.char, it.function, it.matchClass, it.freqRank) }
+            .sortedWith(order)
 
         val series = db.hanziQueries.phoneticSeriesFor(componentId).executeAsOneOrNull()
 

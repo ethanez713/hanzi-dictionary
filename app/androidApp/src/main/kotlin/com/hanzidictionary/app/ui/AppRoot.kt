@@ -7,6 +7,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.UserRepository
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -16,7 +17,11 @@ private fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")
 private fun dec(s: String): String = URLDecoder.decode(s, "UTF-8")
 
 @Composable
-fun AppRoot(repository: HanziRepository) {
+fun AppRoot(
+    repository: HanziRepository,
+    userRepository: UserRepository,
+    hskLevels: Map<Int, List<String>>,
+) {
     val nav = rememberNavController()
 
     NavHost(navController = nav, startDestination = "search") {
@@ -24,6 +29,7 @@ fun AppRoot(repository: HanziRepository) {
             SearchScreen(
                 repository = repository,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onOpenKnown = { nav.navigate("known") },
             )
         }
         composable(
@@ -33,6 +39,7 @@ fun AppRoot(repository: HanziRepository) {
             val glyphId = dec(entry.arguments?.getString("glyphId").orEmpty())
             CharacterScreen(
                 repository = repository,
+                userRepository = userRepository,
                 glyphId = glyphId,
                 onOpenComponent = { componentId -> nav.navigate("component/${enc(componentId)}") },
                 onOpenCharacter = { gid -> nav.navigate("character/${enc(gid)}") },
@@ -46,7 +53,16 @@ fun AppRoot(repository: HanziRepository) {
             val componentId = dec(entry.arguments?.getString("componentId").orEmpty())
             ComponentScreen(
                 repository = repository,
+                userRepository = userRepository,
                 componentId = componentId,
+                onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable("known") {
+            KnownScreen(
+                userRepository = userRepository,
+                hskLevels = hskLevels,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onBack = { nav.popBackStack() },
             )

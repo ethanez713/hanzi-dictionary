@@ -95,7 +95,7 @@ def check_license_lint(manifests: dict[str, dict]) -> list[str]:
 
 
 def current_stats(conn: sqlite3.Connection) -> dict[str, int]:
-    tables = ["glyph", "reading", "decomposition", "component_use", "claim", "variant_edge", "phonetic_series"]
+    tables = ["glyph", "reading", "decomposition", "component_use", "claim", "variant_edge", "phonetic_series", "confusable"]
     return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables}
 
 

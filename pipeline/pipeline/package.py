@@ -20,6 +20,7 @@ SOURCE_DB = BUILD_DIR / "hanzi.db"
 CORE_DB = BUILD_DIR / "core.db"
 IDS_DB = BUILD_DIR / "ids.db"
 JSONL_DUMP = BUILD_DIR / "hanzi-dataset.jsonl"
+HSK_LEVELS = BUILD_DIR / "hsk-levels.json"
 
 # Must match HanziDatabase.Schema.version in the app's SQLDelight-generated code, so
 # Android's SupportSQLiteOpenHelper opens the prebuilt pack without firing onCreate/
@@ -146,6 +147,17 @@ def _group_by(conn: sqlite3.Connection, sql: str, key_idx: int) -> dict[str, lis
     return out
 
 
+def export_hsk_levels(src: sqlite3.Connection) -> None:
+    """Per-level character lists (as glyph ids) for the app's HSK-level import picker
+    (spec §7). Bundled as an app asset, not part of the published dataset repo."""
+    levels: dict[str, list[str]] = {}
+    for glyph_id, hsk in src.execute("SELECT id, hsk FROM glyph WHERE hsk IS NOT NULL ORDER BY freq_rank IS NULL, freq_rank"):
+        levels.setdefault(str(hsk), []).append(glyph_id)
+    HSK_LEVELS.write_text(json.dumps(levels, ensure_ascii=False, indent=0))
+    total = sum(len(v) for v in levels.values())
+    print(f"hsk-levels.json: {total} characters across {len(levels)} HSK levels")
+
+
 def package() -> None:
     if not SOURCE_DB.exists():
         raise FileNotFoundError(f"no build found at {SOURCE_DB}; run pipeline.build first")
@@ -153,6 +165,7 @@ def package() -> None:
     build_ids_db(src)
     build_core_db(src)
     export_jsonl(src)
+    export_hsk_levels(src)
     src.close()
 
 

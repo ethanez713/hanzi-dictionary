@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.ComponentPage
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SeriesMember
+import com.hanzidictionary.core.UserRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -36,12 +37,15 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ComponentScreen(
     repository: HanziRepository,
+    userRepository: UserRepository,
     componentId: String,
     onOpenCharacter: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     val page by produceState<ComponentPage?>(initialValue = null, componentId) {
-        value = withContext(Dispatchers.IO) { repository.componentPage(componentId) }
+        value = withContext(Dispatchers.IO) {
+            repository.componentPage(componentId, userRepository.knownIds())
+        }
     }
 
     Scaffold(

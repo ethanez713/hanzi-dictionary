@@ -1,9 +1,9 @@
-"""Run all M0 source fetchers. Each fetcher is idempotent (skips if already fetched)."""
+"""Run all source fetchers. Each fetcher is idempotent (skips if already fetched)."""
 from __future__ import annotations
 
 import argparse
 
-from fetchers import fetch_cjkvi_ids, fetch_makemeahanzi, fetch_opencc, fetch_unihan, fetch_wiktextract
+from fetchers import fetch_cjkvi_ids, fetch_hsk, fetch_makemeahanzi, fetch_opencc, fetch_unihan, fetch_wiktextract
 
 FETCHERS = [
     ("unihan", fetch_unihan.fetch),
@@ -11,6 +11,7 @@ FETCHERS = [
     ("cjkvi-ids", fetch_cjkvi_ids.fetch),
     ("opencc", fetch_opencc.fetch),
     ("wiktextract", fetch_wiktextract.fetch),
+    ("hsk", fetch_hsk.fetch),
 ]
 
 

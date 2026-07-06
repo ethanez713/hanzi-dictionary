@@ -14,6 +14,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,6 +37,7 @@ import kotlinx.coroutines.withContext
 fun SearchScreen(
     repository: HanziRepository,
     onOpenCharacter: (String) -> Unit,
+    onOpenKnown: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
 
@@ -45,7 +47,14 @@ fun SearchScreen(
         else withContext(Dispatchers.IO) { repository.search(q) }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Hanzi Dictionary") }) }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Hanzi Dictionary") },
+                actions = { TextButton(onClick = onOpenKnown) { Text("My Characters") } },
+            )
+        },
+    ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
             OutlinedTextField(
                 value = query,

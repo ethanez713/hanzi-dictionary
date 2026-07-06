@@ -9,10 +9,10 @@ import com.hanzidictionary.app.ui.AppTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository = (application as HanziApp).repository
+        val app = application as HanziApp
         setContent {
             AppTheme {
-                AppRoot(repository)
+                AppRoot(app.repository, app.userRepository, app.hskLevels)
             }
         }
     }

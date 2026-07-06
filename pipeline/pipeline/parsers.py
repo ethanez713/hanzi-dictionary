@@ -128,5 +128,25 @@ def parse_wiktextract_single_char(path: Path) -> dict[int, list[dict]]:
     return out
 
 
+def parse_hsk_char_levels(path: Path) -> dict[int, int]:
+    """complete.min.json entry: {"s": simplified, "l": ["n1","o2",...], ...}.
+    Returns {codepoint_int: lowest new-HSK (n1..n7) level of any word containing it}.
+    n7 is the combined HSK 7-9 band; we record it as level 7."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out: dict[int, int] = {}
+    for entry in data:
+        word = entry.get("s", "")
+        new_levels = [int(code[1:]) for code in entry.get("l", []) if code.startswith("n") and code[1:].isdigit()]
+        if not new_levels:
+            continue
+        level = min(new_levels)
+        for ch in word:
+            if "CJK UNIFIED IDEOGRAPH" in unicodedata.name(ch, ""):
+                cp = ord(ch)
+                if cp not in out or level < out[cp]:
+                    out[cp] = level
+    return out
+
+
 def nfc(s: str) -> str:
     return unicodedata.normalize("NFC", s)

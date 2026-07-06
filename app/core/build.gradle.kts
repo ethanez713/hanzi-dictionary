@@ -7,11 +7,19 @@ plugins {
 // per spec §9. SQLDelight generates against the same schema the pipeline ships.
 sqldelight {
     databases {
+        // Read-only content pack shipped by the pipeline; SQLDelight only reads it, so
+        // verifyMigrations stays off and the .sq schema must match the pipeline's.
         create("HanziDatabase") {
             packageName.set("com.hanzidictionary.core.db")
-            // We ship a prebuilt DB from the pipeline; SQLDelight only reads it, so
-            // verifyMigrations stays off and the .sq schema must match the pipeline's.
+            srcDirs.setFrom("src/main/sqldelight/hanzi")
             verifyMigrations.set(false)
+            deriveSchemaFromMigrations.set(false)
+        }
+        // App-owned, writable user state (known characters, lookup history). SQLDelight
+        // creates this one from the .sq schema on first open.
+        create("UserDatabase") {
+            packageName.set("com.hanzidictionary.core.userdb")
+            srcDirs.setFrom("src/main/sqldelight/user")
             deriveSchemaFromMigrations.set(false)
         }
     }

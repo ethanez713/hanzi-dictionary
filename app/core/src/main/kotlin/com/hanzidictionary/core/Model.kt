@@ -41,6 +41,12 @@ data class VariantView(
     val mappingType: String?,  // systematic|merger|irregular (unclassified)|...
 )
 
+data class ConfusableView(
+    val glyphId: String,
+    val char: String,
+    val kind: String,          // visual
+)
+
 data class CharacterPage(
     val glyphId: String,
     val char: String,
@@ -53,6 +59,7 @@ data class CharacterPage(
     val breakdown: List<ComponentBreakdown>,
     val claims: List<ClaimView>,
     val variants: List<VariantView>,
+    val confusables: List<ConfusableView>,
 )
 
 data class SeriesMember(

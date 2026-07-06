@@ -74,6 +74,13 @@ CREATE TABLE phonetic_series (
     best_stratum TEXT NOT NULL
 );
 
+CREATE TABLE confusable (
+    glyph_a TEXT NOT NULL,
+    glyph_b TEXT NOT NULL,
+    kind    TEXT NOT NULL,
+    diff    TEXT
+);
+
 -- ---- queries ----
 
 glyphByChar:
@@ -119,6 +126,9 @@ FROM component_use cu
 JOIN glyph g ON g.id = cu.glyph_id
 WHERE cu.component_id = :componentId
 ORDER BY (g.freq_rank IS NULL), g.freq_rank;
+
+confusablesFor:
+SELECT glyph_a, glyph_b, kind FROM confusable WHERE glyph_a = :glyphId OR glyph_b = :glyphId;
 
 allSources:
 SELECT * FROM source;

@@ -26,9 +26,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import com.hanzidictionary.core.CharacterPage
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.UserRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -36,13 +44,22 @@ import org.json.JSONObject
 @Composable
 fun CharacterScreen(
     repository: HanziRepository,
+    userRepository: UserRepository,
     glyphId: String,
     onOpenComponent: (String) -> Unit,
     onOpenCharacter: (String) -> Unit,
     onBack: () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     val page by produceState<CharacterPage?>(initialValue = null, glyphId) {
         value = withContext(Dispatchers.IO) { repository.characterPage(glyphId) }
+    }
+    var known by remember { mutableStateOf(false) }
+    LaunchedEffect(glyphId) {
+        known = withContext(Dispatchers.IO) {
+            userRepository.logLookup(glyphId)
+            userRepository.isKnown(glyphId)
+        }
     }
 
     Scaffold(
@@ -64,10 +81,20 @@ fun CharacterScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Header(p)
+            FilterChip(
+                selected = known,
+                onClick = {
+                    val newValue = !known
+                    known = newValue
+                    scope.launch(Dispatchers.IO) { userRepository.setKnown(glyphId, newValue) }
+                },
+                label = { Text(if (known) "✓ I know this" else "I know this") },
+            )
             BreakdownStrip(p, onOpenComponent)
             SoundLine(p)
             Formation(p)
             if (p.variants.isNotEmpty()) ScriptMapping(p, onOpenCharacter)
+            if (p.confusables.isNotEmpty()) Confusables(p, onOpenCharacter)
             Provenance(p)
         }
     }
@@ -147,18 +174,51 @@ private fun Formation(p: CharacterPage) {
 @Composable
 private fun ScriptMapping(p: CharacterPage, onOpenCharacter: (String) -> Unit) {
     SectionTitle("Simplified / Traditional")
+    // A merger = one simplified form standing in for several distinct traditional
+    // characters; warn because the traditional side isn't recoverable from the simplified
+    // one alone (spec §9 IA item 5 "merger warnings").
+    val mergerTargets = p.variants.groupBy { it.toGlyph }.filterValues { it.size > 1 }.keys
     for (v in p.variants) {
         Card(Modifier.fillMaxWidth()) {
-            Row(
-                Modifier.fillMaxWidth().padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(v.fromChar, fontSize = 28.sp, modifier = Modifier.clickable { onOpenCharacter(v.fromGlyph) })
-                Text("→")
-                Text(v.toChar, fontSize = 28.sp, modifier = Modifier.clickable { onOpenCharacter(v.toGlyph) })
-                v.mappingType?.let {
-                    Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(v.fromChar, fontSize = 28.sp, modifier = Modifier.clickable { onOpenCharacter(v.fromGlyph) })
+                    Text("→")
+                    Text(v.toChar, fontSize = 28.sp, modifier = Modifier.clickable { onOpenCharacter(v.toGlyph) })
+                    v.mappingType?.let {
+                        Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (v.mappingType == "merger" || v.toGlyph in mergerTargets) {
+                    Text(
+                        "⚠ Merger: ${v.toChar} stands in for multiple traditional characters — the traditional form can't be recovered from it alone.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Confusables(p: CharacterPage, onOpenCharacter: (String) -> Unit) {
+    SectionTitle("Easily confused with")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (c in p.confusables) {
+            Card(Modifier.clickable { onOpenCharacter(c.glyphId) }) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(p.char, fontSize = 28.sp)
+                    Text("vs", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(c.char, fontSize = 28.sp)
                 }
             }
         }

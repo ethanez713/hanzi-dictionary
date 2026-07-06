@@ -34,10 +34,12 @@ class GlyphEntity:
     readings: list[RawReading] = field(default_factory=list)
     decompositions: list[RawDecomposition] = field(default_factory=list)
     total_strokes: int | None = None
+    hsk: int | None = None
     simplified_variants: list[int] = field(default_factory=list)   # this char -> simpler form(s)
     traditional_variants: list[int] = field(default_factory=list)  # this char -> traditional form(s)
     opencc_simplified_of: list[int] = field(default_factory=list)  # this char (traditional) -> simplified form(s)
     opencc_traditional_of: list[int] = field(default_factory=list)  # this char (simplified) -> traditional form(s)
+    spoofing_variants: list[int] = field(default_factory=list)      # Unihan kSpoofingVariant: visually confusable with
     makemeahanzi: dict | None = None
     wiktextract_entries: list[dict] = field(default_factory=list)
 
@@ -59,6 +61,7 @@ def build_entities(snapshot_paths: dict[str, Path]) -> dict[int, GlyphEntity]:
     opencc_st = parsers.parse_opencc_char_table(snapshot_paths["opencc"] / "STCharacters.txt")
     opencc_ts = parsers.parse_opencc_char_table(snapshot_paths["opencc"] / "TSCharacters.txt")
     wiktextract = parsers.parse_wiktextract_single_char(snapshot_paths["wiktextract"] / "zh-single-char.jsonl")
+    hsk_levels = parsers.parse_hsk_char_levels(snapshot_paths["hsk"] / "complete.min.json") if "hsk" in snapshot_paths else {}
 
     all_codepoints = (
         set(readings_raw) | set(variants_raw) | set(irg_raw) | set(makemeahanzi)
@@ -86,10 +89,13 @@ def build_entities(snapshot_paths: dict[str, Path]) -> dict[int, GlyphEntity]:
         variant_fields = variants_raw.get(cp, {})
         for value in variant_fields.get("kSimplifiedVariant", []):
             for v in value.split(" "):
-                e.simplified_variants.append(parsers.cp_to_int(v))
+                e.simplified_variants.append(parsers.cp_to_int(v.split("<")[0]))
         for value in variant_fields.get("kTraditionalVariant", []):
             for v in value.split(" "):
-                e.traditional_variants.append(parsers.cp_to_int(v))
+                e.traditional_variants.append(parsers.cp_to_int(v.split("<")[0]))
+        for value in variant_fields.get("kSpoofingVariant", []):
+            for v in value.split(" "):
+                e.spoofing_variants.append(parsers.cp_to_int(v.split("<")[0]))
 
         irg_fields = irg_raw.get(cp, {})
         if irg_fields.get("kTotalStrokes"):
@@ -111,6 +117,7 @@ def build_entities(snapshot_paths: dict[str, Path]) -> dict[int, GlyphEntity]:
 
         e.opencc_simplified_of = opencc_ts.get(cp, [])
         e.opencc_traditional_of = opencc_st.get(cp, [])
+        e.hsk = hsk_levels.get(cp)
 
         e.wiktextract_entries = wiktextract.get(cp, [])
         for entry in e.wiktextract_entries:

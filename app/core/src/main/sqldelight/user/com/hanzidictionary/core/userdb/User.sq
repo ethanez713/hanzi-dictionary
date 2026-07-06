@@ -1,0 +1,44 @@
+-- On-device user state (spec §7 "On-device user DB (separate)"). App-owned and
+-- writable, kept in its own file so it's never entangled with the read-only content
+-- pack. SRS columns are reserved in status for the deferred review feature (spec §14).
+
+CREATE TABLE known_item (
+    item_id  TEXT NOT NULL PRIMARY KEY,   -- glyph id "U+XXXX" (word ids later)
+    kind     TEXT NOT NULL,               -- character (word later)
+    status   TEXT NOT NULL,               -- known (SRS statuses reserved)
+    added_at INTEGER NOT NULL
+);
+
+CREATE TABLE lookup_event (
+    item_id TEXT NOT NULL,
+    ts      INTEGER NOT NULL
+);
+
+CREATE TABLE confusion_event (
+    glyph_a TEXT NOT NULL,
+    glyph_b TEXT NOT NULL,
+    ts      INTEGER NOT NULL
+);
+
+-- ---- queries ----
+
+upsertKnown:
+INSERT OR REPLACE INTO known_item(item_id, kind, status, added_at) VALUES (?, ?, ?, ?);
+
+deleteKnown:
+DELETE FROM known_item WHERE item_id = :itemId;
+
+isKnown:
+SELECT COUNT(*) > 0 FROM known_item WHERE item_id = :itemId AND status = 'known';
+
+allKnownIds:
+SELECT item_id FROM known_item WHERE status = 'known';
+
+knownCount:
+SELECT COUNT(*) FROM known_item WHERE status = 'known';
+
+logLookup:
+INSERT INTO lookup_event(item_id, ts) VALUES (?, ?);
+
+logConfusion:
+INSERT INTO confusion_event(glyph_a, glyph_b, ts) VALUES (?, ?, ?);
