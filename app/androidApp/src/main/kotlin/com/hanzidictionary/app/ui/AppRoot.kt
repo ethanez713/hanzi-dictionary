@@ -6,23 +6,27 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.hanzidictionary.app.audio.SyllableAudioPlayer
+import android.net.Uri
+import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.UserRepository
-import java.net.URLDecoder
-import java.net.URLEncoder
 
 /** Route arguments can be CJK chars or "ids:⿰..." pseudo-ids, neither URL-safe, so
- * every id crossing a route boundary is URL-encoded here and decoded in the screen. */
-private fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")
-private fun dec(s: String): String = URLDecoder.decode(s, "UTF-8")
+ * every id crossing a route boundary is percent-encoded here and decoded in the screen.
+ *
+ * Uses android.net.Uri, not java.net.URLEncoder: URLEncoder does form-encoding, which
+ * turns spaces into '+' and, on the way back, '+' into a space — corrupting glyph ids
+ * like "U+597D". Uri.decode only reverses percent-escapes and leaves '+' alone, so it's
+ * also idempotent if Navigation has already decoded the path argument. */
+private fun enc(s: String): String = Uri.encode(s)
+private fun dec(s: String): String = Uri.decode(s)
 
 @Composable
 fun AppRoot(
     repository: HanziRepository,
     userRepository: UserRepository,
     hskLevels: Map<Int, List<String>>,
-    audioPlayer: SyllableAudioPlayer,
+    tts: MandarinTts,
 ) {
     val nav = rememberNavController()
 
@@ -43,7 +47,7 @@ fun AppRoot(
             CharacterScreen(
                 repository = repository,
                 userRepository = userRepository,
-                audioPlayer = audioPlayer,
+                tts = tts,
                 glyphId = glyphId,
                 onOpenComponent = { componentId -> nav.navigate("component/${enc(componentId)}") },
                 onOpenCharacter = { gid -> nav.navigate("character/${enc(gid)}") },

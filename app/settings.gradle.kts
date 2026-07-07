@@ -11,6 +11,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Scoped to requery only: its FTS5-enabled SQLite (com.github.requery:sqlite-android)
+        // is published via JitPack, not Maven Central. Content filter keeps every other
+        // dependency resolving from the trusted repos above.
+        maven("https://jitpack.io") {
+            content { includeGroup("com.github.requery") }
+        }
     }
 }
 

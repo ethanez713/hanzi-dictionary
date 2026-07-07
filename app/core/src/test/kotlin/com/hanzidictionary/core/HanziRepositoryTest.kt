@@ -86,6 +86,15 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun characterPageCarriesDefinition() {
+        val page = repo.characterPageByChar("请")
+        assertNotNull(page)
+        val def = page.definition
+        assertNotNull(def, "请 should carry a Unihan kDefinition gloss")
+        assertTrue("ask" in def || "request" in def, "unexpected 请 gloss: $def")
+    }
+
+    @Test
     fun characterPageCarriesHskLevel() {
         val page = repo.characterPageByChar("请")
         assertNotNull(page)

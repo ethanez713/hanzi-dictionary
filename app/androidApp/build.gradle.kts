@@ -5,7 +5,9 @@ plugins {
 
 android {
     namespace = "com.hanzidictionary.app"
-    compileSdk = 34
+    // compileSdk 35 required by requery 3.49.0 (its AAR sets minCompileSdk=35). 35 also
+    // brings the 16 KB-page toolchain; needs AGP 8.6+ (see root build.gradle.kts).
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.hanzidictionary.app"
@@ -39,10 +41,9 @@ android {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
 
-    // SQLite packs are already-compact binary (don't recompress); WAV clips must stay
-    // uncompressed so they can be opened as asset file descriptors for playback.
+    // SQLite packs are already-compact binary (don't recompress).
     androidResources {
-        noCompress += listOf("db", "wav")
+        noCompress += listOf("db")
     }
 
     packaging {
@@ -65,6 +66,16 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     implementation("app.cash.sqldelight:android-driver:2.0.2")
+
+    // Android's framework SQLite is not built with SQLITE_ENABLE_FTS5 (confirmed absent
+    // even on the S25 / Android 16), so the pack's glyph_fts MATCH query throws
+    // "no such module: fts5". requery ships a modern SQLite .so compiled with FTS5
+    // (-DSQLITE_ENABLE_FTS5 in its Android.mk); we point the pack drivers at it via
+    // RequerySQLiteOpenHelperFactory. Distributed via JitPack (see settings.gradle.kts).
+    // 3.49.0 ships FTS5 with 16 KB-page-aligned native libs (required by Android 15/16;
+    // 3.45.0's libsqlite3x.so was not aligned and triggered a compat warning). Needs
+    // compileSdk 35 (minCompileSdk in its AAR metadata).
+    implementation("com.github.requery:sqlite-android:3.49.0")
 
     // Unbundled ML Kit Chinese text recognition (model downloaded via Play Services, keeps
     // the APK small per spec §9/§13). Its Task API is consumed via blocking Tasks.await

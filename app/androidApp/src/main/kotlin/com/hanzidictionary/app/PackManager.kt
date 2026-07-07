@@ -7,6 +7,8 @@ import app.cash.sqldelight.db.SqlSchema
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.db.HanziDatabase
+import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
+import java.io.File
 
 /**
  * Installs the bundled data packs on first run (copying core.db + ids.db out of assets
@@ -23,7 +25,7 @@ object PackManager {
 
     // Bump when a shipped pack changes so an installed app re-copies it. This is the
     // in-APK bundled version; the GitHub-Releases delta-update path (spec §9) is later.
-    private const val BUNDLED_PACK_VERSION = 1
+    private const val BUNDLED_PACK_VERSION = 2
     private const val PREFS = "pack"
     private const val KEY_INSTALLED_VERSION = "installed_version"
 
@@ -43,8 +45,12 @@ object PackManager {
 
     fun openRepository(context: Context): HanziRepository {
         ensureInstalled(context)
-        val coreDriver = AndroidSqliteDriver(HanziDatabase.Schema, context, CORE_DB)
-        val idsDriver = AndroidSqliteDriver(noOpIdsSchema, context, IDS_DB)
+        // Read both prebuilt packs through requery's bundled SQLite rather than the
+        // framework engine: core.db's search relies on an FTS5 index the framework
+        // SQLite can't open on many devices (see build.gradle dependency comment).
+        val factory = RequerySQLiteOpenHelperFactory()
+        val coreDriver = AndroidSqliteDriver(HanziDatabase.Schema, context, CORE_DB, factory)
+        val idsDriver = AndroidSqliteDriver(noOpIdsSchema, context, IDS_DB, factory)
         return HanziRepository(coreDriver, idsDriver)
     }
 
@@ -62,6 +68,11 @@ object PackManager {
     private fun copyAsset(context: Context, name: String) {
         val dest = context.getDatabasePath(name)
         dest.parentFile?.mkdirs()
+        // A stale WAL/journal sidecar left by a previous install would be replayed
+        // against the freshly copied file and read as corruption — drop them first.
+        for (suffix in listOf("", "-wal", "-shm", "-journal")) {
+            File(dest.path + suffix).delete()
+        }
         context.assets.open(name).use { input ->
             dest.outputStream().use { output -> input.copyTo(output) }
         }

@@ -2,7 +2,7 @@ package com.hanzidictionary.app
 
 import android.app.Application
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
-import com.hanzidictionary.app.audio.SyllableAudioPlayer
+import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.photo.MediaStorePhotoSource
 import com.hanzidictionary.app.photo.MlKitTextRecognizer
 import com.hanzidictionary.core.HanziRepository
@@ -13,7 +13,7 @@ import org.json.JSONObject
 class HanziApp : Application() {
     val repository: HanziRepository by lazy { PackManager.openRepository(this) }
 
-    val audioPlayer: SyllableAudioPlayer by lazy { SyllableAudioPlayer(this) }
+    val tts: MandarinTts by lazy { MandarinTts(this) }
 
     /** Writable, app-owned user state (known characters, history). SQLDelight creates
      * user.db from its schema on first open. */

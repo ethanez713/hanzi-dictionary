@@ -29,7 +29,7 @@ def load_sources(conn: sqlite3.Connection, manifests: dict[str, dict]) -> None:
 
 
 def load_glyphs(conn: sqlite3.Connection, glyphs: list[tuple]) -> None:
-    conn.executemany("INSERT INTO glyph VALUES (?,?,?,?,?,?)", glyphs)
+    conn.executemany("INSERT INTO glyph VALUES (?,?,?,?,?,?,?)", glyphs)
 
 
 def load_readings(conn: sqlite3.Connection, readings: list[tuple]) -> None:

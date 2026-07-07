@@ -9,6 +9,15 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <!-- Package-visibility exemption for the device's TTS engine: without this, apps
+         targeting API 30+ can't bind any TTS service (AppsFilter blocks it silently and
+         MandarinTts never becomes available). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".HanziApp"
         android:allowBackup="true"

@@ -103,17 +103,17 @@ def build_core_db(src: sqlite3.Connection) -> None:
 def export_jsonl(src: sqlite3.Connection) -> None:
     sources = {row[0]: dict(zip(("name", "license", "url", "version"), row[1:])) for row in src.execute("SELECT id, name, license, url, version FROM source")}
 
-    glyphs = src.execute("SELECT id, char, scripts, stroke_count, freq_rank, hsk FROM glyph ORDER BY id").fetchall()
+    glyphs = src.execute("SELECT id, char, scripts, stroke_count, freq_rank, hsk, definition FROM glyph ORDER BY id").fetchall()
     readings = _group_by(src, "SELECT glyph_id, system, value, sense_hint, freq, source_id FROM reading", key_idx=0)
     decompositions = _group_by(src, "SELECT glyph_id, ids, region, source_id FROM decomposition", key_idx=0)
     component_uses = _group_by(src, "SELECT glyph_id, component_id, position, function, match_class, confidence, resolution FROM component_use", key_idx=0)
     claims = _group_by(src, "SELECT subject_id, predicate, value, source_id, source_ref, confidence, retrieved_at FROM claim", key_idx=0)
 
     with JSONL_DUMP.open("w", encoding="utf-8") as out:
-        for gid, char, scripts, stroke_count, freq_rank, hsk in glyphs:
+        for gid, char, scripts, stroke_count, freq_rank, hsk, definition in glyphs:
             record = {
                 "id": gid, "char": char, "scripts": scripts, "stroke_count": stroke_count,
-                "freq_rank": freq_rank, "hsk": hsk,
+                "freq_rank": freq_rank, "hsk": hsk, "definition": definition,
                 "readings": [
                     {"system": s, "value": v, "sense_hint": sh, "freq": f,
                      "source": sources.get(src_id, {}).get("name", src_id), "license": sources.get(src_id, {}).get("license")}

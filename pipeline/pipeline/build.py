@@ -110,7 +110,7 @@ def build() -> Path:
         e = entities[cp]
         gid = f"U+{cp:04X}"
         rank = freq_rank_map.get(cp)
-        glyph_rows.append((gid, e.char, glyph_scripts(e), e.total_strokes, rank, e.hsk))
+        glyph_rows.append((gid, e.char, glyph_scripts(e), e.total_strokes, rank, e.hsk, e.definition))
 
         for system, value, freq in dedupe_readings(e):
             reading_rows.append((gid, system, value, None, freq, "unihan" if system not in ("mc_baxter", "oc_zz", "oc_bs") else "wiktextract"))

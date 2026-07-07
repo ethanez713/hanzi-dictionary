@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,7 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import com.hanzidictionary.app.audio.SyllableAudioPlayer
+import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.CharacterPage
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ReadingView
@@ -47,7 +48,7 @@ import org.json.JSONObject
 fun CharacterScreen(
     repository: HanziRepository,
     userRepository: UserRepository,
-    audioPlayer: SyllableAudioPlayer,
+    tts: MandarinTts,
     glyphId: String,
     onOpenComponent: (String) -> Unit,
     onOpenCharacter: (String) -> Unit,
@@ -90,7 +91,8 @@ fun CharacterScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            Header(p, audioPlayer)
+            Header(p, tts)
+            p.definition?.let { Definition(it) }
             FilterChip(
                 selected = known,
                 onClick = {
@@ -112,29 +114,44 @@ fun CharacterScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Header(p: CharacterPage, audioPlayer: SyllableAudioPlayer) {
+private fun Header(p: CharacterPage, tts: MandarinTts) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(p.char, fontSize = 72.sp)
-        // Every reading (多音字: all of them, spec §15) as its own tappable, audible chip.
+        // Every reading (多音字: all of them, spec §15) as its own chip. Only the primary
+        // (highest-frequency, sorted first) reading is playable: the device TTS reads a
+        // bare character with its most common pronunciation, so a speaker on a secondary
+        // reading would play the wrong sound (spec §16 audio revision).
         val pinyinReadings = p.readings.filter { it.system == "pinyin" }.distinctBy { it.value }
         if (pinyinReadings.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (r in pinyinReadings) ReadingChip(r, audioPlayer)
+                pinyinReadings.forEachIndexed { i, r ->
+                    ReadingChip(r, playable = i == 0 && tts.available, onPlay = { tts.speak(p.char) })
+                }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            p.freqRank?.let { Chip("freq #$it") }
-            p.hsk?.let { Chip("HSK $it") }
-            Chip(scriptLabel(p.scripts))
-            p.strokeCount?.let { Chip("$it strokes") }
+        // Reference metadata (frequency, HSK band, script, stroke count) is useful but not
+        // what you look at while learning, so it stays collapsed behind a toggle by default.
+        var showDetails by remember { mutableStateOf(false) }
+        TextButton(
+            onClick = { showDetails = !showDetails },
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+        ) {
+            Text(if (showDetails) "Hide details ▴" else "Details ▾")
+        }
+        if (showDetails) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                p.freqRank?.let { Chip("freq #$it") }
+                p.hsk?.let { Chip("HSK $it") }
+                Chip(scriptLabel(p.scripts))
+                p.strokeCount?.let { Chip("$it strokes") }
+            }
         }
     }
 }
 
 @Composable
-private fun ReadingChip(reading: ReadingView, audioPlayer: SyllableAudioPlayer) {
-    val playable = audioPlayer.hasClip(reading.value)
-    Card(modifier = if (playable) Modifier.clickable { audioPlayer.play(reading.value) } else Modifier) {
+private fun ReadingChip(reading: ReadingView, playable: Boolean, onPlay: () -> Unit) {
+    Card(modifier = if (playable) Modifier.clickable(onClick = onPlay) else Modifier) {
         Row(
             Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -144,6 +161,13 @@ private fun ReadingChip(reading: ReadingView, audioPlayer: SyllableAudioPlayer) 
             if (playable) Text("🔊", fontSize = 16.sp)
         }
     }
+}
+
+/** The plain-English gloss (Unihan kDefinition) — the first thing a learner wants, so it
+ * sits directly under the character and readings. */
+@Composable
+private fun Definition(text: String) {
+    Text(text, fontSize = 18.sp, lineHeight = 24.sp)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -162,7 +186,8 @@ private fun BreakdownStrip(p: CharacterPage, onOpenComponent: (String) -> Unit) 
                     .padding(vertical = 4.dp),
             ) {
                 Text(c.displayChar ?: "◎", fontSize = 40.sp, color = color)
-                Text(functionLabel(c.function), fontSize = 12.sp, color = color)
+                val label = functionLabel(c.function)
+                if (label.isNotEmpty()) Text(label, fontSize = 12.sp, color = color)
             }
         }
     }

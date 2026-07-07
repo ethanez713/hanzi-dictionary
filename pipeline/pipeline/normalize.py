@@ -35,6 +35,7 @@ class GlyphEntity:
     decompositions: list[RawDecomposition] = field(default_factory=list)
     total_strokes: int | None = None
     hsk: int | None = None
+    definition: str | None = None   # Unihan kDefinition (short English gloss)
     simplified_variants: list[int] = field(default_factory=list)   # this char -> simpler form(s)
     traditional_variants: list[int] = field(default_factory=list)  # this char -> traditional form(s)
     opencc_simplified_of: list[int] = field(default_factory=list)  # this char (traditional) -> simplified form(s)
@@ -73,6 +74,9 @@ def build_entities(snapshot_paths: dict[str, Path]) -> dict[int, GlyphEntity]:
         e = GlyphEntity(codepoint=cp, char=chr(cp))
 
         fields = readings_raw.get(cp, {})
+        definition_values = fields.get("kDefinition", [])
+        if definition_values:
+            e.definition = definition_values[0].strip() or None
         for value in fields.get("kMandarin", []):
             e.readings.append(RawReading("pinyin", value, None, "unihan"))
         for value in fields.get("kCantonese", []):

@@ -51,6 +51,7 @@ data class CharacterPage(
     val glyphId: String,
     val char: String,
     val scripts: String,       // simp|trad|both
+    val definition: String?,   // short English gloss (Unihan kDefinition)
     val strokeCount: Long?,
     val freqRank: Long?,
     val hsk: Long?,

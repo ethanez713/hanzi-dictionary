@@ -40,13 +40,20 @@ class HanziRepository(
             }
         }
 
-        // 2. FTS: pinyin prefix and/or char, then rank by frequency (nulls last)
+        // 2. FTS: pinyin prefix and/or char, then rank by frequency (nulls last).
+        // The FTS index is a search enhancement, not load-bearing: if the query engine
+        // rejects it (e.g. a SQLite build without the fts5 module, or a malformed match)
+        // degrade to the exact matches from step 1 rather than crashing the caller.
         val ftsMatch = buildFtsMatch(q) ?: return ordered.values.toList()
-        val ftsGlyphIds = ftsQuery(ftsMatch, limit * 4)
-        if (ftsGlyphIds.isNotEmpty()) {
-            val glyphs = db.hanziQueries.glyphsByIds(ftsGlyphIds).executeAsList()
-                .sortedWith(compareBy({ it.freq_rank == null }, { it.freq_rank }))
-            for (g in glyphs) ordered.putIfAbsent(g.id, g.toSearchResult())
+        try {
+            val ftsGlyphIds = ftsQuery(ftsMatch, limit * 4)
+            if (ftsGlyphIds.isNotEmpty()) {
+                val glyphs = db.hanziQueries.glyphsByIds(ftsGlyphIds).executeAsList()
+                    .sortedWith(compareBy({ it.freq_rank == null }, { it.freq_rank }))
+                for (g in glyphs) ordered.putIfAbsent(g.id, g.toSearchResult())
+            }
+        } catch (e: Exception) {
+            // Swallow: no FTS results, exact hits (if any) still returned below.
         }
 
         return ordered.values.take(limit).toList()
@@ -112,6 +119,7 @@ class HanziRepository(
             glyphId = g.id,
             char = g.char,
             scripts = g.scripts,
+            definition = g.definition,
             strokeCount = g.stroke_count,
             freqRank = g.freq_rank,
             hsk = g.hsk,

@@ -24,6 +24,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.res.ResourcesCompat
+import android.graphics.Paint
+import com.hanzidictionary.app.R
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,10 +46,20 @@ fun SearchScreen(
 ) {
     var query by remember { mutableStateOf("") }
 
+    // The pack includes ultra-rare characters (unranked CJK Ext-B/C/D) that the bundled
+    // Noto font has no glyph for; they'd render as tofu boxes. Drop them from results by
+    // testing each against Noto so search only ever shows characters we can actually draw.
+    val context = LocalContext.current
+    val glyphPaint = remember {
+        Paint().apply { typeface = ResourcesCompat.getFont(context, R.font.noto_sans_cjk_sc) }
+    }
+
     val results by produceState(initialValue = emptyList<SearchResult>(), query) {
         val q = query
         value = if (q.isBlank()) emptyList()
-        else withContext(Dispatchers.IO) { repository.search(q) }
+        else withContext(Dispatchers.IO) {
+            repository.search(q).filter { glyphPaint.hasGlyph(it.char) }
+        }
     }
 
     Scaffold(

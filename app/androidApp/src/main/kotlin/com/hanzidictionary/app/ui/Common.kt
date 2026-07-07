@@ -16,12 +16,14 @@ fun functionColor(function: String): Color = when (function) {
     else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
+/** Empty string means "no useful classification" (the pack stores "unknown" for
+ * associative compounds like 好 = 女+子 where neither part is meaning- or sound-bearing).
+ * Callers skip rendering a label in that case rather than showing a distracting "unknown". */
 fun functionLabel(function: String): String = when (function) {
     "semantic" -> "meaning"
     "phonetic" -> "sound"
     "both" -> "sound + meaning"
-    "empty" -> "empty"
-    else -> "unknown"
+    else -> ""
 }
 
 /** Human-readable drift sentence from a match_class (spec §9 "sound line"). The

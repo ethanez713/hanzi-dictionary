@@ -12,7 +12,7 @@ class MainActivity : ComponentActivity() {
         val app = application as HanziApp
         setContent {
             AppTheme {
-                AppRoot(app.repository, app.userRepository, app.hskLevels, app.audioPlayer)
+                AppRoot(app.repository, app.userRepository, app.hskLevels, app.tts)
             }
         }
     }

@@ -14,6 +14,13 @@ dataset repo's NOTICE and the in-app attributions screen (spec §9's IA item 9,
 | [makemeahanzi](https://github.com/skishore/makemeahanzi) `dictionary.txt` (derived from Unihan + [CJKlib](https://github.com/cburgmer/cjklib)) | Character decomposition (fallback when cjkvi-ids has none), semantic/phonetic component claims, formation-type claims | **LGPL-3.0-or-later** | [LGPL-3.0.txt](../LICENSES/LGPL-3.0.txt) |
 | [cjkvi-ids](https://github.com/cjkvi/cjkvi-ids) (CHISE) | Region-tagged IDS decomposition (primary source; shipped separately as `ids.db`, see below) | GPL-2.0 | [GPL-2.0.txt](../LICENSES/GPL-2.0.txt) |
 | [OpenCC](https://github.com/BYVoid/OpenCC) `STCharacters.txt`/`TSCharacters.txt` | Simplified/Traditional character conversion tables, cross-checked against Unihan for variant-edge classification | Apache-2.0 | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
+| [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | HSK 3.0 level assignments (glyph.hsk, hsk-levels.json import picker) | MIT | (short license, see upstream repo) |
+
+## Bundled app assets (not part of the dataset)
+
+| Asset | Provides | License | Full text |
+|---|---|---|---|
+| [Noto Sans CJK SC](https://github.com/notofonts/noto-cjk) (`res/font/noto_sans_cjk_sc.otf`) | UI typeface — renders CJK Extension chars and IDS operators the system font shows as tofu | SIL OFL 1.1 | [OFL-1.1.txt](../LICENSES/OFL-1.1.txt) |
 
 **Not currently included:** makemeahanzi's `graphics.txt`/stroke-order SVGs
 (Arphic Public License) — deferred until stroke rendering is actually built
@@ -59,5 +66,6 @@ dump:
 - **`ids.db`** — cjkvi-ids decomposition rows only (GPL-2.0), kept separate so
   GPL doesn't propagate into the rest of the pack.
 
-The app opens `core.db` and `ATTACH`es `ids.db` at query time; they are not
-merged into a single file.
+The app opens `core.db` and `ids.db` as two separate SQLite connections and
+merges results in Kotlin (deliberately no ATTACH — see `app/README.md`); they
+are never combined into a single file.

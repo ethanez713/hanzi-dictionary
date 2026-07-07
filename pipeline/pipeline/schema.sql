@@ -21,7 +21,8 @@ CREATE TABLE glyph (
     scripts      TEXT NOT NULL,      -- simp|trad|both
     stroke_count INTEGER,
     freq_rank    INTEGER,
-    hsk          INTEGER
+    hsk          INTEGER,
+    definition   TEXT                -- short English gloss (Unihan kDefinition)
 );
 CREATE INDEX idx_glyph_char ON glyph(char);
 CREATE INDEX idx_glyph_freq_rank ON glyph(freq_rank);

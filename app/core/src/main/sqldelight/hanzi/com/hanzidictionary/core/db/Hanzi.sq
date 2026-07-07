@@ -19,7 +19,8 @@ CREATE TABLE glyph (
     scripts      TEXT NOT NULL,
     stroke_count INTEGER,
     freq_rank    INTEGER,
-    hsk          INTEGER
+    hsk          INTEGER,
+    definition   TEXT
 );
 
 CREATE TABLE reading (

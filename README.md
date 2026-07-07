@@ -33,13 +33,13 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   "I know this", My Characters + HSK/paste import, known-first series ordering — the spec's
   headline differentiator), and photo-library scanning (scan recent camera-roll photos for
   hanzi via ML Kit, watermark dedup — workflow logic unit-tested with fakes). Core suite
-  15/15. Audio syllable bank (Piper TTS, 1,559 clips) generated + wired to tappable
-  readings; structurally verified, **pending the user's ear-check for tone correctness**.
-  Live camera OCR dropped in favor of photo scanning. Anki .apkg import deferred (needs a
-  sample file).
-- **M3.5 (definitions & attributions)** — added in spec v1.2: CC-CEDICT ingestion (the
-  `word`/`word_char` tables are currently empty, so the app shows no English glosses) plus
-  an in-app ⓘ attributions element (spec §16). Not started.
+  15/15. Audio: device Mandarin TTS on the primary reading (the Piper syllable bank
+  failed the ear-check — inaccurate tones — and was removed; spec §16). Live camera OCR
+  dropped in favor of photo scanning. Anki .apkg import deferred (needs a sample file).
+- **M3.5 (definitions & attributions)** — in progress: character-page glosses now ship via
+  Unihan `kDefinition` (glyph.definition, shown under the header). Still to do: CC-CEDICT
+  ingestion for full word data (`word`/`word_char`, word search/pages) and the in-app ⓘ
+  attributions element (spec §16).
 - **M3.6–M3.9** — added in spec v1.2: scholarly & component depth, capture/search
   completion, app polish, and pack updates. Spec §12 is now the complete work plan —
   every spec requirement belongs to exactly one milestone. None started.
