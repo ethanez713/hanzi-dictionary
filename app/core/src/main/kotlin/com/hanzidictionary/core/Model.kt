@@ -7,6 +7,7 @@ data class SearchResult(
     val glyphId: String,
     val char: String,
     val primaryPinyin: String?,
+    val definition: String?,   // short English gloss, shown in the result row
     val freqRank: Long?,
 )
 

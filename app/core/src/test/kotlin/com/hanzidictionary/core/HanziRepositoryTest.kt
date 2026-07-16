@@ -86,6 +86,15 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun searchResultsCarryDefinitions() {
+        val results = repo.search("qing")
+        val qing = results.first { it.char == "情" }
+        val def = qing.definition
+        assertNotNull(def, "search rows should carry the gloss they display")
+        assertTrue("feeling" in def, "unexpected 情 gloss: $def")
+    }
+
+    @Test
     fun characterPageCarriesDefinition() {
         val page = repo.characterPageByChar("请")
         assertNotNull(page)

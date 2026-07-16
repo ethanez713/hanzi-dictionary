@@ -244,7 +244,7 @@ class HanziRepository(
         val py = db.hanziQueries.readingsForGlyph(id).executeAsList()
             .filter { it.system == "pinyin" }
             .maxByOrNull { it.freq ?: 0L }?.value_
-        return SearchResult(id, char, py, freq_rank)
+        return SearchResult(id, char, py, definition, freq_rank)
     }
 }
 

@@ -29,6 +29,7 @@ import androidx.core.content.res.ResourcesCompat
 import android.graphics.Paint
 import com.hanzidictionary.app.R
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.HanziRepository
@@ -108,6 +109,8 @@ fun SearchScreen(
     }
 }
 
+/** A result row leads with what identifies the character — its sound and meaning. The
+ * frequency rank was reference clutter here; it lives on the character page's Details. */
 @Composable
 private fun SearchRow(result: SearchResult, onClick: () -> Unit) {
     Row(
@@ -116,13 +119,15 @@ private fun SearchRow(result: SearchResult, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(result.char, fontSize = 34.sp)
-        Column {
+        Column(Modifier.weight(1f)) {
             result.primaryPinyin?.let { Text(it, fontSize = 18.sp) }
-            result.freqRank?.let {
+            result.definition?.let {
                 Text(
-                    "freq #$it",
-                    fontSize = 12.sp,
+                    it,
+                    fontSize = 13.sp,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

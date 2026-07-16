@@ -92,7 +92,6 @@ fun CharacterScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Header(p, tts)
-            p.definition?.let { Definition(it) }
             FilterChip(
                 selected = known,
                 onClick = {
@@ -115,22 +114,35 @@ fun CharacterScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Header(p: CharacterPage, tts: MandarinTts) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(p.char, fontSize = 72.sp)
-        // Every reading (多音字: all of them, spec §15) as its own chip. Only the primary
-        // (highest-frequency, sorted first) reading is playable: the device TTS reads a
-        // bare character with its most common pronunciation, so a speaker on a secondary
-        // reading would play the wrong sound (spec §16 audio revision).
-        val pinyinReadings = p.readings.filter { it.system == "pinyin" }.distinctBy { it.value }
-        if (pinyinReadings.isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                pinyinReadings.forEachIndexed { i, r ->
-                    ReadingChip(r, playable = i == 0 && tts.available, onPlay = { tts.speak(p.char) })
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Character on the left, meaning and sound beside it: stacking these vertically
+        // left the whole right half of the page empty.
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            Text(p.char, fontSize = 88.sp, lineHeight = 96.sp)
+            Column(
+                Modifier.weight(1f).padding(top = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Every reading (多音字: all of them, spec §15) as its own chip. Only the
+                // primary (highest-frequency, sorted first) reading is playable: the device
+                // TTS reads a bare character with its most common pronunciation, so a
+                // speaker on a secondary reading would play the wrong sound (spec §16).
+                val pinyinReadings = p.readings.filter { it.system == "pinyin" }.distinctBy { it.value }
+                if (pinyinReadings.isNotEmpty()) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        pinyinReadings.forEachIndexed { i, r ->
+                            ReadingChip(r, playable = i == 0 && tts.available, onPlay = { tts.speak(p.char) })
+                        }
+                    }
                 }
+                Definition(p.definition)
             }
         }
-        // Reference metadata (frequency, HSK band, script, stroke count) is useful but not
-        // what you look at while learning, so it stays collapsed behind a toggle by default.
+        // Reference metadata (frequency, HSK band, script, stroke count, IDS structure) is
+        // useful but not what you look at while learning, so it stays collapsed by default.
         var showDetails by remember { mutableStateOf(false) }
         TextButton(
             onClick = { showDetails = !showDetails },
@@ -139,11 +151,18 @@ private fun Header(p: CharacterPage, tts: MandarinTts) {
             Text(if (showDetails) "Hide details ▴" else "Details ▾")
         }
         if (showDetails) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 p.freqRank?.let { Chip("freq #$it") }
                 p.hsk?.let { Chip("HSK $it") }
                 Chip(scriptLabel(p.scripts))
                 p.strokeCount?.let { Chip("$it strokes") }
+                // Raw IDS notation: its ⿰-style operators draw as dashed layout boxes and
+                // it restates the component characters, so it belongs with the reference
+                // data rather than above the breakdown.
+                p.ids?.let { Chip(it) }
             }
         }
     }
@@ -158,16 +177,32 @@ private fun ReadingChip(reading: ReadingView, playable: Boolean, onPlay: () -> U
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(reading.value, fontSize = 20.sp)
+            if (isNeutralTone(reading.value)) {
+                Text(
+                    "neutral",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (playable) Text("🔊", fontSize = 16.sp)
         }
     }
 }
 
 /** The plain-English gloss (Unihan kDefinition) — the first thing a learner wants, so it
- * sits directly under the character and readings. */
+ * sits right beside the character itself. Unihan carries no gloss for many rare
+ * characters; say so explicitly rather than leaving a blank that reads as a bug. */
 @Composable
-private fun Definition(text: String) {
-    Text(text, fontSize = 18.sp, lineHeight = 24.sp)
+private fun Definition(text: String?) {
+    if (text != null) {
+        Text(text, fontSize = 18.sp, lineHeight = 24.sp)
+    } else {
+        Text(
+            "No English gloss for this character.",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -175,19 +210,28 @@ private fun Definition(text: String) {
 private fun BreakdownStrip(p: CharacterPage, onOpenComponent: (String) -> Unit) {
     if (p.breakdown.isEmpty()) return
     SectionTitle("Components")
-    p.ids?.let { Text(it, fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         for (c in p.breakdown) {
             val color = functionColor(c.function)
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .then(if (c.navigable) Modifier.clickable { onOpenComponent(c.componentId) } else Modifier)
-                    .padding(vertical = 4.dp),
+            Card(
+                modifier = if (c.navigable) {
+                    Modifier.clickable { onOpenComponent(c.componentId) }
+                } else {
+                    Modifier
+                },
             ) {
-                Text(c.displayChar ?: "◎", fontSize = 40.sp, color = color)
-                val label = functionLabel(c.function)
-                if (label.isNotEmpty()) Text(label, fontSize = 12.sp, color = color)
+                Row(
+                    Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(c.displayChar ?: "◎", fontSize = 44.sp, color = color)
+                    val label = functionLabel(c.function)
+                    if (label.isNotEmpty()) Text(label, fontSize = 13.sp, color = color)
+                }
             }
         }
     }

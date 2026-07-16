@@ -26,6 +26,12 @@ fun functionLabel(function: String): String = when (function) {
     else -> ""
 }
 
+/** A pinyin syllable carrying no tone diacritic is the neutral tone — real Unihan data
+ * (kHanyuPinlu lists 情 as "qíng(1700) qing(491)": neutral in 事情), not a parse failure.
+ * Shown bare next to a toned reading it just looks broken, so callers label it. */
+fun isNeutralTone(pinyin: String): Boolean =
+    pinyin.isNotEmpty() && pinyin.none { it in "āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜêềếể" }
+
 /** Human-readable drift sentence from a match_class (spec §9 "sound line"). The
  * match_class already encodes the stratum it held at — "oc_only" means the link
  * survives only in Old Chinese — so the stratum isn't needed separately here. */
