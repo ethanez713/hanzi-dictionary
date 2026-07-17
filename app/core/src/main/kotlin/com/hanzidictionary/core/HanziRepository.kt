@@ -33,9 +33,11 @@ class HanziRepository(
 
         val ordered = LinkedHashMap<String, SearchResult>()
 
-        // 1. exact single-character hit ranks first (spec §9 "exact char > word > pinyin")
-        if (q.length <= 2 && isSingleCjk(q)) {
-            db.hanziQueries.glyphByChar(q).executeAsList().forEach { g ->
+        // 1. exact character hits rank first (spec §9 "exact char > word > pinyin").
+        // A multi-character query (pasted or shared text like 你好吗) lists each
+        // distinct character in text order.
+        for (ch in extractHanzi(q)) {
+            db.hanziQueries.glyphByChar(ch).executeAsList().forEach { g ->
                 ordered.putIfAbsent(g.id, g.toSearchResult())
             }
         }
@@ -216,10 +218,28 @@ class HanziRepository(
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
         val match = buildWordFtsMatch(q) ?: return emptyList()
-        val ids = try {
+        var ids = try {
             rawStringList(driver, "SELECT word_id FROM word_fts WHERE word_fts MATCH ? LIMIT ?", match, (limit * 4).toLong())
         } catch (e: Exception) {
             return emptyList()
+        }
+        // Greedy fallback for pasted/shared phrases: 你好吗 isn't an entry, but its
+        // longest matching prefix 你好 is — shorten until something matches.
+        if (ids.isEmpty()) {
+            var cjk = q.filter { isCjkChar(it) }
+            while (ids.isEmpty() && cjk.length > 1) {
+                cjk = cjk.dropLast(1)
+                ids = try {
+                    rawStringList(
+                        driver,
+                        "SELECT word_id FROM word_fts WHERE word_fts MATCH ? LIMIT ?",
+                        "(simp:$cjk* OR trad:$cjk*)",
+                        (limit * 4).toLong(),
+                    )
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
         }
         if (ids.isEmpty()) return emptyList()
         return db.hanziQueries.wordsByIds(ids).executeAsList()

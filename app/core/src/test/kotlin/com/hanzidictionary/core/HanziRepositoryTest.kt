@@ -197,6 +197,17 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun sharedPhraseYieldsCharactersAndLongestWord() {
+        // 你好吗 (shared/pasted text): not a CC-CEDICT entry itself, but every character
+        // should list, and word search should fall back to the longest prefix word 你好.
+        val chars = repo.search("你好吗")
+        assertEquals(listOf("你", "好", "吗"), chars.take(3).map { it.char })
+
+        val words = repo.searchWords("你好吗")
+        assertTrue(words.any { it.simp == "你好" }, "expected 你好 via greedy fallback, got ${words.map { it.simp }}")
+    }
+
+    @Test
     fun wordSearchMatchesEnglishPinyinAndCjk() {
         val byEnglish = repo.searchWords("novel")
         assertTrue(byEnglish.any { it.simp == "小说" }, "'novel' should find 小说, got ${byEnglish.map { it.simp }}")
