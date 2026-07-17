@@ -44,6 +44,10 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   over glosses, word search (word_fts: CJK prefix / pinyin syllables / English) with
   word pages (both forms, senses, per-character strip, device-TTS word audio), and the
   in-app ⓘ attributions dialog.
+- **M3.7 (capture/search completion)** — partial: SEND share target (share text from any
+  app; one hanzi opens its page, more prefill search) and paste-on-open (clipboard hanzi
+  offered as a one-tap search when the window gains focus). Remaining: component-compose
+  search chip, fuzzy fallback.
 - **Learning features (beyond spec)** — practice deck sources (encountered / HSK band /
   component series), reverse (production-recall) cards, confusable drills writing
   confusion_event, per-HSK progress bars on the Archive.

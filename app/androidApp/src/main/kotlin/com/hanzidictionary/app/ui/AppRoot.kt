@@ -1,6 +1,11 @@
 package com.hanzidictionary.app.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -10,6 +15,8 @@ import android.net.Uri
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.UserRepository
+import com.hanzidictionary.core.extractHanzi
+import com.hanzidictionary.core.glyphIdOfChar
 
 /** Route arguments can be CJK chars or "ids:⿰..." pseudo-ids, neither URL-safe, so
  * every id crossing a route boundary is percent-encoded here and decoded in the screen.
@@ -27,13 +34,37 @@ fun AppRoot(
     userRepository: UserRepository,
     hskLevels: Map<Int, List<String>>,
     tts: MandarinTts,
+    sharedText: String? = null,
+    onSharedTextConsumed: () -> Unit = {},
 ) {
     val nav = rememberNavController()
+    var query by rememberSaveable { mutableStateOf("") }
+
+    // Shared text (SEND target, spec §9 capture): one hanzi jumps straight to its page;
+    // several prefill search (word search picks up multi-char words from there).
+    LaunchedEffect(sharedText) {
+        if (sharedText != null) {
+            val hanzi = extractHanzi(sharedText)
+            when {
+                hanzi.size == 1 -> nav.navigate("character/${enc(glyphIdOfChar(hanzi[0]))}")
+                hanzi.isNotEmpty() -> {
+                    query = hanzi.joinToString("")
+                    nav.navigate("search") {
+                        popUpTo("search")
+                        launchSingleTop = true
+                    }
+                }
+            }
+            onSharedTextConsumed()
+        }
+    }
 
     NavHost(navController = nav, startDestination = "search") {
         composable("search") {
             SearchScreen(
                 repository = repository,
+                query = query,
+                onQueryChange = { query = it },
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
                 onOpenPractice = { nav.navigate("practice") },

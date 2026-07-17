@@ -13,6 +13,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -28,7 +29,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.core.content.res.ResourcesCompat
 import android.graphics.Paint
 import com.hanzidictionary.app.R
@@ -40,6 +44,7 @@ import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SearchResult
 import com.hanzidictionary.core.SourceInfo
 import com.hanzidictionary.core.WordHit
+import com.hanzidictionary.core.extractHanzi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -47,15 +52,30 @@ import kotlinx.coroutines.withContext
 @Composable
 fun SearchScreen(
     repository: HanziRepository,
+    query: String,
+    onQueryChange: (String) -> Unit,
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
     onOpenPractice: () -> Unit,
     onOpenPhotos: () -> Unit,
 ) {
-    var query by remember { mutableStateOf("") }
     var showAttributions by remember { mutableStateOf(false) }
     if (showAttributions) {
         AttributionsDialog(repository, onDismiss = { showAttributions = false })
+    }
+
+    // Paste-on-open (spec §9 capture): if the clipboard holds hanzi when the window
+    // gains focus (clipboard is only readable while focused on API 29+), offer it as a
+    // one-tap search. Checked once per screen life; declining just means not tapping.
+    val clipboard = LocalClipboardManager.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    var clipSuggestion by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(windowFocused) {
+        if (windowFocused && clipSuggestion == null && query.isBlank()) {
+            val text = clipboard.getText()?.text ?: return@LaunchedEffect
+            val hanzi = extractHanzi(text)
+            if (hanzi.isNotEmpty()) clipSuggestion = hanzi.joinToString("").take(12)
+        }
     }
 
     // The pack includes ultra-rare characters (unranked CJK Ext-B/C/D) that the bundled
@@ -96,13 +116,19 @@ fun SearchScreen(
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
             OutlinedTextField(
                 value = query,
-                onValueChange = { query = it },
+                onValueChange = onQueryChange,
                 label = { Text("Character, pinyin, or English") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             )
 
             if (query.isBlank()) {
+                clipSuggestion?.let { s ->
+                    AssistChip(
+                        onClick = { onQueryChange(s) },
+                        label = { Text("From clipboard: $s") },
+                    )
+                }
                 Text(
                     "Type a character (请), pinyin (qing), or English (feeling).",
                     modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
