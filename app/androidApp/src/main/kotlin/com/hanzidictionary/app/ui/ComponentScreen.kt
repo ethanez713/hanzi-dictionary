@@ -66,9 +66,27 @@ fun ComponentScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Text(p.char ?: p.componentId, fontSize = 64.sp)
+                // When the component is itself a dictionary character, its glyph links
+                // through to the full character page (definition, words, breakdown).
+                val gid = p.glyphId
+                Text(
+                    p.char ?: p.componentId,
+                    fontSize = 64.sp,
+                    modifier = if (gid != null) Modifier.clickable { onOpenCharacter(gid) } else Modifier,
+                )
                 val pinyin = p.ownReadings.filter { it.system == "pinyin" }.joinToString("  ") { it.value }
                 if (pinyin.isNotEmpty()) Text(pinyin, fontSize = 20.sp)
+                p.definition?.let {
+                    Text(
+                        it,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                if (gid != null) {
+                    TextButton(onClick = { onOpenCharacter(gid) }) { Text("Open character page →") }
+                }
             }
 
             if (p.reliability != null) ReliabilityMeter(p)

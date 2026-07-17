@@ -104,6 +104,24 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun characterPageCarriesContainingWords() {
+        val page = repo.characterPageByChar("情")
+        assertNotNull(page)
+        assertTrue(page.words.isNotEmpty(), "情 should list containing words")
+        val shiqing = page.words.firstOrNull { it.simp == "事情" }
+        assertNotNull(shiqing, "事情 (HSK 2) should rank among 情's top words, got ${page.words.map { it.simp }}")
+        assertTrue(shiqing.gloss!!.contains("matter") || shiqing.gloss!!.contains("affair"))
+        assertEquals("shì qing", shiqing.pinyin, "numbered CC-CEDICT pinyin should be tone-marked")
+    }
+
+    @Test
+    fun componentPageLinksToOwnCharacterPage() {
+        val page = repo.componentPage("青")
+        assertEquals("U+9752", page.glyphId, "青 is itself a pack glyph and should link to it")
+        assertNotNull(page.definition, "青 should carry its own gloss on the component page")
+    }
+
+    @Test
     fun characterPageCarriesHskLevel() {
         val page = repo.characterPageByChar("请")
         assertNotNull(page)
@@ -116,6 +134,24 @@ class HanziRepositoryTest {
         val page = repo.characterPageByChar("妹")
         assertNotNull(page)
         assertTrue(page.confusables.any { it.char == "妺" }, "妹 should list 妺 as a confusable")
+    }
+
+    @Test
+    fun practiceQueueHoldsEncounteredUnknownsUntilArchived() {
+        val d = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        UserRepository.Schema.create(d)
+        val user = UserRepository(d)
+
+        user.logLookup("U+8BF7")                        // looked up 请
+        user.recordPhotoFind("U+60C5", "p1", 1000)      // found 情 in a photo
+        user.setKnown("U+4E00", true)                   // 一 already known: never queued
+        user.logLookup("U+4E00")
+
+        assertEquals(setOf("U+8BF7", "U+60C5"), user.practiceQueue().toSet())
+
+        user.setKnown("U+60C5", true)                   // "I knew it" archives 情
+        assertEquals(listOf("U+8BF7"), user.practiceQueue())
+        d.close()
     }
 
     @Test

@@ -34,16 +34,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.hanzidictionary.app.audio.MandarinTts
+import androidx.compose.ui.text.style.TextOverflow
 import com.hanzidictionary.core.CharacterPage
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ReadingView
 import com.hanzidictionary.core.UserRepository
+import com.hanzidictionary.core.WordView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CharacterScreen(
     repository: HanziRepository,
@@ -92,15 +94,43 @@ fun CharacterScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Header(p, tts)
-            FilterChip(
-                selected = known,
-                onClick = {
-                    val newValue = !known
-                    known = newValue
-                    scope.launch(Dispatchers.IO) { userRepository.setKnown(glyphId, newValue) }
-                },
-                label = { Text(if (known) "✓ I know this" else "I know this") },
-            )
+            // One compact row for both controls: the archive toggle ("I know this"
+            // removes the character from the practice deck) and the reference-data
+            // drawer. Stacked, these two burned a whole screen row each.
+            var showDetails by remember { mutableStateOf(false) }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FilterChip(
+                    selected = known,
+                    onClick = {
+                        val newValue = !known
+                        known = newValue
+                        scope.launch(Dispatchers.IO) { userRepository.setKnown(glyphId, newValue) }
+                    },
+                    label = { Text(if (known) "✓ Known" else "I know this") },
+                )
+                TextButton(onClick = { showDetails = !showDetails }) {
+                    Text(if (showDetails) "Hide details ▴" else "Details ▾")
+                }
+            }
+            if (showDetails) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    p.freqRank?.let { Chip("freq #$it") }
+                    p.hsk?.let { Chip("HSK $it") }
+                    Chip(scriptLabel(p.scripts))
+                    p.strokeCount?.let { Chip("$it strokes") }
+                    // Raw IDS notation: its ⿰-style operators draw as dashed layout
+                    // boxes and it restates the component characters, so it belongs
+                    // with the reference data rather than above the breakdown.
+                    p.ids?.let { Chip(it) }
+                }
+            }
+            if (p.words.isNotEmpty()) Words(p.words)
             BreakdownStrip(p, onOpenComponent)
             SoundLine(p)
             Formation(p)
@@ -141,28 +171,34 @@ private fun Header(p: CharacterPage, tts: MandarinTts) {
                 Definition(p.definition)
             }
         }
-        // Reference metadata (frequency, HSK band, script, stroke count, IDS structure) is
-        // useful but not what you look at while learning, so it stays collapsed by default.
-        var showDetails by remember { mutableStateOf(false) }
-        TextButton(
-            onClick = { showDetails = !showDetails },
-            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+    }
+}
+
+/** Common words containing this character (spec §9 IA item 6 "In your words"), the
+ * "phrases that use the word" a learner actually meets it in. */
+@Composable
+private fun Words(words: List<WordView>) {
+    SectionTitle("In words")
+    for (w in words) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(if (showDetails) "Hide details ▴" else "Details ▾")
-        }
-        if (showDetails) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                p.freqRank?.let { Chip("freq #$it") }
-                p.hsk?.let { Chip("HSK $it") }
-                Chip(scriptLabel(p.scripts))
-                p.strokeCount?.let { Chip("$it strokes") }
-                // Raw IDS notation: its ⿰-style operators draw as dashed layout boxes and
-                // it restates the component characters, so it belongs with the reference
-                // data rather than above the breakdown.
-                p.ids?.let { Chip(it) }
+            Text(
+                if (w.trad != w.simp) "${w.simp}·${w.trad}" else w.simp,
+                fontSize = 22.sp,
+            )
+            w.pinyin?.let { Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            w.gloss?.let {
+                Text(
+                    it,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }

@@ -70,3 +70,14 @@ INSERT INTO photo_find(glyph_id, photo_id, found_at) VALUES (?, ?, ?);
 recentPhotoFinds:
 SELECT glyph_id, MAX(found_at) AS found_at FROM photo_find
 GROUP BY glyph_id ORDER BY found_at DESC LIMIT :limit;
+
+-- The practice deck: characters the user has ENCOUNTERED (looked up, or found in a
+-- photo) but not archived as known — most recently seen first.
+practiceQueue:
+SELECT gid, MAX(ts) AS last_seen FROM (
+    SELECT item_id AS gid, ts FROM lookup_event
+    UNION ALL
+    SELECT glyph_id AS gid, found_at AS ts FROM photo_find
+)
+WHERE gid NOT IN (SELECT item_id FROM known_item WHERE status = 'known')
+GROUP BY gid ORDER BY last_seen DESC LIMIT :limit;

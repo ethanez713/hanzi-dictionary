@@ -126,10 +126,51 @@ class HanziRepository(
             readings = readings,
             ids = resolvedIds(glyphId),
             breakdown = breakdown,
+            words = wordsForGlyph(glyphId),
             claims = claims,
             variants = variants,
             confusables = confusables,
         )
+    }
+
+    /** Words containing the character, learner-relevant first (HSK level, then length).
+     * defs is a JSON array of CC-CEDICT senses; the first two make a compact gloss. */
+    fun wordsForGlyph(glyphId: String, limit: Long = 6): List<WordView> =
+        db.hanziQueries.wordsForGlyph(glyphId, limit).executeAsList().map { w ->
+            WordView(w.simp, w.trad, w.pinyin, firstSenses(w.defs), w.hsk)
+        }
+
+    private fun firstSenses(defsJson: String?, count: Int = 2): String? {
+        if (defsJson == null) return null
+        // Minimal JSON-array-of-strings reader; kept dependency-free so core stays
+        // KMP-portable (no org.json on the JVM-only test path either).
+        val senses = mutableListOf<String>()
+        var i = defsJson.indexOf('"')
+        while (i >= 0 && senses.size < count) {
+            val sb = StringBuilder()
+            var j = i + 1
+            while (j < defsJson.length && defsJson[j] != '"') {
+                if (defsJson[j] == '\\' && j + 1 < defsJson.length) {
+                    j++
+                    sb.append(
+                        when (defsJson[j]) {
+                            'n' -> '\n'; 't' -> '\t'; 'u' -> {
+                                val code = defsJson.substring(j + 1, j + 5).toInt(16)
+                                j += 4
+                                code.toChar()
+                            }
+                            else -> defsJson[j]
+                        },
+                    )
+                } else {
+                    sb.append(defsJson[j])
+                }
+                j++
+            }
+            senses.add(sb.toString())
+            i = defsJson.indexOf('"', j + 1)
+        }
+        return senses.joinToString("; ").ifEmpty { null }
     }
 
     private fun buildConfusables(glyphId: String): List<ConfusableView> =
@@ -191,17 +232,20 @@ class HanziRepository(
         val series = db.hanziQueries.phoneticSeriesFor(componentId).executeAsOneOrNull()
 
         val isPseudo = componentId.startsWith("ids:")
-        val ownReadings = if (isPseudo) emptyList() else {
-            db.hanziQueries.glyphByChar(componentId).executeAsList().firstOrNull()?.let { g ->
-                db.hanziQueries.readingsForGlyph(g.id).executeAsList()
-                    .map { ReadingView(it.system, it.value_, it.freq) }
-                    .sortedWith(compareBy({ systemOrder(it.system) }, { it.freq?.let { f -> -f } ?: 0L }))
-            } ?: emptyList()
-        }
+        // A component that is itself a pack glyph (青, 尾, …) gets a link to its own
+        // character page plus its gloss; radicals-only forms (氵) usually aren't glyphs.
+        val ownGlyph = if (isPseudo) null else db.hanziQueries.glyphByChar(componentId).executeAsList().firstOrNull()
+        val ownReadings = ownGlyph?.let { g ->
+            db.hanziQueries.readingsForGlyph(g.id).executeAsList()
+                .map { ReadingView(it.system, it.value_, it.freq) }
+                .sortedWith(compareBy({ systemOrder(it.system) }, { it.freq?.let { f -> -f } ?: 0L }))
+        } ?: emptyList()
 
         return ComponentPage(
             componentId = componentId,
             char = if (isPseudo) null else componentId,
+            glyphId = ownGlyph?.id,
+            definition = ownGlyph?.definition,
             ownReadings = ownReadings,
             memberCount = series?.member_count?.toInt() ?: members.size,
             reliability = series?.reliability,

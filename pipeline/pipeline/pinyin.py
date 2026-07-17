@@ -41,6 +41,47 @@ def strip_tone(syllable: str) -> tuple[str, int | None]:
     return "".join(base_chars), tone
 
 
+def mark_syllable(base: str, tone: int | None) -> str:
+    """'zhong', 1 -> 'zhōng'. Placement rule: the mark goes on 'a' or 'e' if present,
+    on the 'o' of 'ou', else on the last vowel. Tone 5/None (neutral) stays bare."""
+    base = base.replace("u:", "ü").replace("v", "ü")
+    if not tone or tone == 5:
+        return base
+    vowels = "aeiouü"
+    idx = -1
+    if "a" in base:
+        idx = base.index("a")
+    elif "e" in base:
+        idx = base.index("e")
+    elif "ou" in base:
+        idx = base.index("o")
+    else:
+        for i, ch in enumerate(base):
+            if ch in vowels:
+                idx = i
+    if idx == -1:
+        return base
+    marked_set = "ǖǘǚǜ" if base[idx] == "ü" else _TONE_VOWELS.get(base[idx])
+    if marked_set is None:
+        return base
+    return base[:idx] + marked_set[tone - 1] + base[idx + 1:]
+
+
+def cedict_pinyin(numbered: str) -> str:
+    """CC-CEDICT reading field -> display pinyin: 'Zhong1 guo2' -> 'Zhōng guó'.
+    Case is preserved (proper nouns); non-pinyin tokens (e.g. '·', 'xx') pass through."""
+    out = []
+    for token in numbered.split(" "):
+        if token and token[-1].isdigit():
+            base, tone = token[:-1], int(token[-1])
+            was_title = base[:1].isupper()
+            marked = mark_syllable(base.lower(), tone)
+            out.append(marked[:1].upper() + marked[1:] if was_title else marked)
+        else:
+            out.append(token)
+    return " ".join(out)
+
+
 def split_initial_final(base_syllable: str) -> tuple[str, str]:
     for initial in _INITIALS:
         if base_syllable.startswith(initial) and len(base_syllable) > len(initial):

@@ -67,3 +67,11 @@ def load_phonetic_series(conn: sqlite3.Connection, rows: list[tuple]) -> None:
 
 def load_confusables(conn: sqlite3.Connection, rows: list[tuple]) -> None:
     conn.executemany("INSERT INTO confusable (glyph_a, glyph_b, kind, diff) VALUES (?,?,?,?)", rows)
+
+
+def load_words(conn: sqlite3.Connection, rows: list[tuple]) -> None:
+    conn.executemany("INSERT INTO word VALUES (?,?,?,?,?,?,?)", rows)
+
+
+def load_word_chars(conn: sqlite3.Connection, rows: list[tuple]) -> None:
+    conn.executemany("INSERT INTO word_char VALUES (?,?,?)", rows)

@@ -48,6 +48,11 @@ class UserRepository(driver: SqlDriver) {
     fun recentPhotoFinds(limit: Long = 200): List<PhotoFindRow> =
         q.recentPhotoFinds(limit).executeAsList().map { PhotoFindRow(it.glyph_id, it.found_at ?: 0L) }
 
+    /** The practice deck: characters encountered (lookups + photo finds) but not yet
+     * archived as known, most recently seen first. Marking one known removes it. */
+    fun practiceQueue(limit: Long = 50): List<String> =
+        q.practiceQueue(limit).executeAsList().map { it.gid }
+
     private fun now(): Long = System.currentTimeMillis()
 
     companion object {

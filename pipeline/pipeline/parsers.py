@@ -150,3 +150,37 @@ def parse_hsk_char_levels(path: Path) -> dict[int, int]:
 
 def nfc(s: str) -> str:
     return unicodedata.normalize("NFC", s)
+
+
+_CEDICT_LINE = re.compile(r"^(\S+) (\S+) \[([^\]]*)\] /(.+)/$")
+
+
+def parse_cedict(path: Path) -> list[tuple[str, str, str, list[str]]]:
+    """CC-CEDICT line 'Trad Simp [pin1 yin1] /def1/def2/' -> (trad, simp, numbered_pinyin,
+    [defs]). Comment lines skipped; malformed lines dropped rather than crashing."""
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#"):
+            continue
+        m = _CEDICT_LINE.match(line)
+        if not m:
+            continue
+        trad, simp, pinyin, defs_raw = m.groups()
+        defs = [d for d in defs_raw.split("/") if d]
+        out.append((nfc(trad), nfc(simp), pinyin, defs))
+    return out
+
+
+def parse_hsk_word_levels(path: Path) -> dict[str, int]:
+    """complete.min.json -> {simplified word: lowest new-HSK level} (word-level
+    counterpart of parse_hsk_char_levels; n7 = the combined 7-9 band)."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out: dict[str, int] = {}
+    for entry in data:
+        word = entry.get("s", "")
+        new_levels = [int(code[1:]) for code in entry.get("l", []) if code.startswith("n") and code[1:].isdigit()]
+        if word and new_levels:
+            level = min(new_levels)
+            if word not in out or level < out[word]:
+                out[word] = level
+    return out

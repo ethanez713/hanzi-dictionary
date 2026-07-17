@@ -36,10 +36,13 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   15/15. Audio: device Mandarin TTS on the primary reading (the Piper syllable bank
   failed the ear-check — inaccurate tones — and was removed; spec §16). Live camera OCR
   dropped in favor of photo scanning. Anki .apkg import deferred (needs a sample file).
-- **M3.5 (definitions & attributions)** — in progress: character-page glosses now ship via
-  Unihan `kDefinition` (glyph.definition, shown under the header). Still to do: CC-CEDICT
-  ingestion for full word data (`word`/`word_char`, word search/pages) and the in-app ⓘ
-  attributions element (spec §16).
+- **M3.5 (definitions & attributions)** — mostly done: character-page glosses via Unihan
+  `kDefinition`, and CC-CEDICT ingested (~110k words in `word`/`word_char`, "In words"
+  section on character pages, tone-marked pinyin, word-level HSK). Still to do: word
+  search + word pages, English FTS, and the in-app ⓘ attributions element (spec §16).
+- **M3.55 (practice & archive)** — done: flashcard Practice screen over characters
+  encountered (lookups/photo finds) but not yet known; "I knew it" archives them, and
+  My Characters is reframed as the Archive (spec §16). No SRS scheduling (v2).
 - **M3.6–M3.9** — added in spec v1.2: scholarly & component depth, capture/search
   completion, app polish, and pack updates. Spec §12 is now the complete work plan —
   every spec requirement belongs to exactly one milestone. None started.

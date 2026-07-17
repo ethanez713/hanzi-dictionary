@@ -35,8 +35,18 @@ fun AppRoot(
             SearchScreen(
                 repository = repository,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
-                onOpenKnown = { nav.navigate("known") },
+                onOpenPractice = { nav.navigate("practice") },
                 onOpenPhotos = { nav.navigate("photos") },
+            )
+        }
+        composable("practice") {
+            PracticeScreen(
+                repository = repository,
+                userRepository = userRepository,
+                tts = tts,
+                onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onOpenArchive = { nav.navigate("known") },
+                onBack = { nav.popBackStack() },
             )
         }
         composable(

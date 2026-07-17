@@ -82,6 +82,22 @@ CREATE TABLE confusable (
     diff    TEXT
 );
 
+CREATE TABLE word (
+    id        TEXT PRIMARY KEY,
+    simp      TEXT NOT NULL,
+    trad      TEXT NOT NULL,
+    pinyin    TEXT,
+    defs      TEXT,
+    freq_rank INTEGER,
+    hsk       INTEGER
+);
+
+CREATE TABLE word_char (
+    word_id  TEXT NOT NULL,
+    glyph_id TEXT NOT NULL,
+    position INTEGER NOT NULL
+);
+
 -- ---- queries ----
 
 glyphByChar:
@@ -130,6 +146,15 @@ ORDER BY (g.freq_rank IS NULL), g.freq_rank;
 
 confusablesFor:
 SELECT glyph_a, glyph_b, kind FROM confusable WHERE glyph_a = :glyphId OR glyph_b = :glyphId;
+
+-- Words containing :glyphId, learner-relevant first: HSK-listed (by level), then
+-- shorter words. freq_rank is NULL until a word-frequency source is ingested.
+wordsForGlyph:
+SELECT w.simp, w.trad, w.pinyin, w.defs, w.hsk
+FROM word_char wc JOIN word w ON w.id = wc.word_id
+WHERE wc.glyph_id = :glyphId
+ORDER BY (w.hsk IS NULL), w.hsk, LENGTH(w.simp), w.pinyin
+LIMIT :limit;
 
 allSources:
 SELECT * FROM source;

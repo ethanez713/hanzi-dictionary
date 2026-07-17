@@ -42,7 +42,7 @@ import kotlinx.coroutines.withContext
 fun SearchScreen(
     repository: HanziRepository,
     onOpenCharacter: (String) -> Unit,
-    onOpenKnown: () -> Unit,
+    onOpenPractice: () -> Unit,
     onOpenPhotos: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -69,7 +69,7 @@ fun SearchScreen(
                 title = { Text("Hanzi Dictionary") },
                 actions = {
                     TextButton(onClick = onOpenPhotos) { Text("Photos") }
-                    TextButton(onClick = onOpenKnown) { Text("Known") }
+                    TextButton(onClick = onOpenPractice) { Text("Practice") }
                 },
             )
         },

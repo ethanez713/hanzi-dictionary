@@ -3,7 +3,7 @@
 -- pseudo-IDs in component_id / component_use.glyph_id-shaped columns.
 --
 -- M0 populates: source, glyph, reading, decomposition, component_use, claim,
--- variant_edge, phonetic_series. word/word_char/script_form/confusable/audio are
+-- variant_edge, phonetic_series, word, word_char. script_form/audio are
 -- declared now (SRS/word-level tiers are schema-ready) but stay empty until M1+.
 
 CREATE TABLE source (
@@ -101,6 +101,7 @@ CREATE TABLE word_char (
     glyph_id TEXT NOT NULL REFERENCES glyph(id),
     position INTEGER NOT NULL
 );
+CREATE INDEX idx_word_char_glyph ON word_char(glyph_id);
 
 CREATE TABLE script_form (
     glyph_id  TEXT NOT NULL REFERENCES glyph(id),

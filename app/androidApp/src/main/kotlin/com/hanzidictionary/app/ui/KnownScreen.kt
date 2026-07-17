@@ -62,7 +62,7 @@ fun KnownScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Characters") },
+                title = { Text("Archive") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("←") } },
             )
         },
@@ -71,7 +71,13 @@ fun KnownScreen(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("$count characters marked known", fontWeight = FontWeight.Bold)
+            Text("$count characters archived as known", fontWeight = FontWeight.Bold)
+            Text(
+                "Known characters skip the practice deck and float to the front of " +
+                    "component series. Import what you already know:",
+                fontSize = 13.sp,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             SectionTitle("Import an HSK level")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

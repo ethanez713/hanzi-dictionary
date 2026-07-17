@@ -14,7 +14,8 @@ dataset repo's NOTICE and the in-app attributions screen (spec §9's IA item 9,
 | [makemeahanzi](https://github.com/skishore/makemeahanzi) `dictionary.txt` (derived from Unihan + [CJKlib](https://github.com/cburgmer/cjklib)) | Character decomposition (fallback when cjkvi-ids has none), semantic/phonetic component claims, formation-type claims | **LGPL-3.0-or-later** | [LGPL-3.0.txt](../LICENSES/LGPL-3.0.txt) |
 | [cjkvi-ids](https://github.com/cjkvi/cjkvi-ids) (CHISE) | Region-tagged IDS decomposition (primary source; shipped separately as `ids.db`, see below) | GPL-2.0 | [GPL-2.0.txt](../LICENSES/GPL-2.0.txt) |
 | [OpenCC](https://github.com/BYVoid/OpenCC) `STCharacters.txt`/`TSCharacters.txt` | Simplified/Traditional character conversion tables, cross-checked against Unihan for variant-edge classification | Apache-2.0 | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
-| [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | HSK 3.0 level assignments (glyph.hsk, hsk-levels.json import picker) | MIT | (short license, see upstream repo) |
+| [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | HSK 3.0 level assignments (glyph.hsk, word.hsk, hsk-levels.json import picker) | MIT | (short license, see upstream repo) |
+| [CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict) (MDBG export) | Word-level entries: `word`/`word_char` tables — simplified/traditional forms, pinyin, English definitions ("In words" on character pages) | CC BY-SA 4.0 | [CC-BY-SA-4.0.txt](../LICENSES/CC-BY-SA-4.0.txt) |
 
 ## Bundled app assets (not part of the dataset)
 

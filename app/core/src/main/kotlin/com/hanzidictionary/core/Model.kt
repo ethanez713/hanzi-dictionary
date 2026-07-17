@@ -48,6 +48,15 @@ data class ConfusableView(
     val kind: String,          // visual
 )
 
+/** A word containing the page's character (CC-CEDICT, spec §9 IA item 6). */
+data class WordView(
+    val simp: String,
+    val trad: String,          // may equal simp
+    val pinyin: String?,
+    val gloss: String?,        // first definition(s), pre-joined for display
+    val hsk: Long?,
+)
+
 data class CharacterPage(
     val glyphId: String,
     val char: String,
@@ -59,6 +68,7 @@ data class CharacterPage(
     val readings: List<ReadingView>,
     val ids: String?,          // resolved decomposition IDS string
     val breakdown: List<ComponentBreakdown>,
+    val words: List<WordView>, // words containing this character, learner-relevant first
     val claims: List<ClaimView>,
     val variants: List<VariantView>,
     val confusables: List<ConfusableView>,
@@ -75,6 +85,9 @@ data class SeriesMember(
 data class ComponentPage(
     val componentId: String,
     val char: String?,          // null for "ids:" pseudo-components
+    val glyphId: String?,       // set when the component is itself a pack glyph, so the
+                                // UI can link to its own character page
+    val definition: String?,    // the component's own gloss, when it is a pack glyph
     val ownReadings: List<ReadingView>,
     val memberCount: Int,
     val reliability: Double?,

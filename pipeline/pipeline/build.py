@@ -18,10 +18,10 @@ import json
 from pathlib import Path
 
 from fetchers.common import SNAPSHOT_ROOT
-from pipeline import load, merge, normalize, phonetic
+from pipeline import load, merge, normalize, parsers, phonetic, pinyin
 from pipeline.normalize import GlyphEntity
 
-SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract", "hsk"]
+SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract", "hsk", "cedict"]
 BUILD_DIR = Path(__file__).resolve().parent.parent / "data" / "build"
 
 
@@ -80,6 +80,33 @@ def dedupe_readings(e: GlyphEntity) -> list[tuple[str, str, int | None]]:
         if key not in seen or (r.freq is not None and seen[key] is None):
             seen[key] = r.freq
     return [(system, value, freq) for (system, value), freq in seen.items()]
+
+
+def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[list[tuple], list[tuple]]:
+    """CC-CEDICT entries -> word/word_char rows (spec §7, M3.5). Only multi-character
+    words whose every character is in the pack are kept, so word_char links always
+    resolve; single-char entries are skipped (glyph.definition covers those).
+    word.hsk comes from the word-level HSK list; freq_rank stays NULL until a word
+    frequency source is ingested — display ordering uses hsk + length instead."""
+    entries = parsers.parse_cedict(snapshot_paths["cedict"] / "cedict_ts.u8")
+    hsk_words = parsers.parse_hsk_word_levels(snapshot_paths["hsk"] / "complete.min.json")
+
+    word_rows: list[tuple] = []
+    word_char_rows: list[tuple] = []
+    for trad, simp, numbered, defs in entries:
+        if len(simp) < 2:
+            continue
+        gids = [f"U+{ord(ch):04X}" for ch in simp]
+        if any(g not in glyph_ids for g in gids):
+            continue
+        wid = f"w{len(word_rows) + 1:06d}"
+        word_rows.append((
+            wid, simp, trad, pinyin.cedict_pinyin(numbered),
+            json.dumps(defs, ensure_ascii=False), None, hsk_words.get(simp),
+        ))
+        for pos, g in enumerate(gids):
+            word_char_rows.append((wid, g, pos))
+    return word_rows, word_char_rows
 
 
 def build() -> Path:
@@ -150,6 +177,8 @@ def build() -> Path:
         if d.from_glyph in selected_set and d.to_glyph in selected_set
     ]
 
+    word_rows, word_char_rows = build_words(snapshot_paths, glyph_ids={f"U+{cp:04X}" for cp in selected})
+
     series_rows_typed = phonetic.compute_phonetic_series(component_use_objects, freq_rank_map)
     phonetic_series_rows = [
         (s.component_id, s.member_count, s.reliability, s.best_stratum) for s in series_rows_typed
@@ -185,6 +214,8 @@ def build() -> Path:
     load.load_variant_edges(conn, variant_edge_rows)
     load.load_phonetic_series(conn, phonetic_series_rows)
     load.load_confusables(conn, confusable_rows)
+    load.load_words(conn, word_rows)
+    load.load_word_chars(conn, word_char_rows)
     conn.commit()
     conn.close()
 
@@ -192,6 +223,7 @@ def build() -> Path:
     print(f"  glyphs={len(glyph_rows)} readings={len(reading_rows)} decompositions={len(decomposition_rows)}")
     print(f"  component_use={len(component_use_rows)} claims={len(claim_rows)}")
     print(f"  variant_edges={len(variant_edge_rows)} phonetic_series={len(phonetic_series_rows)} confusables={len(confusable_rows)}")
+    print(f"  words={len(word_rows)} word_chars={len(word_char_rows)}")
     return db_path
 
 
