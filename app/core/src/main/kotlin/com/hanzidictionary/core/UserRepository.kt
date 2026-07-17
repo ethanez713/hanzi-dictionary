@@ -35,6 +35,12 @@ class UserRepository(driver: SqlDriver) {
 
     fun logLookup(glyphId: String) = q.logLookup(glyphId, now())
 
+    /** Record that the user mixed up [glyphA] and [glyphB] in a drill — seeds future
+     * confusable review (spec §7 confusion_event, §14). */
+    fun logConfusion(glyphA: String, glyphB: String) = q.logConfusion(glyphA, glyphB, now())
+
+    fun confusionCount(): Long = q.confusionCount().executeAsOne()
+
     // ---- photo scan state ----
 
     fun lastScanTimestamp(): Long = q.getLastScanTimestamp().executeAsOneOrNull() ?: 0L

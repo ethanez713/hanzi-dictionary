@@ -40,6 +40,7 @@ fun ComponentScreen(
     userRepository: UserRepository,
     componentId: String,
     onOpenCharacter: (String) -> Unit,
+    onPracticeSeries: () -> Unit,
     onBack: () -> Unit,
 ) {
     val page by produceState<ComponentPage?>(initialValue = null, componentId) {
@@ -90,6 +91,12 @@ fun ComponentScreen(
             }
 
             if (p.reliability != null) ReliabilityMeter(p)
+
+            if (p.phoneticMembers.isNotEmpty() || p.semanticMembers.isNotEmpty()) {
+                // Component reunion (spec §14/§16): drill the whole series at once —
+                // knowing the component makes its siblings predictable.
+                TextButton(onClick = onPracticeSeries) { Text("Practice this series →") }
+            }
 
             if (p.phoneticMembers.isNotEmpty()) {
                 SectionTitle("Phonetic series (${p.phoneticMembers.size})")

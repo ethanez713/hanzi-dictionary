@@ -58,6 +58,9 @@ INSERT INTO lookup_event(item_id, ts) VALUES (?, ?);
 logConfusion:
 INSERT INTO confusion_event(glyph_a, glyph_b, ts) VALUES (?, ?, ?);
 
+confusionCount:
+SELECT COUNT(*) FROM confusion_event;
+
 getLastScanTimestamp:
 SELECT last_photo_timestamp FROM scan_state WHERE id = 0;
 

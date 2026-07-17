@@ -39,13 +39,31 @@ fun AppRoot(
                 onOpenPhotos = { nav.navigate("photos") },
             )
         }
-        composable("practice") {
+        composable(
+            route = "practice?component={componentId}",
+            arguments = listOf(navArgument("componentId") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            }),
+        ) { entry ->
             PracticeScreen(
                 repository = repository,
                 userRepository = userRepository,
+                hskLevels = hskLevels,
                 tts = tts,
+                initialComponentId = entry.arguments?.getString("componentId")?.let { dec(it) },
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onOpenConfusables = { nav.navigate("confusables") },
                 onOpenArchive = { nav.navigate("known") },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable("confusables") {
+            ConfusableDrillScreen(
+                repository = repository,
+                userRepository = userRepository,
+                onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onBack = { nav.popBackStack() },
             )
         }
@@ -74,6 +92,7 @@ fun AppRoot(
                 userRepository = userRepository,
                 componentId = componentId,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onPracticeSeries = { nav.navigate("practice?component=${enc(componentId)}") },
                 onBack = { nav.popBackStack() },
             )
         }

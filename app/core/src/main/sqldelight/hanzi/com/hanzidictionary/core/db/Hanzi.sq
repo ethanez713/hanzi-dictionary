@@ -147,6 +147,9 @@ ORDER BY (g.freq_rank IS NULL), g.freq_rank;
 confusablesFor:
 SELECT glyph_a, glyph_b, kind FROM confusable WHERE glyph_a = :glyphId OR glyph_b = :glyphId;
 
+allConfusables:
+SELECT glyph_a, glyph_b FROM confusable;
+
 -- Words containing :glyphId, learner-relevant first: HSK-listed (by level), then
 -- shorter words. freq_rank is NULL until a word-frequency source is ingested.
 wordsForGlyph:

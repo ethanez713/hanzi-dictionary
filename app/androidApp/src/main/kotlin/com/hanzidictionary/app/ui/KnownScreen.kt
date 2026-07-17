@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -50,11 +51,13 @@ fun KnownScreen(
     // bumped after each mutation to re-pull the known list/count
     var refresh by remember { mutableIntStateOf(0) }
     var knownChars by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var knownIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var count by remember { mutableStateOf(0L) }
     var pasteText by remember { mutableStateOf("") }
 
     androidx.compose.runtime.LaunchedEffect(refresh) {
         val ids = withContext(Dispatchers.IO) { userRepository.knownIds() }
+        knownIds = ids
         count = ids.size.toLong()
         knownChars = ids.map { it to charOfGlyphId(it) }.sortedBy { it.second }
     }
@@ -78,6 +81,24 @@ fun KnownScreen(
                 fontSize = 13.sp,
                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            SectionTitle("HSK progress")
+            for (level in hskLevels.keys.sorted()) {
+                val levelIds = hskLevels[level].orEmpty()
+                val knownInLevel = levelIds.count { it in knownIds }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        "${if (level == 7) "HSK 7-9" else "HSK $level"}: $knownInLevel / ${levelIds.size}",
+                        fontSize = 13.sp,
+                    )
+                    LinearProgressIndicator(
+                        progress = {
+                            if (levelIds.isEmpty()) 0f else knownInLevel.toFloat() / levelIds.size
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
 
             SectionTitle("Import an HSK level")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

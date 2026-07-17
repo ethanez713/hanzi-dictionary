@@ -98,6 +98,14 @@ data class ComponentPage(
     val semanticMembers: List<SeriesMember>,
 )
 
+/** A visually-confusable pair (Unihan kSpoofingVariant), for the confusable drill. */
+data class ConfusablePair(
+    val glyphA: String,
+    val glyphB: String,
+    val charA: String,
+    val charB: String,
+)
+
 /** All source rows, for the provenance/attributions screen (spec §9 IA item 9, §15). */
 data class SourceInfo(
     val id: String,

@@ -284,6 +284,26 @@ class HanziRepository(
         return db.hanziQueries.glyphsByIds(ids.toList()).executeAsList().map { it.id }.toSet()
     }
 
+    /** [ids] reordered most-common-first (freq_rank asc, unranked last) — study decks
+     * should serve frequent characters before rare ones. Chunked to stay under SQLite's
+     * bound-parameter limit (an HSK band can exceed it). */
+    fun sortByFrequency(ids: Collection<String>): List<String> {
+        if (ids.isEmpty()) return emptyList()
+        val rank = mutableMapOf<String, Long>()
+        for (chunk in ids.chunked(500)) {
+            db.hanziQueries.glyphsByIds(chunk).executeAsList().forEach { g ->
+                rank[g.id] = g.freq_rank ?: Long.MAX_VALUE
+            }
+        }
+        return ids.filter { it in rank }.sortedBy { rank[it] }
+    }
+
+    /** Every visually-confusable pair in the pack (drill source). */
+    fun confusablePairs(): List<ConfusablePair> =
+        db.hanziQueries.allConfusables().executeAsList().map {
+            ConfusablePair(it.glyph_a, it.glyph_b, charOfGlyphId(it.glyph_a), charOfGlyphId(it.glyph_b))
+        }
+
     // ---- sources / provenance ----
 
     fun sources(): List<SourceInfo> =

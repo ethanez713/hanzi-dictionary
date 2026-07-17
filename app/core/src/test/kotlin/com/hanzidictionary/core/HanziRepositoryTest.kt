@@ -176,6 +176,36 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun sortByFrequencyServesCommonCharactersFirst() {
+        val common = "U+8BF7"   // 请, high-frequency
+        val rare = repo.search("qing").last().glyphId
+        val sorted = repo.sortByFrequency(listOf(rare, common, "U+FFFFF" /* not in pack */))
+        assertEquals(common, sorted.first(), "请 should sort before a rare character")
+        assertEquals(2, sorted.size, "ids missing from the pack are dropped")
+    }
+
+    @Test
+    fun confusablePairsAvailableForDrill() {
+        val pairs = repo.confusablePairs()
+        assertTrue(pairs.isNotEmpty(), "pack should carry kSpoofingVariant pairs")
+        assertTrue(
+            pairs.any { setOf(it.charA, it.charB) == setOf("妹", "妺") },
+            "妹/妺 should be a drillable pair",
+        )
+    }
+
+    @Test
+    fun confusionEventsRoundTrip() {
+        val d = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        UserRepository.Schema.create(d)
+        val user = UserRepository(d)
+        assertEquals(0L, user.confusionCount())
+        user.logConfusion("U+59B9", "U+59BA")
+        assertEquals(1L, user.confusionCount())
+        d.close()
+    }
+
+    @Test
     fun practiceQueueHoldsEncounteredUnknownsUntilArchived() {
         val d = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         UserRepository.Schema.create(d)
