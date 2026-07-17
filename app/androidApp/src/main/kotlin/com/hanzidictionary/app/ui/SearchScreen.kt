@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
@@ -189,7 +190,12 @@ fun SearchScreen(
                 )
             } else {
                 // Spec §9 ranking: characters (exact/pinyin/English) first, then words.
-                LazyColumn(Modifier.fillMaxSize()) {
+                // The two searches land at different times; if word hits render first,
+                // LazyColumn anchors scroll to the words header and character rows added
+                // above it end up off-screen — so re-pin to the top on every result change.
+                val listState = rememberLazyListState()
+                LaunchedEffect(results, wordHits) { listState.scrollToItem(0) }
+                LazyColumn(Modifier.fillMaxSize(), state = listState) {
                     items(results, key = { it.glyphId }) { r ->
                         SearchRow(r, onClick = { onOpenCharacter(r.glyphId) })
                         HorizontalDivider()
@@ -198,8 +204,8 @@ fun SearchScreen(
                         item(key = "words-header") {
                             Text(
                                 "Words",
-                                Modifier.padding(top = 16.dp, bottom = 4.dp),
-                                fontSize = 13.sp,
+                                Modifier.padding(top = 10.dp, bottom = 2.dp),
+                                fontSize = 12.sp,
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -308,16 +314,16 @@ private fun AttributionsDialog(repository: HanziRepository, onDismiss: () -> Uni
 @Composable
 private fun WordSearchRow(w: WordHit, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(w.simp, fontSize = 26.sp)
+        Text(w.simp, fontSize = 21.sp)
         if (w.trad != w.simp) {
-            Text(w.trad, fontSize = 16.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(w.trad, fontSize = 14.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(Modifier.weight(1f)) {
-            w.pinyin?.let { Text(it, fontSize = 15.sp) }
+            w.pinyin?.let { Text(it, fontSize = 14.sp) }
             w.gloss?.let {
                 Text(
                     it,
@@ -336,13 +342,13 @@ private fun WordSearchRow(w: WordHit, onClick: () -> Unit) {
 @Composable
 private fun SearchRow(result: SearchResult, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(result.char, fontSize = 34.sp)
+        Text(result.char, fontSize = 27.sp)
         Column(Modifier.weight(1f)) {
-            result.primaryPinyin?.let { Text(it, fontSize = 18.sp) }
+            result.primaryPinyin?.let { Text(it, fontSize = 15.sp) }
             result.definition?.let {
                 Text(
                     it,
