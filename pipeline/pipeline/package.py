@@ -83,15 +83,17 @@ def build_core_db(src: sqlite3.Connection) -> None:
     )
 
     core = sqlite3.connect(CORE_DB)
+    # definition joins the index so English search works (spec §9 ranking "English FTS");
+    # unicode61's diacritic folding is what lets toneless "qing" match "qǐng" in pinyin.
     core.executescript("""
-        CREATE VIRTUAL TABLE glyph_fts USING fts5(glyph_id UNINDEXED, char, pinyin);
+        CREATE VIRTUAL TABLE glyph_fts USING fts5(glyph_id UNINDEXED, char, pinyin, definition);
     """)
     rows = core.execute("""
-        SELECT g.id, g.char, COALESCE(GROUP_CONCAT(DISTINCT r.value), '')
+        SELECT g.id, g.char, COALESCE(GROUP_CONCAT(DISTINCT r.value), ''), COALESCE(g.definition, '')
         FROM glyph g LEFT JOIN reading r ON r.glyph_id = g.id AND r.system = 'pinyin'
         GROUP BY g.id
     """).fetchall()
-    core.executemany("INSERT INTO glyph_fts VALUES (?,?,?)", rows)
+    core.executemany("INSERT INTO glyph_fts VALUES (?,?,?,?)", rows)
     core.commit()
 
     (non_cjkvi_decomp_count,) = core.execute("SELECT COUNT(*) FROM decomposition").fetchone()

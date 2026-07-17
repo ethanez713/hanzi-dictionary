@@ -104,6 +104,23 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun englishSearchFindsCharacterByGloss() {
+        val results = repo.search("feeling")
+        assertTrue(results.any { it.char == "情" }, "searching an English gloss should find 情")
+    }
+
+    @Test
+    fun radicalFormCarriesUsefulGloss() {
+        // 讠's raw kDefinition is pure bookkeeping ("simplified Kangxi radical 149");
+        // the pack derives a learner gloss from its parent 言 instead.
+        val page = repo.characterPageByChar("说")
+        assertNotNull(page)
+        val yan = page.breakdown.first { it.componentId == "讠" }
+        assertNotNull(yan.definition)
+        assertTrue("speech" in yan.definition!!, "讠 should gloss via 言, got: ${yan.definition}")
+    }
+
+    @Test
     fun claimedPhoneticSurvivesTotalSoundDrift() {
         // 说's 兑 (duì vs shuō) has no computable sound link at any stratum, but
         // makemeahanzi's etymology asserts the phonetic role — the detector must keep

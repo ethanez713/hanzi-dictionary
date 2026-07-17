@@ -309,9 +309,9 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
     }
 }
 
-/** First sense only — component cards want a hint ("heart"), not the full gloss. */
+/** First sense only — component cards want a hint ("words, speech"), not the full gloss. */
 private fun shortGloss(definition: String): String =
-    definition.split(";", ",").first().trim()
+    definition.split(";").first().trim()
 
 @Composable
 private fun SoundLine(p: CharacterPage) {

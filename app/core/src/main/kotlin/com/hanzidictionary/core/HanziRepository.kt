@@ -60,10 +60,20 @@ class HanziRepository(
     }
 
     private fun buildFtsMatch(q: String): String? {
-        val hasLatin = q.any { it in 'a'..'z' || it in 'A'..'Z' }
         val hasCjk = q.any { isCjkChar(it) }
+        val latinTokens = q.lowercase().split(" ")
+            .map { sanitizeFts(it) }
+            .filter { t -> t.isNotEmpty() && t.any { it in 'a'..'z' } }
+
         val clauses = mutableListOf<String>()
-        if (hasLatin) clauses += "pinyin:${sanitizeFts(q)}*"
+        // A character has one pinyin syllable, so the pinyin clause only makes sense
+        // for a single token; English glosses are multi-word, so the definition clause
+        // ANDs all tokens (spec §9 ranking: pinyin and English FTS both feed search).
+        if (latinTokens.size == 1) clauses += "pinyin:${latinTokens[0]}*"
+        if (latinTokens.isNotEmpty()) {
+            val defClause = latinTokens.joinToString(" AND ") { "definition:$it*" }
+            clauses += if (latinTokens.size > 1) "($defClause)" else defClause
+        }
         if (hasCjk) clauses += "char:${sanitizeFts(q)}"
         return clauses.joinToString(" OR ").ifEmpty { null }
     }

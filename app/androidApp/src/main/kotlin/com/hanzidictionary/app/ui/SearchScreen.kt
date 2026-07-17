@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SearchResult
+import com.hanzidictionary.core.SourceInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -46,6 +47,10 @@ fun SearchScreen(
     onOpenPhotos: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
+    var showAttributions by remember { mutableStateOf(false) }
+    if (showAttributions) {
+        AttributionsDialog(repository, onDismiss = { showAttributions = false })
+    }
 
     // The pack includes ultra-rare characters (unranked CJK Ext-B/C/D) that the bundled
     // Noto font has no glyph for; they'd render as tofu boxes. Drop them from results by
@@ -70,6 +75,7 @@ fun SearchScreen(
                 actions = {
                     TextButton(onClick = onOpenPhotos) { Text("Photos") }
                     TextButton(onClick = onOpenPractice) { Text("Practice") }
+                    TextButton(onClick = { showAttributions = true }) { Text("ⓘ") }
                 },
             )
         },
@@ -107,6 +113,40 @@ fun SearchScreen(
             }
         }
     }
+}
+
+/** The ⓘ attributions element (spec §15/§16): every data source in the pack with its
+ * license, straight from the pack's own source table, plus the bundled font. */
+@Composable
+private fun AttributionsDialog(repository: HanziRepository, onDismiss: () -> Unit) {
+    val sources by produceState(initialValue = emptyList<SourceInfo>()) {
+        value = withContext(Dispatchers.IO) { repository.sources() }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text("Data sources") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (s in sources) {
+                    Column {
+                        Text(s.name, fontSize = 14.sp)
+                        Text(
+                            "${s.license} · ${s.version}",
+                            fontSize = 12.sp,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Text(
+                    "UI typeface: Noto Sans CJK SC (SIL OFL 1.1). Full license texts ship " +
+                        "in the project's LICENSES/ directory.",
+                    fontSize = 12.sp,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+    )
 }
 
 /** A result row leads with what identifies the character — its sound and meaning. The

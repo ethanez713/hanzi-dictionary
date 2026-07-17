@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 
 from fetchers.common import SNAPSHOT_ROOT
-from pipeline import load, merge, normalize, parsers, phonetic, pinyin
+from pipeline import load, merge, normalize, parsers, phonetic, pinyin, radicals
 from pipeline.normalize import GlyphEntity
 
 SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract", "hsk", "cedict"]
@@ -133,11 +133,18 @@ def build() -> Path:
     component_use_objects: list[phonetic.ComponentUseRow] = []
     claim_rows = []
 
+    # Parent definitions for radical-gloss derivation (讠's useful gloss lives on 言).
+    parent_defs = {
+        parent: (entities.get(ord(parent)).definition if ord(parent) in entities else None)
+        for parent in radicals.RADICAL_PARENT.values()
+    }
+
     for cp in selected:
         e = entities[cp]
         gid = f"U+{cp:04X}"
         rank = freq_rank_map.get(cp)
-        glyph_rows.append((gid, e.char, glyph_scripts(e), e.total_strokes, rank, e.hsk, e.definition))
+        definition = radicals.radical_gloss(e.char, e.definition, parent_defs) or e.definition
+        glyph_rows.append((gid, e.char, glyph_scripts(e), e.total_strokes, rank, e.hsk, definition))
 
         for system, value, freq in dedupe_readings(e):
             reading_rows.append((gid, system, value, None, freq, "unihan" if system not in ("mc_baxter", "oc_zz", "oc_bs") else "wiktextract"))
