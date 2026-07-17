@@ -30,7 +30,7 @@ fun BackButton(onBack: () -> Unit) {
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
 }
 
 /** Component function color-coding used across breakdown strips and component pages

@@ -125,18 +125,19 @@ fun SearchScreen(
         }
     }
 
-    val results by produceState(initialValue = emptyList<SearchResult>(), query) {
+    // Characters and words are queried together so both sections land in the same frame:
+    // if they raced, a words-first frame would put the words header at the top of the
+    // LazyColumn and the character rows would then be inserted above the viewport.
+    val (results, wordHits) = produceState(
+        initialValue = emptyList<SearchResult>() to emptyList<WordHit>(),
+        query,
+    ) {
         val q = query
-        value = if (q.isBlank()) emptyList()
+        value = if (q.isBlank()) emptyList<SearchResult>() to emptyList()
         else withContext(Dispatchers.IO) {
-            repository.search(q).filter { glyphPaint.hasGlyph(it.char) }
+            repository.search(q).filter { glyphPaint.hasGlyph(it.char) } to repository.searchWords(q)
         }
-    }
-    val wordHits by produceState(initialValue = emptyList<WordHit>(), query) {
-        val q = query
-        value = if (q.isBlank()) emptyList()
-        else withContext(Dispatchers.IO) { repository.searchWords(q) }
-    }
+    }.value
 
     Scaffold(
         topBar = {

@@ -88,10 +88,12 @@ fun CharacterScreen(
             )
             return@Scaffold
         }
+        // Density target: definition, "In words", and the component breakdown should all
+        // fit one screen without scrolling for a typical character.
         Column(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Header(p, tts)
             // One compact row for both controls: the archive toggle ("I know this"
@@ -147,17 +149,17 @@ fun CharacterScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Header(p: CharacterPage, tts: MandarinTts) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Character on the left, meaning and sound beside it: stacking these vertically
         // left the whole right half of the page empty.
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(p.char, fontSize = 88.sp, lineHeight = 96.sp)
+            Text(p.char, fontSize = 64.sp, lineHeight = 70.sp)
             Column(
-                Modifier.weight(1f).padding(top = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                Modifier.weight(1f).padding(top = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 // Every reading (多音字: all of them, spec §15) as its own chip. Only the
                 // primary (highest-frequency, sorted first) reading is playable: the device
@@ -188,17 +190,17 @@ private fun Words(words: List<WordView>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(w.simp, fontSize = 22.sp)
+            Text(w.simp, fontSize = 18.sp)
             // The traditional form matters but shouldn't shout at the same size as the
             // headword — smaller and muted keeps the row scannable.
             if (w.trad != w.simp) {
-                Text(w.trad, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(w.trad, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            w.pinyin?.let { Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            w.pinyin?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             w.gloss?.let {
                 Text(
                     it,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -213,11 +215,11 @@ private fun Words(words: List<WordView>) {
 private fun ReadingChip(reading: ReadingView, playable: Boolean, onPlay: () -> Unit) {
     Card(modifier = if (playable) Modifier.clickable(onClick = onPlay) else Modifier) {
         Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(reading.value, fontSize = 20.sp)
+            Text(reading.value, fontSize = 17.sp)
             if (isNeutralTone(reading.value)) {
                 Text(
                     "neutral",
@@ -236,11 +238,11 @@ private fun ReadingChip(reading: ReadingView, playable: Boolean, onPlay: () -> U
 @Composable
 private fun Definition(text: String?) {
     if (text != null) {
-        Text(text, fontSize = 18.sp, lineHeight = 24.sp)
+        Text(text, fontSize = 15.sp, lineHeight = 20.sp)
     } else {
         Text(
             "No English gloss for this character.",
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -254,7 +256,7 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
     // One card per component: the glyph, its role, and what it actually contributes —
     // a meaning-component shows its own gloss, a sound-component its reading (tappable
     // to hear it). Cards stack full-width so the contribution text has room.
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (c in p.breakdown) {
             val color = functionColor(c.function)
             val showsSound = c.function == "phonetic" || c.function == "both"
@@ -265,12 +267,12 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
                 ),
             ) {
                 Row(
-                    Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(c.displayChar ?: "◎", fontSize = 44.sp, color = color)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(c.displayChar ?: "◎", fontSize = 32.sp, color = color)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         val label = functionLabel(c.function)
                         // Provenance badge (spec §7 resolution): computed is the default
                         // and needs no ink; call out corroboration and source-only claims.
@@ -285,7 +287,7 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(label, fontSize = 12.sp, color = color)
+                                Text(label, fontSize = 11.sp, color = color)
                                 if (badge != null) {
                                     Text(
                                         badge,
@@ -295,34 +297,39 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
                                 }
                             }
                         }
-                        if (showsSound && c.pinyin != null) {
+                        // Sound and meaning share one line — a "both" component on two
+                        // lines made every breakdown card a different height.
+                        val gloss = c.definition?.let { shortGloss(it) }
+                        if ((showsSound && c.pinyin != null) || (showsMeaning && gloss != null)) {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(c.pinyin!!, fontSize = 17.sp)
-                                if (tts.available && c.displayChar != null) {
+                                if (showsSound && c.pinyin != null) {
+                                    Text(c.pinyin!!, fontSize = 15.sp)
+                                    if (tts.available && c.displayChar != null) {
+                                        Text(
+                                            "🔊",
+                                            fontSize = 13.sp,
+                                            modifier = Modifier.clickable { tts.speak(c.displayChar!!) },
+                                        )
+                                    }
+                                }
+                                if (showsMeaning && gloss != null) {
                                     Text(
-                                        "🔊",
-                                        fontSize = 14.sp,
-                                        modifier = Modifier.clickable { tts.speak(c.displayChar!!) },
+                                        gloss,
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }
                         }
-                        if (showsMeaning && c.definition != null) {
-                            Text(
-                                shortGloss(c.definition!!),
-                                fontSize = 14.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
                         // For unclassified parts, the component's own gloss is still the
                         // most useful hint we have — shown muted, not asserted as a role.
-                        if (!showsSound && !showsMeaning && c.definition != null) {
+                        if (!showsSound && !showsMeaning && gloss != null) {
                             Text(
-                                shortGloss(c.definition!!),
+                                gloss,
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -345,7 +352,7 @@ private fun SoundLine(p: CharacterPage) {
     val phon = p.breakdown.firstOrNull { it.function == "phonetic" || it.function == "both" } ?: return
     val sentence = driftSentence(phon.matchClass) ?: return
     SectionTitle("Sound")
-    Text(sentence)
+    Text(sentence, fontSize = 14.sp)
     phon.confidence?.let {
         Text(
             "sound-match confidence ${"%.0f".format(it * 100)}%",
@@ -362,8 +369,8 @@ private fun Formation(p: CharacterPage) {
     SectionTitle("Formation")
     for (claim in relevant) {
         Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(prettyClaim(claim.predicate, claim.value))
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(prettyClaim(claim.predicate, claim.value), fontSize = 14.sp)
                 Text(
                     "source: ${claim.source}",
                     fontSize = 11.sp,
