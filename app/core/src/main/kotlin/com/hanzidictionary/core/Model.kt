@@ -98,6 +98,33 @@ data class ComponentPage(
     val semanticMembers: List<SeriesMember>,
 )
 
+/** A word matched by search (spec §9 ranking "word"). */
+data class WordHit(
+    val id: String,
+    val simp: String,
+    val trad: String,
+    val pinyin: String?,
+    val gloss: String?,
+    val hsk: Long?,
+)
+
+/** One constituent character on a word page (spec §15 word page IA). */
+data class WordCharView(
+    val glyphId: String,
+    val char: String,
+    val definition: String?,
+)
+
+data class WordPage(
+    val id: String,
+    val simp: String,
+    val trad: String,
+    val pinyin: String?,
+    val senses: List<String>,
+    val hsk: Long?,
+    val chars: List<WordCharView>,  // distinct constituent characters, in order
+)
+
 /** A visually-confusable pair (Unihan kSpoofingVariant), for the confusable drill. */
 data class ConfusablePair(
     val glyphA: String,

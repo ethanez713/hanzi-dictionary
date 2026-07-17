@@ -176,6 +176,32 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun wordSearchMatchesEnglishPinyinAndCjk() {
+        val byEnglish = repo.searchWords("novel")
+        assertTrue(byEnglish.any { it.simp == "小说" }, "'novel' should find 小说, got ${byEnglish.map { it.simp }}")
+
+        val byPinyin = repo.searchWords("shuo hua")
+        assertTrue(byPinyin.any { it.simp == "说话" }, "'shuo hua' should find 说话")
+
+        val byCjk = repo.searchWords("说话")
+        assertTrue(byCjk.any { it.simp == "说话" }, "说话 should find itself")
+    }
+
+    @Test
+    fun wordPageAssemblesFormsSensesAndCharacterLinks() {
+        val hit = repo.searchWords("小说").first { it.simp == "小说" }
+        val page = repo.wordPage(hit.id)
+        assertNotNull(page)
+        assertEquals("小说", page.simp)
+        assertEquals("小說", page.trad)
+        assertTrue(page.senses.isNotEmpty())
+        // 小, 说, plus 說 from the traditional form — each linking to its glyph
+        assertTrue(page.chars.any { it.char == "说" })
+        assertTrue(page.chars.any { it.char == "小" })
+        assertTrue(page.chars.all { it.glyphId.startsWith("U+") })
+    }
+
+    @Test
     fun sortByFrequencyServesCommonCharactersFirst() {
         val common = "U+8BF7"   // 请, high-frequency
         val rare = repo.search("qing").last().glyphId

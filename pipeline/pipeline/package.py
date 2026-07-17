@@ -94,6 +94,17 @@ def build_core_db(src: sqlite3.Connection) -> None:
         GROUP BY g.id
     """).fetchall()
     core.executemany("INSERT INTO glyph_fts VALUES (?,?,?,?)", rows)
+
+    # Word search (spec §9 ranking "word", §15 word pages): unicode61 keeps contiguous
+    # CJK as one token, so prefix queries like simp:说* match 说话; diacritic folding
+    # lets "shuo hua" match the tone-marked pinyin column.
+    core.executescript("""
+        CREATE VIRTUAL TABLE word_fts USING fts5(word_id UNINDEXED, simp, trad, pinyin, defs);
+    """)
+    word_rows = core.execute(
+        "SELECT id, simp, trad, COALESCE(pinyin,''), COALESCE(defs,'') FROM word"
+    ).fetchall()
+    core.executemany("INSERT INTO word_fts VALUES (?,?,?,?,?)", word_rows)
     core.commit()
 
     (non_cjkvi_decomp_count,) = core.execute("SELECT COUNT(*) FROM decomposition").fetchone()

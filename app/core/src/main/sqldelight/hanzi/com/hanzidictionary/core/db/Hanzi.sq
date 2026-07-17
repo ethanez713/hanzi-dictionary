@@ -159,5 +159,11 @@ WHERE wc.glyph_id = :glyphId
 ORDER BY (w.hsk IS NULL), w.hsk, LENGTH(w.simp), w.pinyin
 LIMIT :limit;
 
+wordsByIds:
+SELECT * FROM word WHERE id IN :ids;
+
+wordById:
+SELECT * FROM word WHERE id = :id;
+
 allSources:
 SELECT * FROM source;

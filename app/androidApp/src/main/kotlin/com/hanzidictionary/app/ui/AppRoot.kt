@@ -35,8 +35,21 @@ fun AppRoot(
             SearchScreen(
                 repository = repository,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
                 onOpenPractice = { nav.navigate("practice") },
                 onOpenPhotos = { nav.navigate("photos") },
+            )
+        }
+        composable(
+            route = "word/{wordId}",
+            arguments = listOf(navArgument("wordId") { type = NavType.StringType }),
+        ) { entry ->
+            WordScreen(
+                repository = repository,
+                tts = tts,
+                wordId = dec(entry.arguments?.getString("wordId").orEmpty()),
+                onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onBack = { nav.popBackStack() },
             )
         }
         composable(

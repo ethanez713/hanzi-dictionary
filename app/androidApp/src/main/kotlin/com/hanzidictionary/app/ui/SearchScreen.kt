@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SearchResult
 import com.hanzidictionary.core.SourceInfo
+import com.hanzidictionary.core.WordHit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -47,6 +48,7 @@ import kotlinx.coroutines.withContext
 fun SearchScreen(
     repository: HanziRepository,
     onOpenCharacter: (String) -> Unit,
+    onOpenWord: (String) -> Unit,
     onOpenPractice: () -> Unit,
     onOpenPhotos: () -> Unit,
 ) {
@@ -70,6 +72,11 @@ fun SearchScreen(
         else withContext(Dispatchers.IO) {
             repository.search(q).filter { glyphPaint.hasGlyph(it.char) }
         }
+    }
+    val wordHits by produceState(initialValue = emptyList<WordHit>(), query) {
+        val q = query
+        value = if (q.isBlank()) emptyList()
+        else withContext(Dispatchers.IO) { repository.searchWords(q) }
     }
 
     Scaffold(
@@ -102,7 +109,7 @@ fun SearchScreen(
                     textAlign = TextAlign.Center,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } else if (results.isEmpty()) {
+            } else if (results.isEmpty() && wordHits.isEmpty()) {
                 Text(
                     "No results for “$query”.",
                     modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
@@ -110,10 +117,25 @@ fun SearchScreen(
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
+                // Spec §9 ranking: characters (exact/pinyin/English) first, then words.
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(results, key = { it.glyphId }) { r ->
                         SearchRow(r, onClick = { onOpenCharacter(r.glyphId) })
                         HorizontalDivider()
+                    }
+                    if (wordHits.isNotEmpty()) {
+                        item(key = "words-header") {
+                            Text(
+                                "Words",
+                                Modifier.padding(top = 16.dp, bottom = 4.dp),
+                                fontSize = 13.sp,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        items(wordHits, key = { it.id }) { w ->
+                            WordSearchRow(w, onClick = { onOpenWord(w.id) })
+                            HorizontalDivider()
+                        }
                     }
                 }
             }
@@ -153,6 +175,32 @@ private fun AttributionsDialog(repository: HanziRepository, onDismiss: () -> Uni
             }
         },
     )
+}
+
+@Composable
+private fun WordSearchRow(w: WordHit, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(w.simp, fontSize = 26.sp)
+        if (w.trad != w.simp) {
+            Text(w.trad, fontSize = 16.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f)) {
+            w.pinyin?.let { Text(it, fontSize = 15.sp) }
+            w.gloss?.let {
+                Text(
+                    it,
+                    fontSize = 13.sp,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
 }
 
 /** A result row leads with what identifies the character — its sound and meaning. The

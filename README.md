@@ -36,12 +36,17 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   15/15. Audio: device Mandarin TTS on the primary reading (the Piper syllable bank
   failed the ear-check — inaccurate tones — and was removed; spec §16). Live camera OCR
   dropped in favor of photo scanning. Anki .apkg import deferred (needs a sample file).
-- **M3.5 (definitions & attributions)** — nearly done: character-page glosses via Unihan
-  `kDefinition` (radical forms like 讠 derive learner glosses from their parent, e.g.
-  "words, speech"), CC-CEDICT ingested (~110k words, "In words" section, tone-marked
-  pinyin, word-level HSK), English search over glosses (definition column in glyph_fts),
-  and the in-app ⓘ attributions dialog. Still to do: word search + word pages,
-  sense↔reading pairing.
+- **M3.5 (definitions & attributions)** — done except sense↔reading pairing (needs
+  wiktextract per-pronunciation senses in the pipeline; shown unpaired for now, which
+  §15 permits): character-page glosses via Unihan `kDefinition` (radical forms like 讠
+  derive learner glosses from their parent, e.g. "words, speech"), CC-CEDICT ingested
+  (~110k words, "In words" section, tone-marked pinyin, word-level HSK), English search
+  over glosses, word search (word_fts: CJK prefix / pinyin syllables / English) with
+  word pages (both forms, senses, per-character strip, device-TTS word audio), and the
+  in-app ⓘ attributions dialog.
+- **Learning features (beyond spec)** — practice deck sources (encountered / HSK band /
+  component series), reverse (production-recall) cards, confusable drills writing
+  confusion_event, per-HSK progress bars on the Archive.
 - **M3.55 (practice & archive)** — done: flashcard Practice screen over characters
   encountered (lookups/photo finds) but not yet known; "I knew it" archives them, and
   My Characters is reframed as the Archive (spec §16). No SRS scheduling (v2).

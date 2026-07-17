@@ -162,13 +162,16 @@ class HanziRepository(
             WordView(w.simp, w.trad, w.pinyin, firstSenses(w.defs), w.hsk)
         }
 
-    private fun firstSenses(defsJson: String?, count: Int = 2): String? {
-        if (defsJson == null) return null
-        // Minimal JSON-array-of-strings reader; kept dependency-free so core stays
-        // KMP-portable (no org.json on the JVM-only test path either).
+    private fun firstSenses(defsJson: String?, count: Int = 2): String? =
+        parseSenses(defsJson).take(count).joinToString("; ").ifEmpty { null }
+
+    /** All senses out of the stored JSON array-of-strings. Minimal hand parser; kept
+     * dependency-free so core stays KMP-portable (no org.json on the JVM test path). */
+    private fun parseSenses(defsJson: String?): List<String> {
+        if (defsJson == null) return emptyList()
         val senses = mutableListOf<String>()
         var i = defsJson.indexOf('"')
-        while (i >= 0 && senses.size < count) {
+        while (i >= 0) {
             val sb = StringBuilder()
             var j = i + 1
             while (j < defsJson.length && defsJson[j] != '"') {
@@ -192,7 +195,77 @@ class HanziRepository(
             senses.add(sb.toString())
             i = defsJson.indexOf('"', j + 1)
         }
-        return senses.joinToString("; ").ifEmpty { null }
+        return senses
+    }
+
+    // ---- word search / word page ----
+
+    /** Words matching [query] — CJK matches simp/trad by prefix, latin matches pinyin
+     * syllables or definition words (all tokens ANDed within a field). Ranked
+     * learner-first: HSK level, then word length. */
+    fun searchWords(query: String, limit: Int = 20): List<WordHit> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        val match = buildWordFtsMatch(q) ?: return emptyList()
+        val ids = try {
+            rawStringList(driver, "SELECT word_id FROM word_fts WHERE word_fts MATCH ? LIMIT ?", match, (limit * 4).toLong())
+        } catch (e: Exception) {
+            return emptyList()
+        }
+        if (ids.isEmpty()) return emptyList()
+        return db.hanziQueries.wordsByIds(ids).executeAsList()
+            .sortedWith(compareBy({ it.hsk == null }, { it.hsk }, { it.simp.length }, { it.pinyin }))
+            .take(limit)
+            .map { WordHit(it.id, it.simp, it.trad, it.pinyin, firstSenses(it.defs), it.hsk) }
+    }
+
+    private fun buildWordFtsMatch(q: String): String? {
+        val hasCjk = q.any { isCjkChar(it) }
+        val latinTokens = q.lowercase().split(" ")
+            .map { sanitizeFts(it) }
+            .filter { t -> t.isNotEmpty() && t.any { it in 'a'..'z' } }
+
+        val clauses = mutableListOf<String>()
+        if (hasCjk) {
+            val cjk = sanitizeFts(q)
+            clauses += "(simp:$cjk* OR trad:$cjk*)"
+        }
+        if (latinTokens.isNotEmpty()) {
+            clauses += "(" + latinTokens.joinToString(" AND ") { "pinyin:$it*" } + ")"
+            clauses += "(" + latinTokens.joinToString(" AND ") { "defs:$it*" } + ")"
+        }
+        return clauses.joinToString(" OR ").ifEmpty { null }
+    }
+
+    fun wordPage(wordId: String): WordPage? {
+        val w = db.hanziQueries.wordById(wordId).executeAsOneOrNull() ?: return null
+        // Constituent characters of both forms, first-seen order, deduped (说话/說話
+        // shares 话/話 positions but the strip should show each distinct char once).
+        // extractHanzi is code-point-correct for supplementary-plane characters.
+        val charViews = extractHanzi(w.simp + w.trad).mapNotNull { ch ->
+            db.hanziQueries.glyphByChar(ch).executeAsList().firstOrNull()
+                ?.let { WordCharView(it.id, it.char, it.definition) }
+        }
+        return WordPage(w.id, w.simp, w.trad, w.pinyin, parseSenses(w.defs), w.hsk, charViews)
+    }
+
+    private fun rawStringList(target: SqlDriver, sql: String, arg: String, limit: Long): List<String> {
+        val out = mutableListOf<String>()
+        target.executeQuery(
+            identifier = null,
+            sql = sql,
+            mapper = { cursor: SqlCursor ->
+                while (cursor.next().value) {
+                    cursor.getString(0)?.let { out.add(it) }
+                }
+                QueryResult.Value(Unit)
+            },
+            parameters = 2,
+        ) {
+            bindString(0, arg)
+            bindLong(1, limit)
+        }.value
+        return out
     }
 
     private fun buildConfusables(glyphId: String): List<ConfusableView> =
