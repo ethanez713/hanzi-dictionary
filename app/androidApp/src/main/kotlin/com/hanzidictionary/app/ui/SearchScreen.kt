@@ -1,9 +1,15 @@
 package com.hanzidictionary.app.ui
 
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,7 +20,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -33,8 +41,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import android.graphics.Paint
+import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.R
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,6 +54,7 @@ import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SearchResult
 import com.hanzidictionary.core.SourceInfo
 import com.hanzidictionary.core.WordHit
+import com.hanzidictionary.core.charOfGlyphId
 import com.hanzidictionary.core.extractHanzi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -84,6 +95,33 @@ fun SearchScreen(
     val context = LocalContext.current
     val glyphPaint = remember {
         Paint().apply { typeface = ResourcesCompat.getFont(context, R.font.noto_sans_cjk_sc) }
+    }
+
+    // "From your photos" panel: kick the (watermark-deduped) scan off immediately so the
+    // search box is usable while OCR runs; null = still scanning. Re-entering with no
+    // new photos costs one MediaStore metadata query and zero OCR.
+    val app = context.applicationContext as HanziApp
+    var photosGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, photoPermission) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        photosGranted = it
+    }
+    var photoFinds by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
+    LaunchedEffect(photosGranted) {
+        if (!photosGranted) return@LaunchedEffect
+        photoFinds = null
+        photoFinds = withContext(Dispatchers.IO) {
+            app.createPhotoScanner().scanNewPhotos()
+            val rows = app.userRepository.recentPhotoFinds(30)
+            val existing = repository.existingGlyphIds(rows.map { it.glyphId })
+            rows.filter { it.glyphId in existing }
+                .map { it.glyphId to charOfGlyphId(it.glyphId) }
+                .filter { glyphPaint.hasGlyph(it.second) }
+                .take(12)
+        }
     }
 
     val results by produceState(initialValue = emptyList<SearchResult>(), query) {
@@ -129,9 +167,16 @@ fun SearchScreen(
                         label = { Text("From clipboard: $s") },
                     )
                 }
+                PhotoPanel(
+                    granted = photosGranted,
+                    finds = photoFinds,
+                    onAllow = { permissionLauncher.launch(photoPermission) },
+                    onOpenCharacter = onOpenCharacter,
+                    onOpenPhotos = onOpenPhotos,
+                )
                 Text(
                     "Type a character (请), pinyin (qing), or English (feeling).",
-                    modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
                     textAlign = TextAlign.Center,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -162,6 +207,63 @@ fun SearchScreen(
                             WordSearchRow(w, onClick = { onOpenWord(w.id) })
                             HorizontalDivider()
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The always-on photo strip (the user's primary capture path): characters from the
+ * most recent camera-roll photos, scanned asynchronously so search stays responsive.
+ * finds == null means the scan is still running. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PhotoPanel(
+    granted: Boolean,
+    finds: List<Pair<String, String>>?,
+    onAllow: () -> Unit,
+    onOpenCharacter: (String) -> Unit,
+    onOpenPhotos: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionTitle("From your photos")
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onOpenPhotos) { Text("All →") }
+        }
+        when {
+            !granted -> Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Scan recent photos for characters.",
+                    fontSize = 13.sp,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onAllow) { Text("Allow") }
+            }
+            finds == null -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(
+                    "Scanning recent photos…",
+                    fontSize = 12.sp,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            finds.isEmpty() -> Text(
+                "No characters in recent photos yet.",
+                fontSize = 13.sp,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for ((glyphId, ch) in finds) {
+                    Card(Modifier.clickable { onOpenCharacter(glyphId) }) {
+                        Text(ch, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 26.sp)
                     }
                 }
             }

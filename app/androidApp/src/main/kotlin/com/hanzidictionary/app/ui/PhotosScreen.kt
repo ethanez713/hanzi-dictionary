@@ -1,8 +1,6 @@
 package com.hanzidictionary.app.ui
 
-import android.Manifest
 import android.content.pm.PackageManager
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -45,10 +43,6 @@ import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.charOfGlyphId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-private val photoPermission =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES
-    else Manifest.permission.READ_EXTERNAL_STORAGE
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable

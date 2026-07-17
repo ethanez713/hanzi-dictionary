@@ -1,5 +1,7 @@
 package com.hanzidictionary.app.ui
 
+import android.Manifest
+import android.os.Build
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -10,6 +12,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+
+/** The runtime permission the photo-library features need on this OS version (shared by
+ * the search screen's photo panel and the full Photos screen). */
+val photoPermission: String =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES
+    else Manifest.permission.READ_EXTERNAL_STORAGE
 
 /** Standard top-bar back affordance (replaces the old "←" text buttons; also gives
  * TalkBack a real label, spec §15 a11y). */
