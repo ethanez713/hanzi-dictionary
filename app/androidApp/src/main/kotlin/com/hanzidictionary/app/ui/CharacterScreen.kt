@@ -76,7 +76,7 @@ fun CharacterScreen(
         topBar = {
             TopAppBar(
                 title = { Text(page?.char ?: "…") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("←") } },
+                navigationIcon = { BackButton(onBack) },
             )
         },
     ) { padding ->
@@ -185,10 +185,12 @@ private fun Words(words: List<WordView>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                if (w.trad != w.simp) "${w.simp}·${w.trad}" else w.simp,
-                fontSize = 22.sp,
-            )
+            Text(w.simp, fontSize = 22.sp)
+            // The traditional form matters but shouldn't shout at the same size as the
+            // headword — smaller and muted keeps the row scannable.
+            if (w.trad != w.simp) {
+                Text(w.trad, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             w.pinyin?.let { Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             w.gloss?.let {
                 Text(
@@ -321,7 +323,7 @@ private fun SoundLine(p: CharacterPage) {
     Text(sentence)
     phon.confidence?.let {
         Text(
-            "reliability ${"%.0f".format(it * 100)}%",
+            "sound-match confidence ${"%.0f".format(it * 100)}%",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -408,11 +410,6 @@ private fun Provenance(p: CharacterPage) {
     val text = "Readings/variants from Unihan; decomposition from cjkvi-ids/makemeahanzi" +
         if (claimSources.isNotEmpty()) "; claims from ${claimSources.joinToString(", ")}" else ""
     Text(text, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
 }
 
 @Composable

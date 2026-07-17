@@ -1,8 +1,29 @@
 package com.hanzidictionary.app.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+
+/** Standard top-bar back affordance (replaces the old "←" text buttons; also gives
+ * TalkBack a real label, spec §15 a11y). */
+@Composable
+fun BackButton(onBack: () -> Unit) {
+    IconButton(onClick = onBack) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+    }
+}
+
+@Composable
+fun SectionTitle(text: String) {
+    Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+}
 
 /** Component function color-coding used across breakdown strips and component pages
  * (spec §9): semantic red-ish, phonetic blue-ish, both purple, else muted. Tuned to

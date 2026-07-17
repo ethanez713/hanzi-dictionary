@@ -52,7 +52,7 @@ fun ComponentScreen(
         topBar = {
             TopAppBar(
                 title = { Text(page?.char ?: "component") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("←") } },
+                navigationIcon = { BackButton(onBack) },
             )
         },
     ) { padding ->
@@ -150,9 +150,4 @@ private fun MemberGrid(members: List<SeriesMember>, onOpenCharacter: (String) ->
             }
         }
     }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
 }

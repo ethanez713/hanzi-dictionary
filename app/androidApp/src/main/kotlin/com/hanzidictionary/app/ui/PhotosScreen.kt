@@ -90,7 +90,7 @@ fun PhotosScreen(
         topBar = {
             TopAppBar(
                 title = { Text("From your photos") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("←") } },
+                navigationIcon = { BackButton(onBack) },
             )
         },
     ) { padding ->

@@ -11,6 +11,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -75,7 +79,9 @@ fun SearchScreen(
                 actions = {
                     TextButton(onClick = onOpenPhotos) { Text("Photos") }
                     TextButton(onClick = onOpenPractice) { Text("Practice") }
-                    TextButton(onClick = { showAttributions = true }) { Text("ⓘ") }
+                    IconButton(onClick = { showAttributions = true }) {
+                        Icon(Icons.Filled.Info, contentDescription = "Data sources")
+                    }
                 },
             )
         },
@@ -84,14 +90,14 @@ fun SearchScreen(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = { Text("Search character or pinyin") },
+                label = { Text("Character, pinyin, or English") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             )
 
             if (query.isBlank()) {
                 Text(
-                    "Type a character (请) or pinyin (qing).",
+                    "Type a character (请), pinyin (qing), or English (feeling).",
                     modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                     textAlign = TextAlign.Center,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,

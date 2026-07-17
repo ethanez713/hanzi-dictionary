@@ -97,7 +97,7 @@ fun PracticeScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Practice") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("←") } },
+                navigationIcon = { BackButton(onBack) },
                 actions = { TextButton(onClick = onOpenArchive) { Text("Archive") } },
             )
         },

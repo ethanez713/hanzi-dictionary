@@ -63,7 +63,7 @@ fun KnownScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Archive") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("←") } },
+                navigationIcon = { BackButton(onBack) },
             )
         },
     ) { padding ->
@@ -124,9 +124,4 @@ fun KnownScreen(
             }
         }
     }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
 }
