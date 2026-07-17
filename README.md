@@ -54,6 +54,11 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
 - **M3.55 (practice & archive)** — done: flashcard Practice screen over characters
   encountered (lookups/photo finds) but not yet known; "I knew it" archives them, and
   My Characters is reframed as the Archive (spec §16). No SRS scheduling (v2).
-- **M3.6–M3.9** — added in spec v1.2: scholarly & component depth, capture/search
-  completion, app polish, and pack updates. Spec §12 is now the complete work plan —
-  every spec requirement belongs to exactly one milestone. None started.
+- **M3.6** — partial: coverage-tier honesty chip (T1 full historical data / T2 modern
+  only) in Details, per-component resolution badges (✓ cross-checked / source-asserted /
+  sources disagree), function distribution + positional-variant links (水/氵/氺) on
+  component pages. Remaining: GlyphWiki script forms + scholarly tier, spoken names,
+  Wikimedia syllable recordings.
+- **M3.8–M3.9** — not started (app polish: fonts subsetting, strokes, confusable
+  compare, series browser, settings, strings; pack updates — blocked on the public
+  dataset repo decision). Spec §12 remains the complete work plan.

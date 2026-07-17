@@ -124,6 +124,9 @@ fun CharacterScreen(
                     p.hsk?.let { Chip("HSK $it") }
                     Chip(scriptLabel(p.scripts))
                     p.strokeCount?.let { Chip("$it strokes") }
+                    // Coverage honesty (spec §6): whether the drift analysis has the
+                    // full historical strata behind it or only modern readings.
+                    Chip(if (p.tier == 1) "T1 · full historical data" else "T2 · modern analysis only")
                     // Raw IDS notation: its ⿰-style operators draw as dashed layout
                     // boxes and it restates the component characters, so it belongs
                     // with the reference data rather than above the breakdown.
@@ -269,7 +272,29 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
                     Text(c.displayChar ?: "◎", fontSize = 44.sp, color = color)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         val label = functionLabel(c.function)
-                        if (label.isNotEmpty()) Text(label, fontSize = 12.sp, color = color)
+                        // Provenance badge (spec §7 resolution): computed is the default
+                        // and needs no ink; call out corroboration and source-only claims.
+                        val badge = when (c.resolution) {
+                            "agreement" -> "✓ cross-checked"
+                            "single_source" -> "source-asserted"
+                            "conflict" -> "sources disagree"
+                            else -> null
+                        }
+                        if (label.isNotEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(label, fontSize = 12.sp, color = color)
+                                if (badge != null) {
+                                    Text(
+                                        badge,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                         if (showsSound && c.pinyin != null) {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),

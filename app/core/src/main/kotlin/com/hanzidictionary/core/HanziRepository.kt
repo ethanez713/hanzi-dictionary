@@ -126,6 +126,7 @@ class HanziRepository(
                 matchClass = cu.match_class,
                 confidence = cu.confidence,
                 navigable = !isPseudo,
+                resolution = cu.resolution,
                 definition = compGlyph?.definition,
                 pinyin = compPinyin,
             )
@@ -137,10 +138,18 @@ class HanziRepository(
         val variants = buildVariants(glyphId)
         val confusables = buildConfusables(glyphId)
 
+        // Coverage tier (spec §6, shown honestly): T1 characters carry Middle + Old
+        // Chinese readings, so their drift analysis spans all strata; T2 is
+        // modern-computed only.
+        val tier = if (readings.any { it.system == "mc_baxter" } &&
+            readings.any { it.system == "oc_zz" || it.system == "oc_bs" }
+        ) 1 else 2
+
         return CharacterPage(
             glyphId = g.id,
             char = g.char,
             scripts = g.scripts,
+            tier = tier,
             definition = g.definition,
             strokeCount = g.stroke_count,
             freqRank = g.freq_rank,

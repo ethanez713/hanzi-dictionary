@@ -136,6 +136,7 @@ fun AppRoot(
                 userRepository = userRepository,
                 componentId = componentId,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onOpenComponent = { cid -> nav.navigate("component/${enc(cid)}") },
                 onPracticeSeries = { nav.navigate("practice?component=${enc(componentId)}") },
                 onBack = { nav.popBackStack() },
             )

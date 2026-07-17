@@ -176,6 +176,27 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun coverageTierAndResolutionAreHonest() {
+        val qing = repo.characterPageByChar("情")
+        assertNotNull(qing)
+        assertEquals(1, qing.tier, "情 has MC+OC readings, so full drift analysis (T1)")
+        // 青 in 情: the reading comparison matches AND makemeahanzi asserts the role
+        assertEquals("agreement", qing.breakdown.first { it.componentId == "青" }.resolution)
+
+        val shuo = repo.characterPageByChar("说")
+        assertNotNull(shuo)
+        // 兑 in 说: no computable match, only the source's assertion
+        assertEquals("single_source", shuo.breakdown.first { it.componentId == "兑" }.resolution)
+    }
+
+    @Test
+    fun radicalFormsRoundTrip() {
+        assertEquals("水", radicalParentOf("氵"))
+        assertTrue("氵" in radicalFormsOf("水") && "氺" in radicalFormsOf("水"))
+        assertEquals(null, radicalParentOf("青"))
+    }
+
+    @Test
     fun wordSearchMatchesEnglishPinyinAndCjk() {
         val byEnglish = repo.searchWords("novel")
         assertTrue(byEnglish.any { it.simp == "小说" }, "'novel' should find 小说, got ${byEnglish.map { it.simp }}")

@@ -25,6 +25,7 @@ data class ComponentBreakdown(
     val matchClass: String?,   // exact|tone|initial|rime|oc_only|opaque
     val confidence: Double?,
     val navigable: Boolean,    // true if it has its own component page (not an ids: pseudo)
+    val resolution: String,    // computed|agreement|single_source|conflict (spec §7 honesty)
     val definition: String?,   // the component's own gloss — what a meaning-component contributes
     val pinyin: String?,       // the component's primary reading — what a sound-component contributes
 )
@@ -63,6 +64,8 @@ data class CharacterPage(
     val glyphId: String,
     val char: String,
     val scripts: String,       // simp|trad|both
+    val tier: Int,             // 1 = has Middle+Old Chinese data (full drift analysis),
+                               // 2 = modern-computed only (spec §6 honesty)
     val definition: String?,   // short English gloss (Unihan kDefinition)
     val strokeCount: Long?,
     val freqRank: Long?,

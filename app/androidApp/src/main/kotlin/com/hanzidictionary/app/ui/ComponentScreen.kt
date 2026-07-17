@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -30,6 +31,8 @@ import com.hanzidictionary.core.ComponentPage
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SeriesMember
 import com.hanzidictionary.core.UserRepository
+import com.hanzidictionary.core.radicalFormsOf
+import com.hanzidictionary.core.radicalParentOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -40,6 +43,7 @@ fun ComponentScreen(
     userRepository: UserRepository,
     componentId: String,
     onOpenCharacter: (String) -> Unit,
+    onOpenComponent: (String) -> Unit,
     onPracticeSeries: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -88,6 +92,48 @@ fun ComponentScreen(
                 if (gid != null) {
                     TextButton(onClick = { onOpenCharacter(gid) }) { Text("Open character page →") }
                 }
+            }
+
+            // Positional variants (spec §9): 水's combining forms 氵/氺, or the parent
+            // of a combining form — each links to its own component page.
+            p.char?.let { ch ->
+                val related = radicalFormsOf(ch) + listOfNotNull(radicalParentOf(ch))
+                if (related.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Related forms:",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        for (form in related) {
+                            Text(
+                                form,
+                                fontSize = 24.sp,
+                                modifier = Modifier.clickable { onOpenComponent(form) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Function distribution (spec §9): how this component is used across the pack.
+            if (p.phoneticMembers.isNotEmpty() || p.semanticMembers.isNotEmpty()) {
+                Text(
+                    buildString {
+                        append("Used as ")
+                        val parts = mutableListOf<String>()
+                        if (p.phoneticMembers.isNotEmpty()) parts += "sound in ${p.phoneticMembers.size}"
+                        if (p.semanticMembers.isNotEmpty()) parts += "meaning in ${p.semanticMembers.size}"
+                        append(parts.joinToString(" · "))
+                        append(" characters")
+                    },
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             if (p.reliability != null) ReliabilityMeter(p)
