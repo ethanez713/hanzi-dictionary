@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-mode counterpart of the base theme: without it the window background
+         behind Compose is white (the values/ theme is Light), which flashes through
+         on every launch and navigation transition when the app renders dark. -->
+    <style name="Theme.HanziDictionary" parent="android:Theme.Material.NoActionBar" />
+</resources>

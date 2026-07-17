@@ -131,7 +131,7 @@ fun CharacterScreen(
                 }
             }
             if (p.words.isNotEmpty()) Words(p.words)
-            BreakdownStrip(p, onOpenComponent)
+            BreakdownStrip(p, tts, onOpenComponent)
             SoundLine(p)
             Formation(p)
             if (p.variants.isNotEmpty()) ScriptMapping(p, onOpenCharacter)
@@ -243,35 +243,75 @@ private fun Definition(text: String?) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BreakdownStrip(p: CharacterPage, onOpenComponent: (String) -> Unit) {
+private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: (String) -> Unit) {
     if (p.breakdown.isEmpty()) return
     SectionTitle("Components")
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    // One card per component: the glyph, its role, and what it actually contributes —
+    // a meaning-component shows its own gloss, a sound-component its reading (tappable
+    // to hear it). Cards stack full-width so the contribution text has room.
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (c in p.breakdown) {
             val color = functionColor(c.function)
+            val showsSound = c.function == "phonetic" || c.function == "both"
+            val showsMeaning = c.function == "semantic" || c.function == "both"
             Card(
-                modifier = if (c.navigable) {
-                    Modifier.clickable { onOpenComponent(c.componentId) }
-                } else {
-                    Modifier
-                },
+                modifier = Modifier.fillMaxWidth().then(
+                    if (c.navigable) Modifier.clickable { onOpenComponent(c.componentId) } else Modifier,
+                ),
             ) {
                 Row(
                     Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(c.displayChar ?: "◎", fontSize = 44.sp, color = color)
-                    val label = functionLabel(c.function)
-                    if (label.isNotEmpty()) Text(label, fontSize = 13.sp, color = color)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        val label = functionLabel(c.function)
+                        if (label.isNotEmpty()) Text(label, fontSize = 12.sp, color = color)
+                        if (showsSound && c.pinyin != null) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(c.pinyin!!, fontSize = 17.sp)
+                                if (tts.available && c.displayChar != null) {
+                                    Text(
+                                        "🔊",
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.clickable { tts.speak(c.displayChar!!) },
+                                    )
+                                }
+                            }
+                        }
+                        if (showsMeaning && c.definition != null) {
+                            Text(
+                                shortGloss(c.definition!!),
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        // For unclassified parts, the component's own gloss is still the
+                        // most useful hint we have — shown muted, not asserted as a role.
+                        if (!showsSound && !showsMeaning && c.definition != null) {
+                            Text(
+                                shortGloss(c.definition!!),
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+/** First sense only — component cards want a hint ("heart"), not the full gloss. */
+private fun shortGloss(definition: String): String =
+    definition.split(";", ",").first().trim()
 
 @Composable
 private fun SoundLine(p: CharacterPage) {

@@ -22,9 +22,11 @@ data class ComponentBreakdown(
     val displayChar: String?,  // the char to render (null only for degenerate ids: forms)
     val position: Int,
     val function: String,      // semantic|phonetic|both|empty|unknown
-    val matchClass: String?,   // exact|tone|initial|rime|oc_only
+    val matchClass: String?,   // exact|tone|initial|rime|oc_only|opaque
     val confidence: Double?,
     val navigable: Boolean,    // true if it has its own component page (not an ids: pseudo)
+    val definition: String?,   // the component's own gloss — what a meaning-component contributes
+    val pinyin: String?,       // the component's primary reading — what a sound-component contributes
 )
 
 data class ClaimView(

@@ -98,6 +98,16 @@ class HanziRepository(
 
         val breakdown = db.hanziQueries.componentUseForGlyph(glyphId).executeAsList().map { cu ->
             val isPseudo = cu.component_id.startsWith("ids:")
+            // The component's own gloss and reading are what it contributes to the
+            // character (meaning for a semantic part, sound for a phonetic one) — worth
+            // two point lookups for the 2-3 components a breakdown has.
+            val compGlyph = if (isPseudo) null else
+                db.hanziQueries.glyphByChar(cu.component_id).executeAsList().firstOrNull()
+            val compPinyin = compGlyph?.let { g ->
+                db.hanziQueries.readingsForGlyph(g.id).executeAsList()
+                    .filter { it.system == "pinyin" }
+                    .maxByOrNull { it.freq ?: 0L }?.value_
+            }
             ComponentBreakdown(
                 componentId = cu.component_id,
                 displayChar = if (isPseudo) null else cu.component_id,
@@ -106,6 +116,8 @@ class HanziRepository(
                 matchClass = cu.match_class,
                 confidence = cu.confidence,
                 navigable = !isPseudo,
+                definition = compGlyph?.definition,
+                pinyin = compPinyin,
             )
         }
 

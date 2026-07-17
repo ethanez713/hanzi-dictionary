@@ -148,8 +148,9 @@ def build() -> Path:
         resolved = merge.resolve_decomposition(e)
         func_claim = merge.component_function_claim(e)
         semantic_component = func_claim.get("semantic_component") if func_claim else None
+        phonetic_component = func_claim.get("phonetic_component") if func_claim else None
         if resolved:
-            rows = phonetic.compute_component_use(cp, entities, resolved, semantic_component)
+            rows = phonetic.compute_component_use(cp, entities, resolved, semantic_component, phonetic_component)
             for row in rows:
                 component_use_objects.append(row)
                 component_use_rows.append((

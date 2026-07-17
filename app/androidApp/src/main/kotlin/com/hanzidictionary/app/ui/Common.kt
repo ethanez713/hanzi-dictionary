@@ -43,6 +43,7 @@ fun driftSentence(matchClass: String?): String? {
         "initial" -> "Sound component: shares the modern initial; the rest has drifted."
         "rime" -> "Sound component: shares the modern rime; the initial has drifted."
         "oc_only" -> "Sound component: the link survives only in Old Chinese — it has drifted apart since."
+        "opaque" -> "Sound component by origin, but the pronunciations have drifted apart beyond recognition."
         else -> null
     }
 }

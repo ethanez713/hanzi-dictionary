@@ -75,6 +75,7 @@ def compute_component_use(
     entities: dict[int, GlyphEntity],
     resolved: ResolvedDecomposition,
     semantic_claim_component: str | None,
+    phonetic_claim_component: str | None = None,
 ) -> list[ComponentUseRow]:
     parent = entities.get(glyph_cp)
     component_refs = direct_component_ids(resolved)
@@ -82,6 +83,7 @@ def compute_component_use(
     rows: list[ComponentUseRow] = []
     for position, comp_ref in enumerate(component_refs):
         is_semantic_claim = semantic_claim_component == comp_ref
+        is_phonetic_claim = phonetic_claim_component == comp_ref
 
         if comp_ref.startswith("ids:"):
             # unencoded compound sub-component: no reading of its own to compare.
@@ -99,7 +101,16 @@ def compute_component_use(
         if match:
             match_class, confidence, stratum = match
             function = "both" if is_semantic_claim else "phonetic"
-            resolution = "computed"
+            # the reading comparison and the source's etymology agreeing is stronger
+            # evidence than either alone (spec §7 resolution enum)
+            resolution = "agreement" if is_phonetic_claim else "computed"
+        elif is_phonetic_claim:
+            # The source asserts a phonetic role but the sound link is inaudible at
+            # every stratum we can compute (说/兑, 家/豕 …): keep the assertion, mark
+            # it "opaque" so the UI can be honest about the drift, and weight it low
+            # so it drags its series' reliability down rather than up.
+            function = "both" if is_semantic_claim else "phonetic"
+            match_class, confidence, resolution, stratum = "opaque", 0.3, "single_source", None
         elif is_semantic_claim:
             function, match_class, confidence, resolution, stratum = "semantic", None, 0.5, "single_source", None
         else:

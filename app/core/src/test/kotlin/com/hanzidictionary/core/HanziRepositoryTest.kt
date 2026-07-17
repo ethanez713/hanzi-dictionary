@@ -104,6 +104,28 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun claimedPhoneticSurvivesTotalSoundDrift() {
+        // 说's 兑 (duì vs shuō) has no computable sound link at any stratum, but
+        // makemeahanzi's etymology asserts the phonetic role — the detector must keep
+        // it as phonetic/opaque instead of dropping to "unknown".
+        val page = repo.characterPageByChar("说")
+        assertNotNull(page)
+        val dui = page.breakdown.firstOrNull { it.componentId == "兑" }
+        assertNotNull(dui, "兑 should appear as a component of 说")
+        assertEquals("phonetic", dui.function)
+        assertEquals("opaque", dui.matchClass)
+    }
+
+    @Test
+    fun breakdownCarriesComponentGlossAndPinyin() {
+        val page = repo.characterPageByChar("情")
+        assertNotNull(page)
+        val qing = page.breakdown.first { it.componentId == "青" }
+        assertEquals("qīng", qing.pinyin, "sound component should carry its own reading")
+        assertNotNull(qing.definition, "component should carry its own gloss")
+    }
+
+    @Test
     fun characterPageCarriesContainingWords() {
         val page = repo.characterPageByChar("情")
         assertNotNull(page)
