@@ -368,14 +368,37 @@ private fun Formation(p: CharacterPage) {
     if (relevant.isEmpty()) return
     SectionTitle("Formation")
     for (claim in relevant) {
-        Card(Modifier.fillMaxWidth()) {
+        // Wiktionary etymologies run to two screens of OC reconstructions and
+        // citations — scholarly reference, not learner reading. Collapse to a
+        // preview; tap the card to expand.
+        var expanded by remember(claim.value) { mutableStateOf(false) }
+        val collapsible = claim.predicate == "etymology_text"
+        Card(
+            Modifier.fillMaxWidth().then(
+                if (collapsible) Modifier.clickable { expanded = !expanded } else Modifier,
+            ),
+        ) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(prettyClaim(claim.predicate, claim.value), fontSize = 14.sp)
                 Text(
-                    "source: ${claim.source}",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    prettyClaim(claim.predicate, claim.value),
+                    fontSize = 14.sp,
+                    maxLines = if (collapsible && !expanded) 4 else Int.MAX_VALUE,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "source: ${claim.source}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (collapsible) {
+                        Text(
+                            if (expanded) "less ▴" else "more ▾",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
         }
     }

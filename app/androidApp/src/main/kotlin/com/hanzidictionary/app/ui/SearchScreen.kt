@@ -56,6 +56,7 @@ import com.hanzidictionary.core.SearchResult
 import com.hanzidictionary.core.SourceInfo
 import com.hanzidictionary.core.WordHit
 import com.hanzidictionary.core.charOfGlyphId
+import com.hanzidictionary.core.displayGloss
 import com.hanzidictionary.core.extractHanzi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -75,6 +76,10 @@ fun SearchScreen(
     if (showAttributions) {
         AttributionsDialog(repository, onDismiss = { showAttributions = false })
     }
+
+    // Back with an active query clears it instead of exiting the app — mid-search the
+    // user's mental "back" is "leave these results", not "leave the dictionary".
+    androidx.activity.compose.BackHandler(enabled = query.isNotBlank()) { onQueryChange("") }
 
     // Paste-on-open (spec §9 capture): if the clipboard holds hanzi when the window
     // gains focus (clipboard is only readable while focused on API 29+), offer it as a
@@ -348,11 +353,14 @@ private fun SearchRow(result: SearchResult, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(result.char, fontSize = 27.sp)
+        result.tradChar?.let {
+            Text(it, fontSize = 16.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Column(Modifier.weight(1f)) {
             result.primaryPinyin?.let { Text(it, fontSize = 15.sp) }
             result.definition?.let {
                 Text(
-                    it,
+                    displayGloss(it),
                     fontSize = 13.sp,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,

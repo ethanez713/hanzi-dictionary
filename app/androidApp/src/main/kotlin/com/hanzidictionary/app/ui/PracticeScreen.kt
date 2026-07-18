@@ -133,13 +133,18 @@ fun PracticeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             DeckPicker(source, initialComponentId, hskLevels.keys.sorted(), onPick = { source = it })
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Scrolls horizontally so the last control never wraps mid-word when the
+            // reverse chip eats most of the row width.
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 FilterChip(
                     selected = reverse,
                     onClick = { reverse = !reverse; showAnswer = false },
                     label = { Text("Reverse: meaning → character") },
                 )
-                OutlinedButton(onClick = onOpenConfusables) { Text("Confusables") }
+                OutlinedButton(onClick = onOpenConfusables) { Text("Look-alikes") }
             }
 
             when {

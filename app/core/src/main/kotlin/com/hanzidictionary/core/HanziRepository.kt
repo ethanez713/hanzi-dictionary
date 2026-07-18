@@ -58,6 +58,18 @@ class HanziRepository(
             // Swallow: no FTS results, exact hits (if any) still returned below.
         }
 
+        // Fold traditional forms into their simplified counterpart's row (輕 into 轻):
+        // when both scripts match, two rows with identical glosses just pad the list.
+        if (ordered.size > 1) {
+            val edges = db.hanziQueries.simplificationEdgesAmong(ordered.keys.toList()).executeAsList()
+            for (e in edges) {
+                val trad = ordered[e.from_glyph] ?: continue
+                val simp = ordered[e.to_glyph] ?: continue
+                ordered[e.to_glyph] = simp.copy(tradChar = trad.char)
+                ordered.remove(e.from_glyph)
+            }
+        }
+
         return ordered.values.take(limit).toList()
     }
 
@@ -212,58 +224,101 @@ class HanziRepository(
     // ---- word search / word page ----
 
     /** Words matching [query] — CJK matches simp/trad by prefix, latin matches pinyin
-     * syllables or definition words (all tokens ANDed within a field). Ranked
-     * learner-first: HSK level, then word length. */
+     * syllables or definition words (all tokens ANDed within a field). Run-together
+     * pinyin ("qingchu") is segmented against the pack's own syllable inventory.
+     *
+     * Field priority: pinyin-field matches rank above defs-field matches — a pinyin
+     * query must not surface words only because their English gloss mentions
+     * "Qinghai". Within each field the ranking is learner-first IN SQL over the full
+     * match set (a LIMIT before ranking buried every common word): HSK level, then
+     * proper nouns last (CC-CEDICT capitalizes their pinyin), then word length. */
     fun searchWords(query: String, limit: Int = 20): List<WordHit> {
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
-        val match = buildWordFtsMatch(q) ?: return emptyList()
-        var ids = try {
-            rawStringList(driver, "SELECT word_id FROM word_fts WHERE word_fts MATCH ? LIMIT ?", match, (limit * 4).toLong())
-        } catch (e: Exception) {
-            return emptyList()
-        }
-        // Greedy fallback for pasted/shared phrases: 你好吗 isn't an entry, but its
-        // longest matching prefix 你好 is — shorten until something matches.
-        if (ids.isEmpty()) {
-            var cjk = q.filter { isCjkChar(it) }
-            while (ids.isEmpty() && cjk.length > 1) {
-                cjk = cjk.dropLast(1)
-                ids = try {
-                    rawStringList(
-                        driver,
-                        "SELECT word_id FROM word_fts WHERE word_fts MATCH ? LIMIT ?",
-                        "(simp:$cjk* OR trad:$cjk*)",
-                        (limit * 4).toLong(),
-                    )
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            }
-        }
-        if (ids.isEmpty()) return emptyList()
-        return db.hanziQueries.wordsByIds(ids).executeAsList()
-            .sortedWith(compareBy({ it.hsk == null }, { it.hsk }, { it.simp.length }, { it.pinyin }))
-            .take(limit)
-            .map { WordHit(it.id, it.simp, it.trad, it.pinyin, firstSenses(it.defs), it.hsk) }
-    }
-
-    private fun buildWordFtsMatch(q: String): String? {
         val hasCjk = q.any { isCjkChar(it) }
         val latinTokens = q.lowercase().split(" ")
             .map { sanitizeFts(it) }
             .filter { t -> t.isNotEmpty() && t.any { it in 'a'..'z' } }
 
-        val clauses = mutableListOf<String>()
+        val ids = LinkedHashSet<String>()
+        fun collect(match: String) {
+            if (ids.size >= limit) return
+            try {
+                ids += rankedWordIds(match, limit.toLong())
+            } catch (e: Exception) {
+                // FTS unavailable or malformed match: skip this clause, keep the rest.
+            }
+        }
+
         if (hasCjk) {
             val cjk = sanitizeFts(q)
-            clauses += "(simp:$cjk* OR trad:$cjk*)"
+            collect("(simp:$cjk* OR trad:$cjk*)")
+            // Greedy fallback for pasted/shared phrases: 你好吗 isn't an entry, but its
+            // longest matching prefix 你好 is — shorten until something matches.
+            var prefix = q.filter { isCjkChar(it) }
+            while (ids.isEmpty() && prefix.length > 1) {
+                prefix = prefix.dropLast(1)
+                collect("(simp:$prefix* OR trad:$prefix*)")
+            }
         }
         if (latinTokens.isNotEmpty()) {
-            clauses += "(" + latinTokens.joinToString(" AND ") { "pinyin:$it*" } + ")"
-            clauses += "(" + latinTokens.joinToString(" AND ") { "defs:$it*" } + ")"
+            val syllables =
+                if (latinTokens.size == 1) segmentPinyin(latinTokens[0], pinyinSyllables) ?: latinTokens
+                else latinTokens
+            collect("(" + syllables.joinToString(" AND ") { "pinyin:$it*" } + ")")
+            collect("(" + latinTokens.joinToString(" AND ") { "defs:$it*" } + ")")
         }
-        return clauses.joinToString(" OR ").ifEmpty { null }
+        if (ids.isEmpty()) return emptyList()
+
+        val rows = db.hanziQueries.wordsByIds(ids.toList()).executeAsList().associateBy { it.id }
+        return ids.mapNotNull { rows[it] }
+            .take(limit)
+            .map { WordHit(it.id, it.simp, it.trad, it.pinyin, firstSenses(it.defs), it.hsk) }
+    }
+
+    /** Word ids for one FTS clause, learner-ranked over the FULL match set in SQL. */
+    private fun rankedWordIds(match: String, limit: Long): List<String> {
+        val out = mutableListOf<String>()
+        driver.executeQuery(
+            identifier = null,
+            sql = """
+                SELECT word.id FROM word_fts JOIN word ON word.id = word_fts.word_id
+                WHERE word_fts MATCH ?
+                ORDER BY (word.hsk IS NULL), word.hsk,
+                         (word.pinyin IS NULL), (word.pinyin GLOB '*[A-Z]*'),
+                         LENGTH(word.simp), word.pinyin
+                LIMIT ?
+            """.trimIndent(),
+            mapper = { cursor: SqlCursor ->
+                while (cursor.next().value) {
+                    cursor.getString(0)?.let { out.add(it) }
+                }
+                QueryResult.Value(Unit)
+            },
+            parameters = 2,
+        ) {
+            bindString(0, match)
+            bindLong(1, limit)
+        }.value
+        return out
+    }
+
+    /** Bare pinyin syllable inventory derived from the pack's own readings — the
+     * segmentation dictionary for run-together pinyin queries. */
+    private val pinyinSyllables: Set<String> by lazy {
+        val out = mutableSetOf<String>()
+        driver.executeQuery(
+            identifier = null,
+            sql = "SELECT DISTINCT value FROM reading WHERE system = 'pinyin'",
+            mapper = { cursor: SqlCursor ->
+                while (cursor.next().value) {
+                    cursor.getString(0)?.let { out.add(stripTones(it)) }
+                }
+                QueryResult.Value(Unit)
+            },
+            parameters = 0,
+        ) { }.value
+        out.filter { s -> s.isNotEmpty() && s.all { it in 'a'..'z' } }.toSet()
     }
 
     fun wordPage(wordId: String): WordPage? {
@@ -400,11 +455,68 @@ class HanziRepository(
         return ids.filter { it in rank }.sortedBy { rank[it] }
     }
 
-    /** Every visually-confusable pair in the pack (drill source). */
+    /** Every visually-confusable pair in the pack (kSpoofingVariant). Kept for the
+     * character page's "Easily confused with"; too rare-skewed to feed the drill. */
     fun confusablePairs(): List<ConfusablePair> =
         db.hanziQueries.allConfusables().executeAsList().map {
             ConfusablePair(it.glyph_a, it.glyph_b, charOfGlyphId(it.glyph_a), charOfGlyphId(it.glyph_b))
         }
+
+    /**
+     * Look-alike groups for the drill: common characters (freq_rank ≤ [maxRank]) that
+     * share one component (清/情/晴 all carry 青) — the visual confusion a learner
+     * actually faces. Each member needs a pinyin and a distinct first gloss so the
+     * cue is unambiguous and a wrong answer teaches something. The pack's
+     * kSpoofingVariant pairs can't feed this: of its 75 pairs exactly one is between
+     * common characters.
+     */
+    fun drillSeries(maxRank: Long = 3000): List<List<DrillChoice>> {
+        data class Row(val comp: String, val id: String, val char: String, val def: String?, val py: String?)
+        val rows = mutableListOf<Row>()
+        driver.executeQuery(
+            identifier = null,
+            sql = """
+                SELECT cu.component_id, g.id, g.char, g.definition,
+                       (SELECT r.value FROM reading r
+                        WHERE r.glyph_id = g.id AND r.system = 'pinyin'
+                        ORDER BY (r.freq IS NULL), r.freq DESC LIMIT 1)
+                FROM component_use cu JOIN glyph g ON g.id = cu.glyph_id
+                WHERE g.freq_rank <= ? AND cu.component_id NOT LIKE 'ids:%'
+            """.trimIndent(),
+            mapper = { cursor: SqlCursor ->
+                while (cursor.next().value) {
+                    rows.add(
+                        Row(
+                            cursor.getString(0)!!, cursor.getString(1)!!, cursor.getString(2)!!,
+                            cursor.getString(3), cursor.getString(4),
+                        ),
+                    )
+                }
+                QueryResult.Value(Unit)
+            },
+            parameters = 1,
+        ) { bindLong(0, maxRank) }.value
+
+        return rows.groupBy { it.comp }.values.mapNotNull { members ->
+            members.asSequence()
+                .filter { it.def != null && it.py != null }
+                .distinctBy { it.char }
+                .map { DrillChoice(it.id, it.char, it.py!!, firstSense(it.def!!)) }
+                .distinctBy { it.gloss.lowercase() }
+                .toList()
+                .takeIf { it.size >= 2 }
+        }
+    }
+
+    /** [ids] as search-row summaries (char + pinyin + gloss), preserving input order —
+     * for lists like the photo-finds feed that already know their glyph ids. */
+    fun glyphSummaries(ids: List<String>): List<SearchResult> {
+        if (ids.isEmpty()) return emptyList()
+        val byId = ids.chunked(500)
+            .flatMap { db.hanziQueries.glyphsByIds(it).executeAsList() }
+            .associateBy { it.id }
+        return ids.mapNotNull { byId[it]?.toSearchResult() }
+    }
 
     // ---- sources / provenance ----
 
@@ -437,6 +549,18 @@ class HanziRepository(
 }
 
 // ---- pure helpers (no driver / no Android) ----
+
+/** First sense only — drill cards and component hints want "clear, pure", not the
+ * full semicolon-chained gloss. */
+fun firstSense(definition: String): String = definition.split(";").first().trim()
+
+private val kangxiSuffix = Regex("[;,]?\\s*Kangxi radical \\d+\\s*$", RegexOption.IGNORE_CASE)
+
+/** Display form of a gloss for list rows: drop a trailing "Kangxi radical N" — it's
+ * reference metadata that reads as noise next to real meanings ("blue, green; young;
+ * Kangxi radical 174"). Glosses that are ONLY the radical note keep it. */
+fun displayGloss(definition: String): String =
+    definition.replace(kangxiSuffix, "").ifBlank { definition }
 
 fun charOfGlyphId(glyphId: String): String {
     val cp = glyphId.removePrefix("U+").toInt(16)

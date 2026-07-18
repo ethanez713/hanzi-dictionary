@@ -74,7 +74,11 @@ fun KnownScreen(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("$count characters archived as known", fontWeight = FontWeight.Bold)
+            Text(
+                if (count == 1L) "1 character archived as known"
+                else "$count characters archived as known",
+                fontWeight = FontWeight.Bold,
+            )
             Text(
                 "Known characters skip the practice deck and float to the front of " +
                     "component series. Import what you already know:",

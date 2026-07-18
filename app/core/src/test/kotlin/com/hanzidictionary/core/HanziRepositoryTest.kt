@@ -299,6 +299,74 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun searchFoldsTraditionalIntoSimplifiedRow() {
+        val results = repo.search("qing")
+        val chars = results.map { it.char }
+        // 轻/輕 both match "qing"; the traditional row must be folded, not listed twice.
+        if ("轻" in chars) {
+            assertFalse("輕" in chars, "輕 should be folded into 轻's row, not its own")
+            assertEquals("輕", results.first { it.char == "轻" }.tradChar)
+        }
+    }
+
+    @Test
+    fun wordSearchRanksLearnerWordsAboveProperNouns() {
+        val hits = repo.searchWords("qing")
+        assertTrue(hits.isNotEmpty(), "qing should return word hits")
+        assertNotNull(hits.first().hsk, "top word hit for a pinyin query should be HSK-listed")
+        // Proper nouns (capitalized pinyin: Qinghai, Qing dynasty figures) must not
+        // outrank learner words just because their English gloss mentions Qing.
+        val topFive = hits.take(5)
+        assertTrue(
+            topFive.none { hit -> hit.pinyin?.any { it in 'A'..'Z' } == true },
+            "no proper nouns in the top word hits, got ${topFive.map { it.simp to it.pinyin }}",
+        )
+    }
+
+    @Test
+    fun wordSearchSegmentsRunTogetherPinyin() {
+        val hits = repo.searchWords("qingchu")
+        assertTrue(hits.any { it.simp == "清楚" }, "qingchu should find 清楚, got ${hits.map { it.simp }}")
+        val nihao = repo.searchWords("nihao")
+        assertTrue(nihao.any { it.simp == "你好" }, "nihao should find 你好, got ${nihao.map { it.simp }}")
+    }
+
+    @Test
+    fun pinyinSegmentationHandlesAmbiguityAndPartials() {
+        val syllables = setOf("qing", "chu", "ni", "hao", "xi", "an", "xian", "wo")
+        assertEquals(listOf("qing", "chu"), segmentPinyin("qingchu", syllables))
+        assertEquals(listOf("ni", "hao"), segmentPinyin("nihao", syllables))
+        // trailing partial syllable while typing
+        assertEquals(listOf("qing", "ch"), segmentPinyin("qingch", syllables))
+        // apostrophe form
+        assertEquals(listOf("xi", "an"), segmentPinyin("xi'an", syllables))
+        // single syllable → null (caller keeps original token)
+        assertEquals(null, segmentPinyin("qing", syllables))
+        // not segmentable → null
+        assertEquals(null, segmentPinyin("feeling", syllables))
+    }
+
+    @Test
+    fun drillSeriesServesCommonDistinctLookAlikes() {
+        val groups = repo.drillSeries()
+        assertTrue(groups.isNotEmpty(), "drill needs at least one look-alike group")
+        for (g in groups) {
+            assertTrue(g.size >= 2)
+            assertTrue(g.all { it.pinyin.isNotBlank() && it.gloss.isNotBlank() })
+            assertEquals(g.size, g.map { it.gloss.lowercase() }.distinct().size, "glosses must be distinct")
+        }
+        val qingGroup = groups.firstOrNull { g -> g.any { it.char == "清" } && g.any { it.char == "情" } }
+        assertNotNull(qingGroup, "the 青 series (清/情) should be a drill group")
+    }
+
+    @Test
+    fun displayGlossStripsKangxiRadicalNoise() {
+        assertEquals("blue, green; young", displayGloss("blue, green; young; Kangxi radical 174"))
+        assertEquals("Kangxi radical 174", displayGloss("Kangxi radical 174"))
+        assertEquals("feeling, sentiment, emotion", displayGloss("feeling, sentiment, emotion"))
+    }
+
+    @Test
     fun knownCharactersFloatToFrontOfSeries() {
         val d = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         UserRepository.Schema.create(d)

@@ -9,6 +9,7 @@ data class SearchResult(
     val primaryPinyin: String?,
     val definition: String?,   // short English gloss, shown in the result row
     val freqRank: Long?,
+    val tradChar: String? = null, // traditional form folded into this row (輕 on 轻's row)
 )
 
 data class ReadingView(
@@ -134,6 +135,15 @@ data class ConfusablePair(
     val glyphB: String,
     val charA: String,
     val charB: String,
+)
+
+/** One option in the look-alike drill: a common member of a shared phonetic series
+ * (清/情/晴 all carry 青), each with the pinyin+gloss that lets a wrong answer teach. */
+data class DrillChoice(
+    val glyphId: String,
+    val char: String,
+    val pinyin: String,
+    val gloss: String,
 )
 
 /** All source rows, for the provenance/attributions screen (spec §9 IA item 9, §15). */

@@ -30,8 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.hanzidictionary.core.CharacterPage
-import com.hanzidictionary.core.ConfusablePair
+import com.hanzidictionary.core.DrillChoice
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.UserRepository
 import kotlinx.coroutines.Dispatchers
@@ -39,15 +38,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private data class Round(
-    val pair: ConfusablePair,
-    val target: CharacterPage,     // the character being asked for
+    val target: DrillChoice,
+    val other: DrillChoice,
     val leftIsTarget: Boolean,
 )
 
 /**
- * "Which one is …?" drill over the pack's visually-confusable pairs (Unihan
- * kSpoofingVariant). A wrong tap logs a confusion_event (spec §7) — the raw material
- * for smarter confusable review later (spec §14).
+ * "Which one is …?" drill over look-alike characters: two common members of one
+ * phonetic series (清 vs 情 — same 青, different radical), cued by pinyin + gloss.
+ * This is the visual discrimination a learner actually needs; the pack's
+ * kSpoofingVariant pairs are almost all ultra-rare characters and can't feed it.
+ * A wrong tap logs a confusion_event (spec §7) — raw material for smarter
+ * confusable review later (spec §14).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,7 +61,7 @@ fun ConfusableDrillScreen(
 ) {
     val scope = rememberCoroutineScope()
 
-    var pairs by remember { mutableStateOf<List<ConfusablePair>>(emptyList()) }
+    var groups by remember { mutableStateOf<List<List<DrillChoice>>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var round by remember { mutableStateOf<Round?>(null) }
     var seed by remember { mutableIntStateOf(0) }        // bump -> deal a new round
@@ -69,25 +71,20 @@ fun ConfusableDrillScreen(
     var score by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
-        pairs = withContext(Dispatchers.IO) { repository.confusablePairs() }
+        groups = withContext(Dispatchers.IO) { repository.drillSeries() }
         loaded = true
     }
-    LaunchedEffect(pairs, seed) {
-        if (pairs.isEmpty()) return@LaunchedEffect
-        round = withContext(Dispatchers.IO) {
-            val pair = pairs.random()
-            val targetId = if (kotlin.random.Random.nextBoolean()) pair.glyphA else pair.glyphB
-            repository.characterPage(targetId)?.let { page ->
-                Round(pair, page, leftIsTarget = kotlin.random.Random.nextBoolean())
-            }
-        }
+    LaunchedEffect(groups, seed) {
+        if (groups.isEmpty()) return@LaunchedEffect
+        val pair = groups.random().shuffled().take(2)
+        round = Round(pair[0], pair[1], leftIsTarget = kotlin.random.Random.nextBoolean())
         answeredCorrectly = null
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Confusables") },
+                title = { Text("Look-alikes") },
                 navigationIcon = { BackButton(onBack) },
             )
         },
@@ -100,8 +97,8 @@ fun ConfusableDrillScreen(
             val r = round
             when {
                 !loaded -> Text("Loading…")
-                pairs.isEmpty() -> Text(
-                    "No confusable pairs in this data pack.",
+                groups.isEmpty() -> Text(
+                    "No look-alike series in this data pack.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 r == null -> Text("Loading…")
@@ -113,14 +110,9 @@ fun ConfusableDrillScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    val pinyin = r.target.readings.filter { it.system == "pinyin" }
-                        .distinctBy { it.value }.joinToString("  ") { it.value }
                     Text("Which one is…", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        buildString {
-                            append(pinyin)
-                            r.target.definition?.let { append(" — ").append(shortSense(it)) }
-                        },
+                        "${r.target.pinyin} — ${r.target.gloss}",
                         fontSize = 20.sp,
                         textAlign = TextAlign.Center,
                     )
@@ -130,15 +122,28 @@ fun ConfusableDrillScreen(
                             answeredCorrectly = pickedTarget
                             roundNumber += 1
                             if (pickedTarget) score += 1 else scope.launch(Dispatchers.IO) {
-                                userRepository.logConfusion(r.pair.glyphA, r.pair.glyphB)
+                                userRepository.logConfusion(r.target.glyphId, r.other.glyphId)
                             }
                         }
                     }
-                    val leftChar = if (r.leftIsTarget) r.target.char else otherChar(r)
-                    val rightChar = if (r.leftIsTarget) otherChar(r) else r.target.char
-                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        ChoiceCard(leftChar, answeredCorrectly, isTargetSide = r.leftIsTarget, onPick = answer)
-                        ChoiceCard(rightChar, answeredCorrectly, isTargetSide = !r.leftIsTarget, onPick = answer)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        ChoiceCard(
+                            if (r.leftIsTarget) r.target else r.other,
+                            answeredCorrectly,
+                            isTargetSide = r.leftIsTarget,
+                            onPick = answer,
+                            modifier = Modifier.weight(1f),
+                        )
+                        ChoiceCard(
+                            if (r.leftIsTarget) r.other else r.target,
+                            answeredCorrectly,
+                            isTargetSide = !r.leftIsTarget,
+                            onPick = answer,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
 
                     if (answeredCorrectly != null) {
@@ -158,17 +163,13 @@ fun ConfusableDrillScreen(
     }
 }
 
-private fun otherChar(r: Round): String =
-    if (r.target.glyphId == r.pair.glyphA) r.pair.charB else r.pair.charA
-
-private fun shortSense(definition: String): String = definition.split(";").first().trim()
-
 @Composable
 private fun ChoiceCard(
-    char: String,
+    choice: DrillChoice,
     answered: Boolean?,
     isTargetSide: Boolean,
     onPick: (pickedTarget: Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val revealed = answered != null
     val colors = when {
@@ -177,12 +178,25 @@ private fun ChoiceCard(
     }
     Card(
         colors = colors,
-        modifier = Modifier.clickable { onPick(isTargetSide) },
+        modifier = modifier.clickable { onPick(isTargetSide) },
     ) {
-        Text(
-            char,
-            Modifier.padding(horizontal = 36.dp, vertical = 28.dp),
-            fontSize = 64.sp,
-        )
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(choice.char, fontSize = 64.sp)
+            // After the reveal, both cards teach: this is what each one was.
+            if (revealed) {
+                Text(choice.pinyin, fontSize = 14.sp)
+                Text(
+                    choice.gloss,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                )
+            }
+        }
     }
 }

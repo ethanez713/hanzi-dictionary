@@ -7,7 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -38,9 +39,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.hanzidictionary.app.HanziApp
+import androidx.compose.ui.text.style.TextOverflow
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.SearchResult
 import com.hanzidictionary.core.UserRepository
-import com.hanzidictionary.core.charOfGlyphId
+import com.hanzidictionary.core.displayGloss
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -65,7 +68,7 @@ fun PhotosScreen(
     }
 
     var scanning by remember { mutableStateOf(false) }
-    var finds by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var finds by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
     var rescans by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(granted, rescans) {
@@ -74,8 +77,7 @@ fun PhotosScreen(
         finds = withContext(Dispatchers.IO) {
             app.createPhotoScanner().scanNewPhotos()
             val rows = userRepository.recentPhotoFinds()
-            val existing = repository.existingGlyphIds(rows.map { it.glyphId })
-            rows.filter { it.glyphId in existing }.map { it.glyphId to charOfGlyphId(it.glyphId) }
+            repository.glyphSummaries(rows.map { it.glyphId })
         }
         scanning = false
     }
@@ -117,12 +119,36 @@ fun PhotosScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else if (finds.isNotEmpty()) {
-                Text("Found ${finds.size} characters", fontWeight = FontWeight.Bold)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for ((glyphId, ch) in finds) {
-                        Card(Modifier.clickable { onOpenCharacter(glyphId) }) {
-                            Text(ch, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 26.sp)
+                Text(
+                    if (finds.size == 1) "Found 1 character" else "Found ${finds.size} characters",
+                    fontWeight = FontWeight.Bold,
+                )
+                // Full rows, not bare tiles: on this screen the user is reviewing what
+                // was found, so each character carries its sound and meaning.
+                Column {
+                    for (f in finds) {
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clickable { onOpenCharacter(f.glyphId) }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(f.char, fontSize = 27.sp)
+                            Column(Modifier.weight(1f)) {
+                                f.primaryPinyin?.let { Text(it, fontSize = 15.sp) }
+                                f.definition?.let {
+                                    Text(
+                                        displayGloss(it),
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
                         }
+                        HorizontalDivider()
                     }
                 }
             }

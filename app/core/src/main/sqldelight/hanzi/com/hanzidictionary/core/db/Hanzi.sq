@@ -150,13 +150,20 @@ SELECT glyph_a, glyph_b, kind FROM confusable WHERE glyph_a = :glyphId OR glyph_
 allConfusables:
 SELECT glyph_a, glyph_b FROM confusable;
 
+-- Trad→simp edges where BOTH endpoints are in :ids — used to fold a traditional
+-- character's search row into its simplified counterpart's.
+simplificationEdgesAmong:
+SELECT from_glyph, to_glyph FROM variant_edge
+WHERE relation = 'simplification' AND from_glyph IN :ids AND to_glyph IN :ids;
+
 -- Words containing :glyphId, learner-relevant first: HSK-listed (by level), then
 -- shorter words. freq_rank is NULL until a word-frequency source is ingested.
 wordsForGlyph:
 SELECT w.simp, w.trad, w.pinyin, w.defs, w.hsk
 FROM word_char wc JOIN word w ON w.id = wc.word_id
 WHERE wc.glyph_id = :glyphId
-ORDER BY (w.hsk IS NULL), w.hsk, LENGTH(w.simp), w.pinyin
+ORDER BY (w.hsk IS NULL), w.hsk, (w.pinyin IS NULL), (w.pinyin GLOB '*[A-Z]*'),
+         LENGTH(w.simp), w.pinyin
 LIMIT :limit;
 
 wordsByIds:
