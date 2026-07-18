@@ -16,6 +16,8 @@ dataset repo's NOTICE and the in-app attributions screen (spec §9's IA item 9,
 | [OpenCC](https://github.com/BYVoid/OpenCC) `STCharacters.txt`/`TSCharacters.txt` | Simplified/Traditional character conversion tables, cross-checked against Unihan for variant-edge classification | Apache-2.0 | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
 | [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | HSK 3.0 level assignments (glyph.hsk, word.hsk, hsk-levels.json import picker) | MIT | (short license, see upstream repo) |
 | [CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict) (MDBG export) | Word-level entries: `word`/`word_char` tables — simplified/traditional forms, pinyin, English definitions ("In words" on character pages) | CC BY-SA 4.0 | [CC-BY-SA-4.0.txt](../LICENSES/CC-BY-SA-4.0.txt) |
+| [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018 zh_cn) | `word.freq_rank` — word-level corpus frequency used for result ranking. Chosen over SUBTLEX-CH (research-use terms): same subtitle lineage, open license | CC BY-SA 4.0 | [CC-BY-SA-4.0.txt](../LICENSES/CC-BY-SA-4.0.txt) |
+| [hanzi-writer-data](https://github.com/chanind/hanzi-writer-data) (makemeahanzi graphics, Arphic KaiTi outlines) | App launcher icon only: the brush-stroke outline paths of 字 (not shipped in the data pack) | Arphic Public License | [Arphic-Public-License.txt](../LICENSES/Arphic-Public-License.txt) |
 
 ## Bundled app assets (not part of the dataset)
 

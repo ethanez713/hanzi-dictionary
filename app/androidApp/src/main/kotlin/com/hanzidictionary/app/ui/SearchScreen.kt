@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
@@ -57,6 +58,7 @@ import com.hanzidictionary.core.SourceInfo
 import com.hanzidictionary.core.WordHit
 import com.hanzidictionary.core.charOfGlyphId
 import com.hanzidictionary.core.displayGloss
+import com.hanzidictionary.core.extractComposeParts
 import com.hanzidictionary.core.extractHanzi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -130,17 +132,27 @@ fun SearchScreen(
         }
     }
 
+    // Component-compose mode (spec §9 / M3.7): the query's CJK characters are read as
+    // PARTS and results are the characters containing all of them (氵青 → 清).
+    var composeMode by remember { mutableStateOf(false) }
+    val composeParts = remember(query) { extractComposeParts(query) }
+
     // Characters and words are queried together so both sections land in the same frame:
     // if they raced, a words-first frame would put the words header at the top of the
     // LazyColumn and the character rows would then be inserted above the viewport.
     val (results, wordHits) = produceState(
         initialValue = emptyList<SearchResult>() to emptyList<WordHit>(),
-        query,
+        query, composeMode,
     ) {
         val q = query
-        value = if (q.isBlank()) emptyList<SearchResult>() to emptyList()
-        else withContext(Dispatchers.IO) {
-            repository.search(q).filter { glyphPaint.hasGlyph(it.char) } to repository.searchWords(q)
+        value = when {
+            q.isBlank() -> emptyList<SearchResult>() to emptyList()
+            composeMode && composeParts.isNotEmpty() -> withContext(Dispatchers.IO) {
+                repository.composeSearch(composeParts).filter { glyphPaint.hasGlyph(it.char) } to emptyList()
+            }
+            else -> withContext(Dispatchers.IO) {
+                repository.search(q).filter { glyphPaint.hasGlyph(it.char) } to repository.searchWords(q)
+            }
         }
     }.value
 
@@ -166,6 +178,16 @@ fun SearchScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             )
+            // The compose-mode chip appears only when the query holds usable parts
+            // (spec §9's "compose-search as mode chip").
+            if (composeParts.isNotEmpty()) {
+                FilterChip(
+                    selected = composeMode,
+                    onClick = { composeMode = !composeMode },
+                    label = { Text(if (composeMode) "Contains parts: ${composeParts.joinToString(" ")}" else "Find by parts") },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
 
             if (query.isBlank()) {
                 clipSuggestion?.let { s ->
@@ -307,8 +329,10 @@ private fun AttributionsDialog(repository: HanziRepository, onDismiss: () -> Uni
                     }
                 }
                 Text(
-                    "UI typeface: Noto Sans CJK SC (SIL OFL 1.1). Full license texts ship " +
-                        "in the project's LICENSES/ directory.",
+                    "UI typeface: Noto Sans CJK SC (SIL OFL 1.1). App icon strokes: " +
+                        "makemeahanzi/hanzi-writer-data, from Arphic KaiTi fonts (Arphic " +
+                        "Public License). Full license texts ship in the project's " +
+                        "LICENSES/ directory.",
                     fontSize = 12.sp,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -184,3 +184,16 @@ def parse_hsk_word_levels(path: Path) -> dict[str, int]:
             if word not in out or level < out[word]:
                 out[word] = level
     return out
+
+
+def parse_word_frequencies(path: Path) -> dict[str, int]:
+    """FrequencyWords zh_cn_full.txt ("word count" lines, sorted most-frequent-first)
+    -> {word: rank}. Rank is the 1-based line position; gaps left by entries the pack
+    doesn't carry are harmless since only relative order is consumed."""
+    out: dict[str, int] = {}
+    with path.open(encoding="utf-8") as f:
+        for rank, line in enumerate(f, start=1):
+            word = line.split(" ", 1)[0].strip()
+            if word and word not in out:
+                out[word] = rank
+    return out

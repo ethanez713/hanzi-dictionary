@@ -21,7 +21,7 @@ from fetchers.common import SNAPSHOT_ROOT
 from pipeline import load, merge, normalize, parsers, phonetic, pinyin, radicals
 from pipeline.normalize import GlyphEntity
 
-SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract", "hsk", "cedict"]
+SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract", "hsk", "cedict", "wordfreq"]
 BUILD_DIR = Path(__file__).resolve().parent.parent / "data" / "build"
 
 
@@ -86,10 +86,11 @@ def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[l
     """CC-CEDICT entries -> word/word_char rows (spec §7, M3.5). Only multi-character
     words whose every character is in the pack are kept, so word_char links always
     resolve; single-char entries are skipped (glyph.definition covers those).
-    word.hsk comes from the word-level HSK list; freq_rank stays NULL until a word
-    frequency source is ingested — display ordering uses hsk + length instead."""
+    word.hsk comes from the word-level HSK list; freq_rank from the OpenSubtitles
+    frequency list (FrequencyWords), NULL for words the corpus never saw."""
     entries = parsers.parse_cedict(snapshot_paths["cedict"] / "cedict_ts.u8")
     hsk_words = parsers.parse_hsk_word_levels(snapshot_paths["hsk"] / "complete.min.json")
+    freq_ranks = parsers.parse_word_frequencies(snapshot_paths["wordfreq"] / "zh_cn_full.txt")
 
     word_rows: list[tuple] = []
     word_char_rows: list[tuple] = []
@@ -102,7 +103,7 @@ def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[l
         wid = f"w{len(word_rows) + 1:06d}"
         word_rows.append((
             wid, simp, trad, pinyin.cedict_pinyin(numbered),
-            json.dumps(defs, ensure_ascii=False), None, hsk_words.get(simp),
+            json.dumps(defs, ensure_ascii=False), freq_ranks.get(simp), hsk_words.get(simp),
         ))
         for pos, g in enumerate(gids):
             word_char_rows.append((wid, g, pos))

@@ -34,6 +34,53 @@ fun segmentPinyin(token: String, syllables: Set<String>): List<String>? {
     return out.takeIf { it.size >= 2 }
 }
 
+/**
+ * Fuzzy fallback variants for a pinyin token that returned nothing (spec §9 ranking:
+ * "… > English FTS > fuzzy"). Two error families, bounded to a small ordered list:
+ * adjacent-letter transpositions ("qign" → "qing") first — plain typos are the
+ * likeliest miss — then the classic fuzzy-pinyin confusions (zh/z, ch/c, sh/s, l/n
+ * initials; ang/an, eng/en, ing/in finals). Callers try variants in order and stop
+ * at the first that matches.
+ */
+fun fuzzyPinyinVariants(token: String): List<String> {
+    val t = token.lowercase()
+    if (t.length < 2 || t.any { it !in 'a'..'z' }) return emptyList()
+    val out = LinkedHashSet<String>()
+
+    for (i in 0 until t.length - 1) {
+        if (t[i] != t[i + 1]) {
+            out.add(t.substring(0, i) + t[i + 1] + t[i] + t.substring(i + 2))
+        }
+    }
+
+    // Retroflex/dental initials, l/n: both directions.
+    when {
+        t.startsWith("zh") -> out.add("z" + t.drop(2))
+        t.startsWith("ch") -> out.add("c" + t.drop(2))
+        t.startsWith("sh") -> out.add("s" + t.drop(2))
+        t.startsWith("z") -> out.add("zh" + t.drop(1))
+        t.startsWith("c") -> out.add("ch" + t.drop(1))
+        t.startsWith("s") -> out.add("sh" + t.drop(1))
+    }
+    when {
+        t.startsWith("l") -> out.add("n" + t.drop(1))
+        t.startsWith("n") -> out.add("l" + t.drop(1))
+    }
+
+    // Nasal finals: both directions.
+    when {
+        t.endsWith("ang") -> out.add(t.dropLast(3) + "an")
+        t.endsWith("eng") -> out.add(t.dropLast(3) + "en")
+        t.endsWith("ing") -> out.add(t.dropLast(3) + "in")
+        t.endsWith("an") -> out.add(t.dropLast(2) + "ang")
+        t.endsWith("en") -> out.add(t.dropLast(2) + "eng")
+        t.endsWith("in") -> out.add(t.dropLast(2) + "ing")
+    }
+
+    out.remove(t)
+    return out.toList()
+}
+
 private fun segmentPiece(piece: String, syllables: Set<String>, allowTrailingPartial: Boolean): List<String>? {
     val maxLen = syllables.maxOf { it.length }
 

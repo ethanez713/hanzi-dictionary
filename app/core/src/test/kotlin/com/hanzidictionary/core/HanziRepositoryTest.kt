@@ -310,17 +310,17 @@ class HanziRepositoryTest {
     }
 
     @Test
-    fun wordSearchRanksLearnerWordsAboveProperNouns() {
+    fun wordSearchRanksByCorpusFrequency() {
         val hits = repo.searchWords("qing")
         assertTrue(hits.isNotEmpty(), "qing should return word hits")
-        assertNotNull(hits.first().hsk, "top word hit for a pinyin query should be HSK-listed")
-        // Proper nouns (capitalized pinyin: Qinghai, Qing dynasty figures) must not
-        // outrank learner words just because their English gloss mentions Qing.
-        val topFive = hits.take(5)
+        // Frequency-first: everyday words up top, corpus-rare words (乳清 "whey",
+        // rank ~109k) and defs-only matches (Qinghai counties) nowhere near it.
+        val topFive = hits.take(5).map { it.simp }
         assertTrue(
-            topFive.none { hit -> hit.pinyin?.any { it in 'A'..'Z' } == true },
-            "no proper nouns in the top word hits, got ${topFive.map { it.simp to it.pinyin }}",
+            topFive.any { it in setOf("情况", "事情", "清楚", "请问", "亲爱") },
+            "a common qing word should lead, got $topFive",
         )
+        assertFalse("乳清" in topFive, "corpus-rare words must not lead")
     }
 
     @Test
@@ -357,6 +357,39 @@ class HanziRepositoryTest {
         }
         val qingGroup = groups.firstOrNull { g -> g.any { it.char == "清" } && g.any { it.char == "情" } }
         assertNotNull(qingGroup, "the 青 series (清/情) should be a drill group")
+    }
+
+    @Test
+    fun composeSearchIntersectsComponents() {
+        val results = repo.composeSearch(listOf("氵", "青"))
+        assertTrue(results.any { it.char == "清" }, "氵+青 should find 清, got ${results.map { it.char }}")
+        // Positional-variant awareness: the full form 水 must reach 氵-characters too.
+        val viaParent = repo.composeSearch(listOf("水", "青"))
+        assertTrue(viaParent.any { it.char == "清" }, "水+青 should also find 清 via 氵")
+        // Most-common member first, not an arbitrary one.
+        val single = repo.composeSearch(listOf("青"))
+        assertTrue(single.isNotEmpty())
+        assertNotNull(single.first().freqRank, "compose results should lead with ranked characters")
+    }
+
+    @Test
+    fun fuzzyFallbackRescuesTyposAndFuzzyPinyin() {
+        // Transposition: "qign" matches nothing exactly, falls back to "qing".
+        val typo = repo.search("qign")
+        assertTrue(typo.any { it.char == "情" || it.char == "请" }, "qign should fuzzy-match qing chars")
+        // Variant generation is ordered: transpositions before initial/final toggles.
+        val variants = fuzzyPinyinVariants("zhang")
+        assertTrue("zhnag" in variants)
+        assertTrue("zang" in variants && "zhan" in variants)
+        assertTrue(fuzzyPinyinVariants("shi").contains("si"))
+        assertTrue(fuzzyPinyinVariants("si").contains("shi"))
+    }
+
+    @Test
+    fun pinyinVForUmlautMatches() {
+        val results = repo.search("lv")
+        assertTrue(results.any { it.primaryPinyin?.let { p -> stripTones(p) == "lu" } == true },
+            "lv should match lü readings, got ${results.take(5).map { it.char to it.primaryPinyin }}")
     }
 
     @Test

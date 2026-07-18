@@ -67,30 +67,42 @@ fun ComponentScreen(
             return@Scaffold
         }
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+            // Same left-aligned header as the character page — the old centered hero
+            // glyph pushed the series grid (this page's payload) below the fold.
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
                 // When the component is itself a dictionary character, its glyph links
                 // through to the full character page (definition, words, breakdown).
                 val gid = p.glyphId
                 Text(
                     p.char ?: p.componentId,
-                    fontSize = 64.sp,
+                    fontSize = 56.sp,
+                    lineHeight = 62.sp,
                     modifier = if (gid != null) Modifier.clickable { onOpenCharacter(gid) } else Modifier,
                 )
-                val pinyin = p.ownReadings.filter { it.system == "pinyin" }.joinToString("  ") { it.value }
-                if (pinyin.isNotEmpty()) Text(pinyin, fontSize = 20.sp)
-                p.definition?.let {
-                    Text(
-                        it,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-                if (gid != null) {
-                    TextButton(onClick = { onOpenCharacter(gid) }) { Text("Open character page →") }
+                Column(
+                    Modifier.weight(1f).padding(top = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    val pinyin = p.ownReadings.filter { it.system == "pinyin" }.joinToString("  ") { it.value }
+                    if (pinyin.isNotEmpty()) Text(pinyin, fontSize = 17.sp)
+                    p.definition?.let {
+                        Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (gid != null) {
+                        Text(
+                            "Open character page →",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onOpenCharacter(gid) }.padding(vertical = 2.dp),
+                        )
+                    }
                 }
             }
 

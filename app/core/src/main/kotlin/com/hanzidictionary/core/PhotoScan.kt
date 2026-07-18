@@ -82,3 +82,17 @@ private fun isCjkIdeograph(cp: Int): Boolean =
         cp in 0x20000..0x2A6DF || // Extension B
         cp in 0x2A700..0x2EBEF || // Extensions C-F
         cp in 0xF900..0xFAFF      // CJK Compatibility Ideographs
+
+/** Like [extractHanzi] but also keeps standalone radical forms (⺌, ⼝ — the Kangxi
+ * and CJK-radicals blocks), which compose-search queries legitimately contain even
+ * though they aren't full ideographs. */
+fun extractComposeParts(text: String): List<String> {
+    val seen = LinkedHashSet<String>()
+    var i = 0
+    while (i < text.length) {
+        val cp = text.codePointAt(i)
+        i += Character.charCount(cp)
+        if (isCjkIdeograph(cp) || cp in 0x2E80..0x2FDF) seen.add(String(Character.toChars(cp)))
+    }
+    return seen.toList()
+}
