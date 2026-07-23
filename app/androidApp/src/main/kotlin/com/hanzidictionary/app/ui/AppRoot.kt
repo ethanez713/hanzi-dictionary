@@ -13,7 +13,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import android.net.Uri
 import com.hanzidictionary.app.audio.MandarinTts
+import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.extractHanzi
 import com.hanzidictionary.core.glyphIdOfChar
@@ -28,6 +30,30 @@ import com.hanzidictionary.core.glyphIdOfChar
 private fun enc(s: String): String = Uri.encode(s)
 private fun dec(s: String): String = Uri.decode(s)
 
+/** Deck sources travel through routes as short tags. Kept next to the decoder so the two
+ * can't drift apart. */
+private fun encodeSource(source: DeckSource): String = when (source) {
+    is DeckSource.Everything -> "everything"
+    is DeckSource.UserList -> "list:${source.listId}:${enc(source.name)}"
+    is DeckSource.Encountered -> "encountered"
+    is DeckSource.Hsk -> "hsk:${source.level}"
+    is DeckSource.Series -> "series:${enc(source.componentId)}"
+}
+
+private fun decodeSource(raw: String?): DeckSource {
+    val value = raw?.let { dec(it) } ?: return DeckSource.Everything
+    val parts = value.split(":")
+    return when (parts[0]) {
+        "list" -> parts.getOrNull(1)?.toLongOrNull()
+            ?.let { DeckSource.UserList(it, parts.drop(2).joinToString(":").let(::dec)) }
+            ?: DeckSource.Everything
+        "encountered" -> DeckSource.Encountered
+        "hsk" -> parts.getOrNull(1)?.toIntOrNull()?.let { DeckSource.Hsk(it) } ?: DeckSource.Everything
+        "series" -> parts.drop(1).joinToString(":").let { DeckSource.Series(dec(it)) }
+        else -> DeckSource.Everything
+    }
+}
+
 @Composable
 fun AppRoot(
     repository: HanziRepository,
@@ -36,6 +62,8 @@ fun AppRoot(
     tts: MandarinTts,
     sharedText: String? = null,
     onSharedTextConsumed: () -> Unit = {},
+    widgetItem: StudyItem? = null,
+    onWidgetItemConsumed: () -> Unit = {},
 ) {
     val nav = rememberNavController()
     var query by rememberSaveable { mutableStateOf("") }
@@ -59,6 +87,18 @@ fun AppRoot(
         }
     }
 
+    // Tapping the middle of the home-screen widget opens Practice on that exact card,
+    // already revealed — the widget can't show an answer, so the app finishes the thought.
+    LaunchedEffect(widgetItem) {
+        if (widgetItem != null) {
+            nav.navigate(
+                "practice?source=everything&item=${enc(widgetItem.itemId)}" +
+                    "&kind=${widgetItem.kind}&reveal=true",
+            )
+            onWidgetItemConsumed()
+        }
+    }
+
     NavHost(navController = nav, startDestination = "search") {
         composable("search") {
             SearchScreen(
@@ -67,8 +107,7 @@ fun AppRoot(
                 onQueryChange = { query = it },
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
-                onOpenPractice = { nav.navigate("practice") },
-                onOpenPhotos = { nav.navigate("photos") },
+                onOpenStudy = { nav.navigate("lists") },
             )
         }
         composable(
@@ -83,21 +122,52 @@ fun AppRoot(
                 onBack = { nav.popBackStack() },
             )
         }
+        composable("lists") {
+            ListsScreen(
+                hskLevels = hskLevels,
+                onOpenList = { listId -> nav.navigate("list/$listId") },
+                onPractice = { source -> nav.navigate("practice?source=${enc(encodeSource(source))}") },
+                onOpenArchive = { nav.navigate("known") },
+                onOpenConfusables = { nav.navigate("confusables") },
+                onBack = { nav.popBackStack() },
+            )
+        }
         composable(
-            route = "practice?component={componentId}",
-            arguments = listOf(navArgument("componentId") {
-                type = NavType.StringType
-                nullable = true
-                defaultValue = null
-            }),
+            route = "list/{listId}",
+            arguments = listOf(navArgument("listId") { type = NavType.LongType }),
         ) { entry ->
+            ListDetailScreen(
+                listId = entry.arguments?.getLong("listId") ?: 0L,
+                onOpenItem = { item ->
+                    if (item.isWord) nav.navigate("word/${enc(item.itemId)}")
+                    else nav.navigate("character/${enc(item.itemId)}")
+                },
+                onPractice = { source -> nav.navigate("practice?source=${enc(encodeSource(source))}") },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable(
+            route = "practice?source={source}&item={item}&kind={kind}&reveal={reveal}",
+            arguments = listOf(
+                navArgument("source") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("item") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("reveal") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
+        ) { entry ->
+            val args = entry.arguments
+            val itemId = args?.getString("item")?.let { dec(it) }
             PracticeScreen(
                 repository = repository,
-                userRepository = userRepository,
                 hskLevels = hskLevels,
                 tts = tts,
-                initialComponentId = entry.arguments?.getString("componentId")?.let { dec(it) },
+                source = decodeSource(args?.getString("source")),
+                initialItem = itemId?.let {
+                    StudyItem(it, args.getString("kind") ?: StudyItem.KIND_CHARACTER)
+                },
+                startRevealed = args?.getString("reveal") == "true",
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
                 onOpenConfusables = { nav.navigate("confusables") },
                 onOpenArchive = { nav.navigate("known") },
                 onBack = { nav.popBackStack() },
@@ -137,7 +207,9 @@ fun AppRoot(
                 componentId = componentId,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onOpenComponent = { cid -> nav.navigate("component/${enc(cid)}") },
-                onPracticeSeries = { nav.navigate("practice?component=${enc(componentId)}") },
+                onPracticeSeries = {
+                    nav.navigate("practice?source=${enc(encodeSource(DeckSource.Series(componentId)))}")
+                },
                 onBack = { nav.popBackStack() },
             )
         }
@@ -145,14 +217,6 @@ fun AppRoot(
             KnownScreen(
                 userRepository = userRepository,
                 hskLevels = hskLevels,
-                onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
-                onBack = { nav.popBackStack() },
-            )
-        }
-        composable("photos") {
-            PhotosScreen(
-                repository = repository,
-                userRepository = userRepository,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onBack = { nav.popBackStack() },
             )

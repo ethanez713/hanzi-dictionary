@@ -16,9 +16,17 @@ class UserRepository(driver: SqlDriver) {
 
     fun isKnown(glyphId: String): Boolean = q.isKnown(glyphId).executeAsOne()
 
-    fun setKnown(glyphId: String, known: Boolean) {
-        if (known) q.upsertKnown(glyphId, "character", "known", now())
-        else q.deleteKnown(glyphId)
+    /**
+     * Archives (or un-archives) an item. Archiving is global by design — it drops the item
+     * out of *every* list's deck at once (spec §17) — and it discards the FSRS schedule:
+     * "I know this" is a statement that the item no longer needs reviewing, so keeping a
+     * due date for it would only resurrect it. Un-archiving therefore starts it fresh.
+     */
+    fun setKnown(itemId: String, known: Boolean, kind: String = StudyItem.KIND_CHARACTER) {
+        q.transaction {
+            if (known) q.upsertKnown(itemId, kind, "known", now()) else q.deleteKnown(itemId)
+            q.deleteCardState(itemId)
+        }
     }
 
     fun knownIds(): Set<String> = q.allKnownIds().executeAsList().toSet()
@@ -29,7 +37,10 @@ class UserRepository(driver: SqlDriver) {
     fun importKnown(glyphIds: Collection<String>) {
         val ts = now()
         q.transaction {
-            for (id in glyphIds) q.upsertKnown(id, "character", "known", ts)
+            for (id in glyphIds) {
+                q.upsertKnown(id, StudyItem.KIND_CHARACTER, "known", ts)
+                q.deleteCardState(id)
+            }
         }
     }
 

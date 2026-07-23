@@ -44,6 +44,21 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!-- Home-screen flashcard (spec §17). Not exported to other apps: the only thing
+             that sends it the GRADE action is the widget's own PendingIntents, which the
+             launcher fires on our behalf. -->
+        <receiver
+            android:name=".widget.PracticeWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.hanzidictionary.app.widget.GRADE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/practice_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.WordPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -89,6 +90,10 @@ fun WordScreen(
                     p.hsk?.let { Chip("HSK $it") }
                 }
             }
+
+            // Words are studiable in their own right (spec §17), so the word page carries
+            // the same primary action as the character page.
+            StudyActionRow(item = StudyItem.word(wordId), label = p.simp)
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 for ((i, sense) in p.senses.withIndex()) {

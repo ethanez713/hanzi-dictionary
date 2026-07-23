@@ -24,6 +24,15 @@ dataset repo's NOTICE and the in-app attributions screen (spec §9's IA item 9,
 | Asset | Provides | License | Full text |
 |---|---|---|---|
 | [Noto Sans CJK SC](https://github.com/notofonts/noto-cjk) (`res/font/noto_sans_cjk_sc.otf`) | UI typeface — renders CJK Extension chars and IDS operators the system font shows as tofu | SIL OFL 1.1 | [OFL-1.1.txt](../LICENSES/OFL-1.1.txt) |
+| [FSRS-6](https://github.com/open-spaced-repetition) (Open Spaced Repetition) | The spaced-repetition algorithm and its 21 default parameters, used to schedule practice cards (`core/Fsrs.kt`, spec §17) | MIT | (algorithm + parameters; see note below) |
+
+**On FSRS:** `core/Fsrs.kt` is an original Kotlin implementation written from the
+published FSRS-6 formulas and verified against the reference implementation
+[py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) (MIT) by porting its
+golden interval sequence into `FsrsTest`. No FSRS code is vendored. Note that the
+community [FSRS-Kotlin](https://github.com/open-spaced-repetition/FSRS-Kotlin)
+port ships **no license file** and so was deliberately not used — the MIT-licensed
+Python and Rust implementations are the ones to reference if this is ever revisited.
 
 **Not currently included:** makemeahanzi's `graphics.txt`/stroke-order SVGs
 (Arphic Public License) — deferred until stroke rendering is actually built

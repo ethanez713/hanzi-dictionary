@@ -7,6 +7,7 @@ import com.hanzidictionary.app.photo.MediaStorePhotoSource
 import com.hanzidictionary.app.photo.MlKitTextRecognizer
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.PhotoScanner
+import com.hanzidictionary.core.StudyRepository
 import com.hanzidictionary.core.UserRepository
 import org.json.JSONObject
 
@@ -15,11 +16,20 @@ class HanziApp : Application() {
 
     val tts: MandarinTts by lazy { MandarinTts(this) }
 
-    /** Writable, app-owned user state (known characters, history). SQLDelight creates
-     * user.db from its schema on first open. */
-    val userRepository: UserRepository by lazy {
-        UserRepository(AndroidSqliteDriver(UserRepository.Schema, this, "user.db"))
+    /** One driver for the whole user database; both repositories are query facades over
+     * it, so they see each other's writes immediately (archiving in [userRepository] has
+     * to drop the schedule [studyRepository] reads). AndroidSqliteDriver runs the .sqm
+     * migrations on open, so an install predating study lists upgrades in place. */
+    private val userDriver by lazy {
+        AndroidSqliteDriver(UserRepository.Schema, this, "user.db")
     }
+
+    /** Writable, app-owned user state (archive, history). SQLDelight creates user.db from
+     * its schema on first open. */
+    val userRepository: UserRepository by lazy { UserRepository(userDriver) }
+
+    /** Study lists and FSRS scheduling (spec §17). */
+    val studyRepository: StudyRepository by lazy { StudyRepository(userDriver) }
 
     /** One app-lifetime ML Kit recognizer: each getClient() call allocates a native
      * client that is never closed here, so re-creating one per scan would leak. Lazy so

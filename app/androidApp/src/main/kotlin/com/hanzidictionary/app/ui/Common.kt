@@ -2,15 +2,26 @@ package com.hanzidictionary.app.ui
 
 import android.Manifest
 import android.os.Build
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** The runtime permission the photo-library features need on this OS version (shared by
@@ -31,6 +42,57 @@ fun BackButton(onBack: () -> Unit) {
 @Composable
 fun SectionTitle(text: String) {
     Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+}
+
+/**
+ * The dense "what is this character/word" row used by search results, the photo list and
+ * list screens: the glyph, then its sound and meaning. One definition of the row keeps
+ * those three surfaces identical, which matters because the same item shows up on all of
+ * them.
+ *
+ * [trailing] is where a screen adds its own state (a ✓ for archived, a due badge).
+ */
+@Composable
+fun ItemRow(
+    text: String,
+    pinyin: String?,
+    gloss: String?,
+    onClick: () -> Unit,
+    secondaryText: String? = null,
+    glossLines: Int = 2,
+    dimmed: Boolean = false,
+    trailing: @Composable (() -> Unit)? = null,
+) {
+    val alpha = if (dimmed) 0.45f else 1f
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(text, fontSize = 27.sp, color = LocalContentColor.current.copy(alpha = alpha))
+        secondaryText?.let {
+            Text(
+                it,
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            pinyin?.let {
+                Text(it, fontSize = 15.sp, color = LocalContentColor.current.copy(alpha = alpha))
+            }
+            gloss?.let {
+                Text(
+                    it,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                    maxLines = glossLines,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        trailing?.invoke()
+    }
 }
 
 /** Component function color-coding used across breakdown strips and component pages

@@ -575,6 +575,46 @@ class HanziRepository(
         return ids.mapNotNull { byId[it]?.toSearchResult() }
     }
 
+    /**
+     * Display text for study items of either kind, in the order given (spec §17). Lists,
+     * practice cards and the home-screen widget all render items through this, so a word
+     * and a character look like the same species of thing wherever they appear.
+     *
+     * Items missing from the pack are dropped — a list can outlive a pack update that
+     * removed an entry, and a row with no text at all would read as a bug.
+     */
+    fun itemSummaries(items: List<StudyItem>): List<ItemSummary> {
+        if (items.isEmpty()) return emptyList()
+        val (words, chars) = items.partition { it.isWord }
+        val glyphs = glyphSummaries(chars.map { it.itemId }).associateBy { it.glyphId }
+        val wordRows = words.map { it.itemId }.chunked(500)
+            .flatMap { db.hanziQueries.wordsByIds(it).executeAsList() }
+            .associateBy { it.id }
+        return items.mapNotNull { item ->
+            if (item.isWord) {
+                wordRows[item.itemId]?.let { w ->
+                    ItemSummary(
+                        item = item,
+                        text = w.simp,
+                        secondaryText = w.trad.takeIf { it != w.simp },
+                        pinyin = w.pinyin,
+                        gloss = firstSenses(w.defs),
+                    )
+                }
+            } else {
+                glyphs[item.itemId]?.let { g ->
+                    ItemSummary(
+                        item = item,
+                        text = g.char,
+                        secondaryText = g.tradChar,
+                        pinyin = g.primaryPinyin,
+                        gloss = g.definition?.let { displayGloss(it) },
+                    )
+                }
+            }
+        }
+    }
+
     // ---- sources / provenance ----
 
     fun sources(): List<SourceInfo> =

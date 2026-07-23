@@ -1,4 +1,4 @@
-# Hanzi Component Dictionary — Product Spec v1.2 (reviewed)
+# Hanzi Component Dictionary — Product Spec v1.3 (reviewed)
 
 ## 1. Overview
 
@@ -173,6 +173,7 @@ Default **off**; single onboarding toggle enables Firebase Analytics + Crashlyti
 - **M3 — Beta:** photo-library scanning (revised from live camera OCR, §16), HSK/paste imports, confusables, syllable audio bank, merger cards.
 - **M3.5 — Definitions & attributions:** CC-CEDICT ingested — character-page glosses, `word`/`word_char` populated, "In words" on character pages, word search + word pages (§15), English FTS in the search ranking (§9), sense↔reading pairing shown where present (§15); in-app ⓘ attributions element (§16).
 - **M3.55 — Practice & archive:** flashcard deck of encountered-but-unknown characters (lookups + photo finds); "I knew it" archives; My Characters reframed as Archive (§16). No SRS scheduling (v2, §14).
+- **M3.56 — Study system (lists, scheduling, widget):** named study lists holding characters *and* words, with membership and archiving edited from one sheet reachable everywhere; archiving stays global (§17); FSRS-6 scheduling over an on-device `card_state`/`review_log` (§17), replacing M3.55's unscheduled deck; swipe interaction on capture rows and practice cards; the intro screen's photo feed as a full detailed list with rescan; a home-screen widget serving one card from the active list with tap-to-grade (§17).
 - **M3.6 — Scholarly & component depth:** GlyphWiki script forms ingested (`script_form`) + the expandable scholarly tier on the character page (oracle→seal forms, OC/MC readings display, §9 IA item 4); component spoken names (~200 rows, §15) on breakdown strips and component pages; component-page positional variants (水/氵/氺) and function distribution (§9); coverage-tier / `resolution` honesty badges surfaced in the UI (§6, §7); prefer Wikimedia Commons syllable recordings where kaikki surfaces them (§9 Audio).
 - **M3.7 — Capture & search completion:** SEND-intent share target; paste-on-open; component-compose search off the IDS index as a search mode chip; fuzzy-search fallback (§9).
 - **M3.8 — App polish:** bundled subsetted Noto Sans SC + TC with explicit per-script typefaces (§9); stroke rendering from makemeahanzi medians via Compose Canvas (§9); confusables side-by-side diff highlighting + compare screen (§9); series browser (§9); Settings screen — script preference, explanation-depth default, pack updates (telemetry toggle lands with M4) (§9); TalkBack labels on breakdown strips and audio buttons + remaining defined empty/error states (§15); strings externalized (§15); provenance footer's prefilled GitHub-issue report link (§9); Anki `.apkg` and Pleco-export imports (§7).
@@ -215,3 +216,48 @@ SRS reviews with "component reunion" sessions, confusable quizzes seeded by `con
 - **Audio revision (decided after the smoke test).** The generated syllable bank (§9 Audio) failed the ear-check — the open-source voice's tones weren't accurate — so character audio now uses the **device's own Mandarin TTS** (`android.speech.tts`, zh-CN), which §9 already trusted for words. Accepted tradeoffs: only the primary reading of a 多音字 gets a play affordance (an engine reads a bare character with its most common pronunciation), and devices without an installed Mandarin voice show no audio. The Wikimedia-Commons-recordings preference (M3.6) and word audio (§14) are unaffected.
 - **Practice & archive (decided post-smoke-test; supersedes part of §2's SRS deferral).** The known-characters model gains its missing consumer loop: characters the user *encounters* (lookups, photo finds) but hasn't marked known form a **practice deck** of simple flashcards (front: character; back: readings + gloss + a sample word + audio). "I knew it" archives the character into the known list — which keeps powering known-first series ordering (§1's differentiator) — and "My Characters" is reframed as that **Archive** (HSK/paste import = bulk-archiving what you already know). Deliberately *not* an SRS: no scheduling, no intervals — that remains v2 (§14); this is a self-check pass over the current deck. Tracked as milestone M3.55.
 - **Smoke-test UI decisions (v0.1 alpha).** (a) Character-page glosses ship early via Unihan `kDefinition` (`glyph.definition`), shown directly under the header; CC-CEDICT (M3.5) remains the plan for full word data and richer glosses. (b) Reference metadata — frequency rank, HSK band, script, stroke count — collapses behind a "Details" toggle instead of a permanent chip row. (c) The breakdown strip suppresses the "unknown"/"empty" function labels (an associative compound like 好 showed a distracting "unknown" under every part). (d) Search results are filtered to characters the bundled Noto Sans CJK SC face can draw, so ultra-rare Ext-B+ glyphs never render as tofu; the font is bundled unsubsetted for now (§9's subsetting lands with M3.8).
+
+## 17. v1.3 Addenda — the study system
+
+- **SRS is now v1, and this supersedes §16's "deliberately not an SRS" and §14's deferral.**
+  M3.55's deck had no notion of *when* to review anything: a character was either in the deck
+  or archived. Practice cards are now scheduled by **FSRS-6** (Free Spaced Repetition
+  Scheduler, Open Spaced Repetition, MIT) — the DSR model Anki has defaulted to since 23.10,
+  which needs ~20-30% fewer reviews than SM-2 for the same retention. Implemented as pure
+  arithmetic in `core/Fsrs.kt` (no dependency; the community Kotlin port carries no license
+  file), with default parameters, desired retention 0.90, learning steps 1 min/10 min,
+  relearning step 10 min, and interval fuzz. Verified against py-fsrs's own golden interval
+  sequence in `FsrsTest`. On-device parameter optimisation stays v2 — `review_log` records
+  every grading so it stays possible.
+- **Deck selection: due first, then practise ahead.** Cards due now come first, ordered by
+  *ascending predicted recall* (least likely to be remembered first); then new cards, capped
+  per day so a large import can't bury tomorrow; then, when nothing is due, a top-up of
+  not-yet-due cards in the same least-recalled-first order, so Practice and the widget are
+  never empty. Within a session a missed card returns to the back of the queue.
+- **Study lists.** Multiple named lists (`study_list`/`list_item`), holding characters *and*
+  words. Membership is per list; **memory is not** — `card_state` is keyed by item alone, so
+  an item in three lists has one schedule. **Archiving is global**: "I know this" writes
+  `known_item`, which every deck filters on, so archiving in one list archives in all of them
+  (and discards the schedule). Archived items stay *in* their lists as a record.
+- **One editing surface.** Membership checkboxes plus the archive action live in a single
+  bottom sheet opened from any screen showing an item. On character and word pages the
+  primary button is **"Add to list"**, not "I know this" — filing something to study is the
+  common act; archiving is the rare one, and it now says on the control that it applies
+  everywhere.
+- **Active list.** One list is active at a time. It is where swipe-right files things and
+  what the home-screen widget follows; "Everything" (all lists pooled) is a valid choice.
+- **Gestures.** One grammar app-wide: **right = affirm** (save it / knew it / archive it),
+  **left = negative** (didn't know it / remove it). Capture rows swipe; the practice card
+  swipes and reveals on tap. Both directions are also TalkBack custom actions (§15 a11y).
+- **Intro screen as capture surface.** The "From your photos" feed is the full scrollable
+  list of detailed rows with a **Scan again** control; the separate Photos screen it
+  duplicated is removed.
+- **Home-screen widget.** One card from the active list. Launchers give widgets taps and no
+  gestures, so the swipe grammar becomes three tap zones: left = didn't know, right = knew
+  it, middle opens Practice on that card, revealed. Grading only — archiving needs the full
+  page. Feedback arrives one card late (the answer to the card just graded is echoed under
+  the next one), because a widget cannot reveal-then-advance without a timer. Built on
+  `RemoteViews` rather than Glance: no new dependency, and Glance compiles to RemoteViews
+  anyway.
+- **Counter names.** The "didn't know"/"knew this" tallies are stored as `lapses` and
+  `reviews` (Anki's vocabulary) and shown as "missed"/"recalled".

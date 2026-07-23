@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Hanzi Dictionary</string>
+    <string name="widget_description">A flashcard from your active list. Tap the sides to
+        grade it, tap the middle to open it.</string>
 </resources>

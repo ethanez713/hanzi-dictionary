@@ -27,21 +27,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.hanzidictionary.app.audio.MandarinTts
 import androidx.compose.ui.text.style.TextOverflow
 import com.hanzidictionary.core.CharacterPage
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ReadingView
+import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.WordView
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -56,7 +54,6 @@ fun CharacterScreen(
     onOpenCharacter: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     // null page is ambiguous (still loading vs. not in the pack), so track load completion
     // separately to give the not-found case its own state (spec §15 empty states).
     var loaded by remember(glyphId) { mutableStateOf(false) }
@@ -64,12 +61,9 @@ fun CharacterScreen(
         value = withContext(Dispatchers.IO) { repository.characterPage(glyphId) }
         loaded = true
     }
-    var known by remember { mutableStateOf(false) }
+    // Looking a character up is what puts it in the "recently encountered" deck.
     LaunchedEffect(glyphId) {
-        known = withContext(Dispatchers.IO) {
-            userRepository.logLookup(glyphId)
-            userRepository.isKnown(glyphId)
-        }
+        withContext(Dispatchers.IO) { userRepository.logLookup(glyphId) }
     }
 
     Scaffold(
@@ -96,27 +90,19 @@ fun CharacterScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Header(p, tts)
-            // One compact row for both controls: the archive toggle ("I know this"
-            // removes the character from the practice deck) and the reference-data
-            // drawer. Stacked, these two burned a whole screen row each.
+            // One compact row for both controls: the study action — "Add to list", the
+            // common case, with archiving tucked inside its sheet (spec §17) — and the
+            // reference-data drawer. Stacked, these two burned a whole screen row each.
             var showDetails by remember { mutableStateOf(false) }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FilterChip(
-                    selected = known,
-                    onClick = {
-                        val newValue = !known
-                        known = newValue
-                        scope.launch(Dispatchers.IO) { userRepository.setKnown(glyphId, newValue) }
-                    },
-                    label = { Text(if (known) "✓ Known" else "I know this") },
-                )
-                TextButton(onClick = { showDetails = !showDetails }) {
-                    Text(if (showDetails) "Hide details ▴" else "Details ▾")
-                }
-            }
+            StudyActionRow(
+                item = StudyItem.character(glyphId),
+                label = p.char,
+                trailing = {
+                    TextButton(onClick = { showDetails = !showDetails }) {
+                        Text(if (showDetails) "Hide details ▴" else "Details ▾")
+                    }
+                },
+            )
             if (showDetails) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),

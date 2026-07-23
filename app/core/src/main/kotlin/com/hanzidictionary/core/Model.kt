@@ -146,6 +146,15 @@ data class DrillChoice(
     val gloss: String,
 )
 
+/** A study item resolved to display text, whichever kind it is (spec §17). */
+data class ItemSummary(
+    val item: StudyItem,
+    val text: String,           // the character, or the word in simplified form
+    val secondaryText: String?, // traditional form, when it differs
+    val pinyin: String?,
+    val gloss: String?,
+)
+
 /** All source rows, for the provenance/attributions screen (spec §9 IA item 9, §15). */
 data class SourceInfo(
     val id: String,

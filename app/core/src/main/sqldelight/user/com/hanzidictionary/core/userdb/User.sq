@@ -1,12 +1,64 @@
 -- On-device user state (spec §7 "On-device user DB (separate)"). App-owned and
 -- writable, kept in its own file so it's never entangled with the read-only content
--- pack. SRS columns are reserved in status for the deferred review feature (spec §14).
+-- pack.
+--
+-- Item ids are glyph ids ("U+597D") or pack word ids ("w000123") — distinguishable on
+-- sight, so no namespacing is needed; `kind` says which.
 
+-- The archive. Deliberately GLOBAL rather than per-list: knowing 好 is a fact about you,
+-- not about a list, so archiving it in one list archives it everywhere (spec §17).
 CREATE TABLE known_item (
-    item_id  TEXT NOT NULL PRIMARY KEY,   -- glyph id "U+XXXX" (word ids later)
-    kind     TEXT NOT NULL,               -- character (word later)
-    status   TEXT NOT NULL,               -- known (SRS statuses reserved)
+    item_id  TEXT NOT NULL PRIMARY KEY,
+    kind     TEXT NOT NULL,               -- character | word
+    status   TEXT NOT NULL,               -- known
     added_at INTEGER NOT NULL
+);
+
+CREATE TABLE study_list (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE list_item (
+    list_id  INTEGER NOT NULL,
+    item_id  TEXT NOT NULL,
+    kind     TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (list_id, item_id)
+);
+
+-- FSRS-6 memory state (spec §17). One row per item no matter how many lists hold it:
+-- your memory of a character doesn't fork per deck.
+CREATE TABLE card_state (
+    item_id     TEXT NOT NULL PRIMARY KEY,
+    kind        TEXT NOT NULL,
+    state       TEXT NOT NULL,            -- learning | review | relearning
+    step        INTEGER,                  -- index into the short-term steps; null in review
+    stability   REAL,                     -- null until the first grading
+    difficulty  REAL,
+    due         INTEGER NOT NULL,
+    last_review INTEGER,
+    reviews     INTEGER NOT NULL DEFAULT 0,
+    lapses      INTEGER NOT NULL DEFAULT 0
+);
+
+-- Append-only grading history. Not needed to schedule (card_state carries that), but it
+-- is exactly the input the FSRS optimiser wants, so keeping it makes personalised
+-- parameters possible later without having thrown the evidence away.
+CREATE TABLE review_log (
+    item_id      TEXT NOT NULL,
+    rating       INTEGER NOT NULL,        -- 1 again | 2 hard | 3 good | 4 easy
+    ts           INTEGER NOT NULL,
+    elapsed_days REAL,
+    stability    REAL,
+    difficulty   REAL,
+    origin       TEXT NOT NULL            -- app | widget
+);
+
+CREATE TABLE app_pref (
+    key   TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 CREATE TABLE lookup_event (
@@ -84,3 +136,99 @@ SELECT gid, MAX(ts) AS last_seen FROM (
 )
 WHERE gid NOT IN (SELECT item_id FROM known_item WHERE status = 'known')
 GROUP BY gid ORDER BY last_seen DESC LIMIT :limit;
+
+-- ---- study lists ----
+
+insertList:
+INSERT INTO study_list(name, created_at) VALUES (?, ?);
+
+lastListId:
+SELECT last_insert_rowid();
+
+allLists:
+SELECT id, name, created_at FROM study_list ORDER BY created_at;
+
+listById:
+SELECT id, name, created_at FROM study_list WHERE id = :listId;
+
+renameList:
+UPDATE study_list SET name = :name WHERE id = :listId;
+
+deleteList:
+DELETE FROM study_list WHERE id = :listId;
+
+deleteAllItemsInList:
+DELETE FROM list_item WHERE list_id = :listId;
+
+addListItem:
+INSERT OR IGNORE INTO list_item(list_id, item_id, kind, added_at) VALUES (?, ?, ?, ?);
+
+removeListItem:
+DELETE FROM list_item WHERE list_id = :listId AND item_id = :itemId;
+
+listIdsContaining:
+SELECT list_id FROM list_item WHERE item_id = :itemId;
+
+-- Members of a list, oldest first. Archived (known) items stay in the list — the list is
+-- a record of what you studied — so callers filter by known_item when building a deck.
+itemsInList:
+SELECT item_id, kind, added_at FROM list_item WHERE list_id = :listId ORDER BY added_at;
+
+-- Every studied item across all lists, deduped (an item can sit in several lists).
+itemsInAllLists:
+SELECT item_id, kind, MIN(added_at) AS added_at FROM list_item
+GROUP BY item_id ORDER BY added_at;
+
+-- Every membership row at once: the lists screen needs per-list counts for all lists, and
+-- one pass beaten into shape in Kotlin is cheaper than a query per list.
+allListItems:
+SELECT list_id, item_id, kind, added_at FROM list_item;
+
+countInList:
+SELECT COUNT(*) FROM list_item WHERE list_id = :listId;
+
+countArchivedInList:
+SELECT COUNT(*) FROM list_item
+WHERE list_id = :listId
+  AND item_id IN (SELECT item_id FROM known_item WHERE status = 'known');
+
+-- ---- FSRS card state ----
+
+cardState:
+SELECT * FROM card_state WHERE item_id = :itemId;
+
+cardStatesFor:
+SELECT * FROM card_state WHERE item_id IN :itemIds;
+
+allCardStates:
+SELECT * FROM card_state;
+
+upsertCardState:
+INSERT OR REPLACE INTO card_state(
+    item_id, kind, state, step, stability, difficulty, due, last_review, reviews, lapses
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteCardState:
+DELETE FROM card_state WHERE item_id = :itemId;
+
+logReview:
+INSERT INTO review_log(item_id, rating, ts, elapsed_days, stability, difficulty, origin)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- How many items were introduced (first ever graded) since :since — the new-cards-per-day
+-- budget, so adding a 600-character HSK list doesn't dump 600 new cards in one session.
+newIntroducedSince:
+SELECT COUNT(DISTINCT item_id) FROM review_log
+WHERE ts >= :since
+  AND item_id NOT IN (SELECT item_id FROM review_log WHERE ts < :since);
+
+reviewCountSince:
+SELECT COUNT(*) FROM review_log WHERE ts >= :since;
+
+-- ---- preferences ----
+
+getPref:
+SELECT value FROM app_pref WHERE key = :key;
+
+setPref:
+INSERT OR REPLACE INTO app_pref(key, value) VALUES (?, ?);

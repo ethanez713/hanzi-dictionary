@@ -80,8 +80,9 @@ fun KnownScreen(
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                "Known characters skip the practice deck and float to the front of " +
-                    "component series. Import what you already know:",
+                "Archived characters stay in your lists as a record, but drop out of every " +
+                    "list's practice and float to the front of component series. Import " +
+                    "what you already know:",
                 fontSize = 13.sp,
                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Widgets are drawn by the launcher, outside the Compose theme, so they need their
+         own explicit palette (values-night/ carries the dark counterpart). The tap-zone
+         tints are deliberately faint: they have to read as an affordance on any
+         wallpaper without turning the widget into a traffic light. -->
+    <color name="widget_background">#F2FFFFFF</color>
+    <color name="widget_text">#DE000000</color>
+    <color name="widget_text_muted">#8A000000</color>
+    <color name="widget_zone_miss">#14C62828</color>
+    <color name="widget_zone_knew">#142E7D32</color>
+    <color name="widget_icon_miss">#B3C62828</color>
+    <color name="widget_icon_knew">#B32E7D32</color>
+</resources>

@@ -48,6 +48,16 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   app; one hanzi opens its page, more prefill search) and paste-on-open (clipboard hanzi
   offered as a one-tap search when the window gains focus). Remaining: component-compose
   search chip, fuzzy fallback.
+- **M3.56 (study system)** — done: named **study lists** holding characters and words, all
+  edited from one bottom sheet (membership checkboxes + a global archive action); "Add to
+  list" is the primary button on character and word pages. Practice is scheduled by
+  **FSRS-6** (`core/Fsrs.kt`, no dependency, checked against py-fsrs's golden interval
+  sequence): due cards first in ascending predicted recall, a per-day cap on new cards,
+  then practice-ahead so the deck is never empty. Swipe interaction throughout — right
+  affirms (save / knew it / archive), left negates (didn't know / remove). The intro screen
+  shows the whole photo feed as detailed rows with **Scan again**. A home-screen widget
+  serves one card from the active list: tap left/right to grade, tap the middle to open it
+  in Practice. Spec §17.
 - **Learning features (beyond spec)** — practice deck sources (encountered / HSK band /
   component series), reverse (production-recall) cards, confusable drills writing
   confusion_event, per-HSK progress bars on the Archive.
