@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
+import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.StudyList
 import kotlinx.coroutines.Dispatchers
@@ -89,6 +90,10 @@ fun ListSheet(
             withContext(Dispatchers.IO) { block() }
             refresh++
             onChanged()
+            // This sheet is the main way membership and archiving change, and the widget
+            // follows the active list — without this poke it would keep offering a card
+            // that was just archived, or stay empty after the first item is filed.
+            PracticeWidgetUpdater.refresh(context)
         }
     }
 
