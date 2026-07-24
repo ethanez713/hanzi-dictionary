@@ -24,8 +24,10 @@ import kotlinx.coroutines.launch
  *
  * Launchers hand widgets taps and nothing else — no gestures — so the app's swipe grammar
  * becomes three tap zones: left gutter = didn't know (Again), right gutter = knew it
- * (Good), the card itself opens the app on that exact card. Grading only: archiving an
- * item for good is a decision that deserves the full page, not a home-screen mis-tap.
+ * (Good), and the card in the middle. Tapping the card **flips it** to reveal the pinyin
+ * and definition in place; tapping the revealed card opens the app on that exact card.
+ * Grading stays on the gutters only, and archiving an item for good is a decision that
+ * deserves the full page, not a home-screen mis-tap.
  *
  * The deck follows the app's **active list**, so switching lists in the app re-points the
  * widget with no widget configuration of its own.
@@ -41,14 +43,23 @@ class PracticeWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action != ACTION_GRADE) return
         val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, INVALID_ID)
         if (widgetId == INVALID_ID) return
-        val rating = if (intent.getBooleanExtra(EXTRA_KNEW, false)) Rating.GOOD else Rating.AGAIN
-        val prefs = prefs(context)
-        val itemId = prefs.getString(key(widgetId, "item"), null) ?: return
-        val kind = prefs.getString(key(widgetId, "kind"), StudyItem.KIND_CHARACTER)!!
-        refreshAsync(context, widgetId, StudyItem(itemId, kind), rating)
+        when (intent.action) {
+            ACTION_FLIP -> {
+                // A flip is a pure UI toggle with no database work, so it updates the pref
+                // in memory and redraws inline rather than paying for a goAsync coroutine.
+                prefs(context).edit().putBoolean(key(widgetId, "revealed"), true).apply()
+                render(context, widgetId)
+            }
+            ACTION_GRADE -> {
+                val rating = if (intent.getBooleanExtra(EXTRA_KNEW, false)) Rating.GOOD else Rating.AGAIN
+                val prefs = prefs(context)
+                val itemId = prefs.getString(key(widgetId, "item"), null) ?: return
+                val kind = prefs.getString(key(widgetId, "kind"), StudyItem.KIND_CHARACTER)!!
+                refreshAsync(context, widgetId, StudyItem(itemId, kind), rating)
+            }
+        }
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
@@ -85,11 +96,12 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                     val mark = if (rating == Rating.GOOD) "✓" else "✗"
                     echo = answer?.let { "$mark  $it" }
                 }
+                val prevId = prefs.getString(key(widgetId, "item"), null)
                 val next = pickCard(
                     app,
                     avoid = gradedItem?.itemId,
                     keepCurrent = gradedItem == null,
-                    currentId = prefs.getString(key(widgetId, "item"), null),
+                    currentId = prevId,
                 )
                 val editor = prefs.edit()
                 if (next == null) {
@@ -100,6 +112,12 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                     editor.putString(key(widgetId, "front"), next.front)
                     editor.putString(key(widgetId, "answer"), next.answer)
                     editor.putString(key(widgetId, "deck"), next.deckLabel)
+                    // A just-graded card, or any change of card, comes up face-down; a plain
+                    // redraw of the same card (list edited, launcher restarted) keeps its
+                    // flip state so an app-poked update can't un-reveal under your thumb.
+                    if (gradedItem != null || next.item.itemId != prevId) {
+                        editor.putBoolean(key(widgetId, "revealed"), false)
+                    }
                 }
                 if (echo != null) editor.putString(key(widgetId, "echo"), echo)
                 else editor.remove(key(widgetId, "echo"))
@@ -115,10 +133,11 @@ class PracticeWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val ACTION_GRADE = "com.hanzidictionary.app.widget.GRADE"
+        private const val ACTION_FLIP = "com.hanzidictionary.app.widget.FLIP"
         private const val EXTRA_KNEW = "knew"
         private const val INVALID_ID = AppWidgetManager.INVALID_APPWIDGET_ID
         private const val PREFS = "practice_widget"
-        private val FIELDS = listOf("item", "kind", "front", "answer", "deck", "echo")
+        private val FIELDS = listOf("item", "kind", "front", "answer", "deck", "echo", "revealed")
 
         private fun prefs(context: Context): SharedPreferences =
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -169,24 +188,52 @@ class PracticeWidgetProvider : AppWidgetProvider() {
             val prefs = prefs(context)
             val views = RemoteViews(context.packageName, R.layout.widget_practice)
             val front = prefs.getString(key(widgetId, "front"), null)
+            val revealed = prefs.getBoolean(key(widgetId, "revealed"), false)
 
             if (front == null) {
                 // Keep the last answer visible when the deck runs dry: the tap that
                 // emptied it deserves its feedback too.
                 val echo = prefs.getString(key(widgetId, "echo"), "").orEmpty()
-                views.setTextViewText(R.id.widget_deck, "Nothing to practise")
+                views.setTextViewText(R.id.widget_deck, "Nothing to practice")
                 views.setTextViewText(R.id.widget_card, "字")
                 views.setTextViewText(R.id.widget_echo, echo.ifBlank { "Tap to open" })
             } else {
                 views.setTextViewText(R.id.widget_deck, prefs.getString(key(widgetId, "deck"), "").orEmpty())
                 views.setTextViewText(R.id.widget_card, front)
-                views.setTextViewText(R.id.widget_echo, prefs.getString(key(widgetId, "echo"), "").orEmpty())
+                if (revealed) {
+                    // Flipped: the bottom line becomes this card's own answer (pinyin +
+                    // gloss), taking over from the one-card-late echo of the last grade.
+                    views.setTextViewText(R.id.widget_echo, prefs.getString(key(widgetId, "answer"), "").orEmpty())
+                } else {
+                    val echo = prefs.getString(key(widgetId, "echo"), "").orEmpty()
+                    views.setTextViewText(R.id.widget_echo, echo.ifBlank { "Tap to reveal" })
+                }
             }
 
             views.setOnClickPendingIntent(R.id.zone_miss, gradeIntent(context, widgetId, knew = false))
             views.setOnClickPendingIntent(R.id.zone_knew, gradeIntent(context, widgetId, knew = true))
-            views.setOnClickPendingIntent(R.id.zone_card, openIntent(context, widgetId))
+            // First tap flips a face-down card in place; once it's revealed (or the deck is
+            // empty) the middle opens the app on that card.
+            val cardIntent =
+                if (front != null && !revealed) flipIntent(context, widgetId)
+                else openIntent(context, widgetId)
+            views.setOnClickPendingIntent(R.id.zone_card, cardIntent)
             AppWidgetManager.getInstance(context).updateAppWidget(widgetId, views)
+        }
+
+        private fun flipIntent(context: Context, widgetId: Int): PendingIntent {
+            val intent = Intent(context, PracticeWidgetProvider::class.java).apply {
+                action = ACTION_FLIP
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                // Distinct data URI so this doesn't collide with the grade/open intents.
+                data = android.net.Uri.parse("hanzi://widget/$widgetId/flip")
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
         }
 
         private fun gradeIntent(context: Context, widgetId: Int, knew: Boolean): PendingIntent {

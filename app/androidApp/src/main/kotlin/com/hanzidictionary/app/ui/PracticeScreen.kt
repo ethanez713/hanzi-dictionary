@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -34,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
@@ -55,11 +57,12 @@ import kotlinx.coroutines.withContext
 /**
  * Flashcard practice, scheduled by FSRS (spec §17).
  *
- * The card is the interface: **tap** reveals the answer, **swipe right** says you knew it,
- * **swipe left** says you didn't — the same two verbs the home-screen widget offers, so
- * the muscle memory transfers. Revealing is optional on purpose: recognising a character
- * and knowing you recognised it is the thing being tested, and forcing a reveal first
- * would slow the common case down.
+ * The card is the interface: **tap** reveals the answer (**tap again** opens its full
+ * page), **swipe right** says you knew it, **swipe left** says you didn't — the same two
+ * verbs the home-screen widget offers, so the muscle memory transfers. **Swipe up** skips
+ * a card without touching its memory. Revealing is optional on purpose: recognising a
+ * character and knowing you recognised it is the thing being tested, and forcing a reveal
+ * first would slow the common case down.
  *
  * A missed card goes to the back of the session queue rather than out of it, so within a
  * sitting you do see the ones you don't know more often — and across days FSRS decides,
@@ -93,6 +96,7 @@ fun PracticeScreen(
     var back by remember { mutableStateOf<CardBack?>(null) }
     var reloads by remember { mutableIntStateOf(0) }
     var dealt by remember { mutableIntStateOf(0) }
+    var showInfo by remember { mutableStateOf(false) }
 
     LaunchedEffect(source, reloads) {
         loaded = false
@@ -166,10 +170,20 @@ fun PracticeScreen(
         advanceAfter(entry, requeue = false)
     }
 
+    fun skip() {
+        val entry = deck.getOrNull(index) ?: return
+        // A skip is deliberately weightless: no grade, no review_log row, no widget poke —
+        // it sends the card to the back of this session's queue and moves on, leaving its
+        // FSRS memory exactly as it was.
+        advanceAfter(entry, requeue = true)
+    }
+
+    if (showInfo) GradingInfoDialog(onDismiss = { showInfo = false })
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Practise") },
+                title = { Text("Practice") },
                 navigationIcon = { BackButton(onBack) },
                 actions = { TextButton(onClick = onOpenArchive) { Text("Archive") } },
             )
@@ -206,12 +220,18 @@ fun PracticeScreen(
                     )
                     val entry = deck[index]
                     val summary = summaries[entry.item.itemId]
+                    val openFull = {
+                        if (entry.item.isWord) onOpenWord(entry.item.itemId)
+                        else onOpenCharacter(entry.item.itemId)
+                    }
                     SwipeCard(
                         key = entry.item.itemId to dealt,
                         rightAction = KnewAction,
                         leftAction = MissedAction,
                         onSwipeRight = { grade(Rating.GOOD) },
                         onSwipeLeft = { grade(Rating.AGAIN) },
+                        upAction = SkipAction,
+                        onSwipeUp = { skip() },
                     ) {
                         PracticeCard(
                             summary = summary,
@@ -220,17 +240,25 @@ fun PracticeScreen(
                             showAnswer = showAnswer,
                             tts = tts,
                             onReveal = { showAnswer = true },
+                            onOpenFull = openFull,
                         )
                     }
-                    SwipeLegend(MissedAction, KnewAction)
+                    SwipeLegend(MissedAction, KnewAction, up = SkipAction)
 
                     if (showAnswer) {
                         // Four-grade FSRS is measurably better than two, so Hard/Easy are
                         // here for when the difference is obvious — but the swipes stay
-                        // the primary path, and they are the only two the widget has.
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // the primary path, and they are the only two the widget has. The
+                        // ⓘ explains what any of these do to the schedule.
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             OutlinedButton(onClick = { grade(Rating.HARD) }) { Text("Hard") }
                             OutlinedButton(onClick = { grade(Rating.EASY) }) { Text("Easy") }
+                            TextButton(onClick = { showInfo = true }) {
+                                Text("ⓘ", fontSize = 20.sp)
+                            }
                         }
                         Button(onClick = { archive() }) { Text("I know this — archive it") }
                         Text(
@@ -240,10 +268,6 @@ fun PracticeScreen(
                             textAlign = TextAlign.Center,
                         )
                         entry.card?.let { CardHistory(it) }
-                        TextButton(onClick = {
-                            if (entry.item.isWord) onOpenWord(entry.item.itemId)
-                            else onOpenCharacter(entry.item.itemId)
-                        }) { Text("Full page →") }
                     }
                 }
             }
@@ -255,9 +279,14 @@ fun PracticeScreen(
 private data class CardBack(
     val pinyin: String?,
     val gloss: String?,
-    val example: String?,
+    val wordsLabel: String,
+    val words: List<BackWord>,
     val speakText: String,
 )
+
+/** One line in the card's word list — a word the character appears in, or (for a word
+ * card) one of its constituent characters. */
+private data class BackWord(val text: String, val pinyin: String?, val gloss: String?)
 
 private suspend fun loadBack(repository: HanziRepository, item: StudyItem): CardBack? =
     if (item.isWord) {
@@ -265,9 +294,11 @@ private suspend fun loadBack(repository: HanziRepository, item: StudyItem): Card
             CardBack(
                 pinyin = w.pinyin,
                 gloss = w.senses.take(3).joinToString("; "),
-                example = w.chars.mapNotNull { it.definition?.substringBefore(";") }
-                    .takeIf { it.isNotEmpty() }
-                    ?.joinToString(" + ") { it.trim() },
+                // A word can't be "used in" much, so its back teaches what it's built from.
+                wordsLabel = "Made of",
+                words = w.chars.map {
+                    BackWord(it.char, null, it.definition?.substringBefore(";")?.trim())
+                },
                 speakText = w.simp,
             )
         }
@@ -279,9 +310,10 @@ private suspend fun loadBack(repository: HanziRepository, item: StudyItem): Card
                     .joinToString("  ") { it.value }
                     .ifBlank { null },
                 gloss = c.definition,
-                example = c.words.firstOrNull()?.let { w ->
-                    "${w.simp}  ${w.pinyin.orEmpty()} — ${w.gloss.orEmpty()}"
-                },
+                // c.words is already learner-ordered (HSK, then length), so the first few
+                // are the words most worth recognising this character in.
+                wordsLabel = "Used in words",
+                words = c.words.map { BackWord(it.simp, it.pinyin, it.gloss) },
                 speakText = c.char,
             )
         }
@@ -295,8 +327,15 @@ private fun PracticeCard(
     showAnswer: Boolean,
     tts: MandarinTts,
     onReveal: () -> Unit,
+    onOpenFull: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth().clickable(enabled = !showAnswer, onClick = onReveal)) {
+    // One tap reveals the answer; once it's showing, the next tap opens the full page —
+    // the card itself is the link, so there's no separate button to hunt for.
+    Card(
+        Modifier.fillMaxWidth().clickable {
+            if (!showAnswer) onReveal() else onOpenFull()
+        },
+    ) {
         Column(
             Modifier.fillMaxWidth().heightIn(min = 220.dp).padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -339,17 +378,65 @@ private fun PracticeCard(
                 if (!reverse) {
                     Text(gloss, fontSize = 16.sp, textAlign = TextAlign.Center)
                 }
-                back?.example?.let {
-                    Text(
-                        it,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
+                back?.words?.take(6)?.takeIf { it.isNotEmpty() }?.let { words ->
+                    Column(
+                        Modifier.fillMaxWidth().padding(top = 2.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            back.wordsLabel,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        words.forEach { w ->
+                            Text(
+                                buildString {
+                                    append(w.text)
+                                    w.pinyin?.let { append("  "); append(it) }
+                                    w.gloss?.let { append(" — "); append(it) }
+                                },
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
+                Text(
+                    "Tap card for full page →",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
     }
+}
+
+/** Explains what the grades and swipes do to a card's schedule (spec §17 grading). */
+@Composable
+private fun GradingInfoDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
+        title = { Text("How grading works") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Each answer tells the scheduler how well you knew the card, and it sets " +
+                        "when you'll see it again — the better you knew it, the longer the gap.",
+                    fontSize = 14.sp,
+                )
+                Text("✗  Didn't know  (swipe left) — comes back within the minute, then often.", fontSize = 13.sp)
+                Text("Hard — you got it, but barely; it returns sooner than a normal card.", fontSize = 13.sp)
+                Text("✓  Knew it  (swipe right) — a normal step; the gap grows each time.", fontSize = 13.sp)
+                Text("Easy — effortless; the next gap jumps well past normal.", fontSize = 13.sp)
+                Text("↑  Swipe up to skip — move on without changing the card's schedule.", fontSize = 13.sp)
+            }
+        },
+    )
 }
 
 /** Per-card history, in plain words rather than SRS jargon. */
@@ -368,7 +455,7 @@ private fun EmptyDeck(source: DeckSource) {
     Text(
         when (source) {
             is DeckSource.Encountered ->
-                "Nothing to practise. Characters you look up or find in photos land here " +
+                "Nothing to practice. Characters you look up or find in photos land here " +
                     "until you file or archive them."
             is DeckSource.Hsk -> "Every character in this HSK band is archived. 好棒!"
             is DeckSource.Series -> "Every character in this series is archived."
@@ -383,7 +470,7 @@ private fun EmptyDeck(source: DeckSource) {
 }
 
 /** Leads with position, then says *why* these cards are up — "ahead" is worth flagging so
- * practising ahead of schedule never looks like the app losing track of time. */
+ * practicing ahead of schedule never looks like the app losing track of time. */
 private fun deckSummary(deck: List<DeckEntry>, index: Int): String {
     val due = deck.count { it.bucket == DeckBucket.DUE }
     val fresh = deck.count { it.bucket == DeckBucket.NEW }

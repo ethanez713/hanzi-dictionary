@@ -152,7 +152,7 @@ fun ListsScreen(
             if (lists.isEmpty()) {
                 Text(
                     "No lists yet. Swipe right on anything — a character in your photos, a " +
-                        "search result — and it lands in a list you can practise.",
+                        "search result — and it lands in a list you can practice.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -238,7 +238,7 @@ private fun ListCard(
                 )
             }
             Spacer(Modifier.padding(horizontal = 4.dp))
-            TextButton(onClick = onPractice) { Text("▶ Practise") }
+            TextButton(onClick = onPractice) { Text("▶ Practice") }
         }
     }
 }

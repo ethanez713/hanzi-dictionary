@@ -212,6 +212,13 @@ class StudyRepository(
      *
      * Step 3 is the principled version of "show unknown cards more often": rather than a
      * fixed 3:1 sampling ratio, cards surface in ascending order of predicted recall.
+     *
+     * Due and Ahead cards keep that recall-first order on purpose — it is the point of an
+     * SRS, and it means a session you don't finish still covered the most at-risk cards.
+     * New cards carry no recall signal, though, so their *sequence* is arbitrary: we keep
+     * the caller's priority for **which** new cards enter today (frequency, list order),
+     * then [shuffled] the ones that made the cut so the deck doesn't drill in the same
+     * fixed sequence every session.
      */
     fun buildDeck(
         candidates: List<StudyItem>,
@@ -240,7 +247,8 @@ class StudyRepository(
         due.sortWith(byRecall)
         ahead.sortWith(byRecall)
 
-        return (due + fresh.take(newAllowance(now)) + ahead).take(limit)
+        val newCards = fresh.take(newAllowance(now)).shuffled()
+        return (due + newCards + ahead).take(limit)
     }
 
     fun deckFor(source: DeckSource, limit: Int = 60, now: Long = System.currentTimeMillis()): List<DeckEntry> =

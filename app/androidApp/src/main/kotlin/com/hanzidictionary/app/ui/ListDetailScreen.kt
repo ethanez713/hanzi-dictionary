@@ -140,7 +140,7 @@ fun ListDetailScreen(
                 navigationIcon = { BackButton(onBack) },
                 actions = {
                     TextButton(onClick = { onPractice(DeckSource.UserList(listId, name)) }) {
-                        Text("▶ Practise")
+                        Text("▶ Practice")
                     }
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "List options")

@@ -2,8 +2,9 @@
 <!-- Home-screen flashcard (spec §17). Launchers give widgets taps but never gestures, so
      the swipe grammar used inside the app becomes three tap targets: a "didn't know"
      gutter on the left, a "knew it" gutter on the right, and the card itself in the
-     middle, which opens the app on this exact card. The gutters are tinted and carry
-     their glyph so the split is visible before you touch anything. -->
+     middle, which flips to reveal the answer and, once revealed, opens the app on this
+     exact card. The gutters are tinted and carry their glyph so the split is visible
+     before you touch anything. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -62,16 +63,18 @@
             android:textColor="@color/widget_text"
             android:textSize="38sp" />
 
-        <!-- The answer to the card you graded a tap ago. A widget can't reveal and then
-             advance on a timer, so feedback arrives one card late — which still closes
-             the loop on every self-assessment. -->
+        <!-- Doubles as the reveal line: when the card is flipped it shows this card's own
+             pinyin + definition; otherwise it echoes the answer to the card you graded a
+             tap ago (a widget can't reveal and then advance on a timer, so that feedback
+             arrives one card late — which still closes the loop on every self-assessment). -->
         <TextView
             android:id="@+id/widget_echo"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
+            android:ellipsize="end"
             android:gravity="center"
-            android:maxLines="1"
+            android:maxLines="2"
             android:textColor="@color/widget_text_muted"
             android:textSize="11sp" />
     </LinearLayout>

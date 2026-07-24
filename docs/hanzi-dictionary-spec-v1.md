@@ -229,7 +229,7 @@ SRS reviews with "component reunion" sessions, confusable quizzes seeded by `con
   relearning step 10 min, and interval fuzz. Verified against py-fsrs's own golden interval
   sequence in `FsrsTest`. On-device parameter optimisation stays v2 — `review_log` records
   every grading so it stays possible.
-- **Deck selection: due first, then practise ahead.** Cards due now come first, ordered by
+- **Deck selection: due first, then practice ahead.** Cards due now come first, ordered by
   *ascending predicted recall* (least likely to be remembered first); then new cards, capped
   per day so a large import can't bury tomorrow; then, when nothing is due, a top-up of
   not-yet-due cards in the same least-recalled-first order, so Practice and the widget are
