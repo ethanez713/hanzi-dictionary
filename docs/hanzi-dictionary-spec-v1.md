@@ -229,11 +229,16 @@ SRS reviews with "component reunion" sessions, confusable quizzes seeded by `con
   relearning step 10 min, and interval fuzz. Verified against py-fsrs's own golden interval
   sequence in `FsrsTest`. On-device parameter optimisation stays v2 — `review_log` records
   every grading so it stays possible.
-- **Deck selection: due first, then practice ahead.** Cards due now come first, ordered by
-  *ascending predicted recall* (least likely to be remembered first); then new cards, capped
-  per day so a large import can't bury tomorrow; then, when nothing is due, a top-up of
-  not-yet-due cards in the same least-recalled-first order, so Practice and the widget are
-  never empty. Within a session a missed card returns to the back of the queue.
+- **Deck selection: new first, then due, then practice ahead.** Never-graded cards lead and
+  get a reserved slice of the deck — a first exposure is the only way to gain any signal on a
+  word, so a brand-new card is never crowded out by a pile of due reviews — capped per day so
+  a large import can't bury tomorrow (that cap is what keeps leading with new cards from
+  becoming review debt). Then cards due now, ordered by *ascending predicted recall* (least
+  likely to be remembered first); then, when nothing is due, a top-up of not-yet-due cards in
+  the same least-recalled-first order, so Practice and the widget are never empty. The moment
+  a new card is graded once it has a memory state and rejoins the recall-sorted order. Within
+  a session a missed card returns to the back of the queue; a skip (swipe up) does the same
+  without grading.
 - **Study lists.** Multiple named lists (`study_list`/`list_item`), holding characters *and*
   words. Membership is per list; **memory is not** — `card_state` is keyed by item alone, so
   an item in three lists has one schedule. **Archiving is global**: "I know this" writes

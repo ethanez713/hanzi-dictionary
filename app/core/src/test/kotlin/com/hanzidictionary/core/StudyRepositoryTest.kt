@@ -151,6 +151,26 @@ class StudyRepositoryTest {
     }
 
     @Test
+    fun neverSeenCardsLeadDueReviewsSoTheyAreNeverStarved() {
+        val list = study.createList("mix", now)
+        val seen = StudyItem.character("U+8000")
+        val fresh = StudyItem.character("U+8001")
+        study.addToList(list, seen, now)
+        study.addToList(list, fresh, now)
+        // `seen` gets a memory state and comes back due within minutes; `fresh` is never
+        // graded, so it has no signal at all — the card we want surfaced first to get some.
+        study.grade(seen, Rating.AGAIN, now = now)
+
+        val deck = study.deckFor(DeckSource.UserList(list), now = now + 5 * 60_000)
+        assertEquals(fresh, deck.first().item, "a never-seen card must lead a due review")
+        assertEquals(DeckBucket.NEW, deck.first().bucket)
+        assertTrue(
+            deck.any { it.item == seen && it.bucket == DeckBucket.DUE },
+            "the due review is still in the deck, just behind the new card",
+        )
+    }
+
+    @Test
     fun everythingPoolsAcrossListsWithoutDuplicates() {
         val a = study.createList("A", now)
         val b = study.createList("B", now)

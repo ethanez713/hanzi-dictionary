@@ -204,21 +204,24 @@ class StudyRepository(
     /**
      * Orders candidates into a practice deck. The policy, in priority order:
      *
-     *  1. **Due** — scheduled for now or earlier, *least likely to be recalled first*.
-     *  2. **New** — never graded, capped per day so importing a 600-character list doesn't
-     *     bury you tomorrow.
+     *  1. **New** — never graded, shown FIRST and given a reserved place in the deck. A
+     *     first exposure is the only way to gain *any* signal on a word (there's no memory
+     *     state, so nothing to schedule), so a brand-new card is never crowded out by a
+     *     pile of due reviews. Capped per day ([NEW_PER_DAY]) so importing a 600-character
+     *     list can't bury you — and that cap is exactly what keeps leading with new cards
+     *     from turning into review debt.
+     *  2. **Due** — scheduled for now or earlier, *least likely to be recalled first*.
      *  3. **Ahead** — nothing left that's due, so top up with whatever you're closest to
      *     forgetting. This is what keeps the deck (and the widget) from ever being empty.
      *
-     * Step 3 is the principled version of "show unknown cards more often": rather than a
-     * fixed 3:1 sampling ratio, cards surface in ascending order of predicted recall.
-     *
-     * Due and Ahead cards keep that recall-first order on purpose — it is the point of an
-     * SRS, and it means a session you don't finish still covered the most at-risk cards.
-     * New cards carry no recall signal, though, so their *sequence* is arbitrary: we keep
-     * the caller's priority for **which** new cards enter today (frequency, list order),
-     * then [shuffled] the ones that made the cut so the deck doesn't drill in the same
-     * fixed sequence every session.
+     * The moment a new card is graded even once it has a memory state (stability +
+     * difficulty) and rejoins the retrievability-sorted Due/Ahead order — "most unknown
+     * until it has signal, scheduled by recall after". Steps 2–3 are the principled version
+     * of "show unknown cards more often": rather than a fixed 3:1 ratio, cards surface in
+     * ascending order of predicted recall, which also means a session you don't finish
+     * still covered the most at-risk reviews. Among new cards there's no recall signal to
+     * sort by, so *which* enter today is the caller's priority (frequency, list order) and
+     * their sequence is [shuffled] so the deck doesn't drill the same order every session.
      */
     fun buildDeck(
         candidates: List<StudyItem>,
@@ -248,7 +251,7 @@ class StudyRepository(
         ahead.sortWith(byRecall)
 
         val newCards = fresh.take(newAllowance(now)).shuffled()
-        return (due + newCards + ahead).take(limit)
+        return (newCards + due + ahead).take(limit)
     }
 
     fun deckFor(source: DeckSource, limit: Int = 60, now: Long = System.currentTimeMillis()): List<DeckEntry> =
