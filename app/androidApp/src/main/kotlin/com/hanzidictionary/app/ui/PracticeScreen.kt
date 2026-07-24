@@ -25,7 +25,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,6 +45,7 @@ import com.hanzidictionary.core.DeckEntry
 import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ItemSummary
+import com.hanzidictionary.core.PracticeState
 import com.hanzidictionary.core.Rating
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.StudyRepository
@@ -87,13 +87,13 @@ fun PracticeScreen(
     val scope = rememberCoroutineScope()
 
     var reverse by remember { mutableStateOf(false) }
-    var deck by remember { mutableStateOf<List<DeckEntry>>(emptyList()) }
+    // All the in-session deck state (which card, its position, whether it's flipped) lives in
+    // one immutable PracticeState so its transitions are unit-tested in core; reassigning it
+    // drives recomposition.
+    var state by remember { mutableStateOf(PracticeState(emptyList(), revealed = startRevealed)) }
     var summaries by remember { mutableStateOf<Map<String, ItemSummary>>(emptyMap()) }
-    var index by remember { mutableIntStateOf(0) }
-    var showAnswer by remember { mutableStateOf(startRevealed) }
     var loaded by remember { mutableStateOf(false) }
     var back by remember { mutableStateOf<CardBack?>(null) }
-    var dealt by remember { mutableIntStateOf(0) }
     var showInfo by remember { mutableStateOf(false) }
 
     LaunchedEffect(source) {
@@ -122,58 +122,47 @@ fun PracticeScreen(
             val found = repository.itemSummaries(entries.map { it.item }).associateBy { it.item.itemId }
             entries.filter { it.item.itemId in found } to found
         }
-        deck = built.first
+        state = PracticeState(
+            deck = built.first,
+            revealed = startRevealed && initialItem != null,
+        )
         summaries = built.second
-        index = 0
-        showAnswer = startRevealed && initialItem != null
         loaded = true
     }
 
-    val current = deck.getOrNull(index)
+    val current = state.current
     LaunchedEffect(current?.item) {
         back = current?.let { entry ->
             withContext(Dispatchers.IO) { loadBack(repository, entry.item) }
         }
     }
 
-    fun advanceAfter(entry: DeckEntry, requeue: Boolean) {
-        val rest = deck.filterIndexed { i, _ -> i != index }
-        deck = if (requeue) rest + entry else rest
-        if (index >= deck.size) index = 0
-        showAnswer = false
-        // Bumped on every advance so the card animation resets even when the *same* item
-        // comes back round — a one-card deck re-queues onto itself, and keying the card
-        // on its id alone would leave it stranded where it was thrown.
-        dealt++
-    }
-
     fun grade(rating: Rating) {
-        val entry = deck.getOrNull(index) ?: return
+        val entry = state.current ?: return
         scope.launch {
             withContext(Dispatchers.IO) { app.studyRepository.grade(entry.item, rating) }
             PracticeWidgetUpdater.refresh(context)
         }
         // Missed cards come back later this session; recalled ones are done for now.
-        advanceAfter(entry, requeue = rating == Rating.AGAIN)
+        state = state.advance(requeue = rating == Rating.AGAIN)
     }
 
     fun archive() {
-        val entry = deck.getOrNull(index) ?: return
+        val entry = state.current ?: return
         scope.launch {
             withContext(Dispatchers.IO) {
                 app.userRepository.setKnown(entry.item.itemId, true, entry.item.kind)
             }
             PracticeWidgetUpdater.refresh(context)
         }
-        advanceAfter(entry, requeue = false)
+        state = state.advance(requeue = false)
     }
 
     fun skip() {
-        val entry = deck.getOrNull(index) ?: return
         // A skip is deliberately weightless: no grade, no review_log row, no widget poke —
         // it sends the card to the back of this session's queue and moves on, leaving its
         // FSRS memory exactly as it was.
-        advanceAfter(entry, requeue = true)
+        if (state.current != null) state = state.advance(requeue = true)
     }
 
     if (showInfo) GradingInfoDialog(onDismiss = { showInfo = false })
@@ -218,7 +207,7 @@ fun PracticeScreen(
                 // selected.
                 FilterChip(
                     selected = reverse,
-                    onClick = { reverse = !reverse; showAnswer = false },
+                    onClick = { reverse = !reverse; state = state.collapse() },
                     label = { Text("Meaning → character") },
                 )
                 FilterChip(
@@ -228,23 +217,23 @@ fun PracticeScreen(
                 )
             }
 
+            val entry = state.current
             when {
                 !loaded -> Text("Loading…")
-                deck.isEmpty() -> EmptyDeck(source)
+                entry == null -> EmptyDeck(source)
                 else -> {
                     Text(
-                        deckSummary(deck, index),
+                        deckSummary(state.deck, state.index),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    val entry = deck[index]
                     val summary = summaries[entry.item.itemId]
                     val openFull = {
                         if (entry.item.isWord) onOpenWord(entry.item.itemId)
                         else onOpenCharacter(entry.item.itemId)
                     }
                     SwipeCard(
-                        key = entry.item.itemId to dealt,
+                        key = entry.item.itemId to state.dealt,
                         rightAction = KnewAction,
                         leftAction = MissedAction,
                         onSwipeRight = { grade(Rating.GOOD) },
@@ -256,15 +245,15 @@ fun PracticeScreen(
                             summary = summary,
                             back = back,
                             reverse = reverse,
-                            showAnswer = showAnswer,
+                            showAnswer = state.revealed,
                             tts = tts,
-                            onReveal = { showAnswer = true },
+                            onReveal = { state = state.reveal() },
                             onOpenFull = openFull,
                         )
                     }
                     SwipeLegend(MissedAction, KnewAction, up = SkipAction)
 
-                    if (showAnswer) {
+                    if (state.revealed) {
                         // Four-grade FSRS is measurably better than two, so Hard/Easy are
                         // here for when the difference is obvious — but the swipes stay
                         // the primary path, and they are the only two the widget has. The
