@@ -44,7 +44,9 @@
                 android:textSize="9sp" />
         </LinearLayout>
 
-        <View
+        <!-- A 1dp TextView, not a <View>: RemoteViews only inflates a whitelist of classes
+             and plain android.view.View isn't on it (an empty TextView is). -->
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="@color/widget_divider" />
@@ -133,7 +135,9 @@
                 android:textSize="9sp" />
         </LinearLayout>
 
-        <View
+        <!-- A 1dp TextView, not a <View>: RemoteViews only inflates a whitelist of classes
+             and plain android.view.View isn't on it (an empty TextView is). -->
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="@color/widget_divider" />
