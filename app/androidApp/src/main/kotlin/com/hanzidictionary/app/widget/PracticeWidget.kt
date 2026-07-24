@@ -23,14 +23,17 @@ import kotlinx.coroutines.launch
  * Home-screen flashcard (spec §17).
  *
  * Launchers hand widgets taps and nothing else — no gestures — so the app's swipe grammar
- * becomes three tap zones: left gutter = didn't know (Again), right gutter = knew it
- * (Good), and the card in the middle. Tapping the card **flips it** to reveal the pinyin
- * and definition in place; tapping the revealed card opens the app on that exact card.
- * Grading stays on the gutters only, and archiving an item for good is a decision that
- * deserves the full page, not a home-screen mis-tap.
+ * becomes tap zones. Each side gutter is split into two stacked grades: the left "struggled"
+ * gutter is Again (top) / Hard (bottom), the right "recalled" gutter is Good (top) / Easy
+ * (bottom) — the full four-grade FSRS scale in the same small footprint. Tapping the card in
+ * the middle **flips it** to reveal the pinyin and definition in place; tapping the revealed
+ * card opens the app on that exact card. Grading stays on the gutters only, and archiving an
+ * item for good is a decision that deserves the full page, not a home-screen mis-tap.
  *
  * The deck follows the app's **active list**, so switching lists in the app re-points the
- * widget with no widget configuration of its own.
+ * widget with no widget configuration of its own. The card shown is picked semi-randomly —
+ * never-seen cards first (they need a first look), otherwise a random due review — so the
+ * widget doesn't march the same fixed sequence every grade, mirroring the practice screen.
  *
  * Every tap runs in the receiver under `goAsync()`, on IO: the content pack was already
  * unpacked at first launch, so a cold process only has to open SQLite.
@@ -53,7 +56,9 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                 render(context, widgetId)
             }
             ACTION_GRADE -> {
-                val rating = if (intent.getBooleanExtra(EXTRA_KNEW, false)) Rating.GOOD else Rating.AGAIN
+                val rating = intent.getStringExtra(EXTRA_RATING)
+                    ?.let { runCatching { Rating.valueOf(it) }.getOrNull() }
+                    ?: return
                 val prefs = prefs(context)
                 val itemId = prefs.getString(key(widgetId, "item"), null) ?: return
                 val kind = prefs.getString(key(widgetId, "kind"), StudyItem.KIND_CHARACTER)!!
@@ -93,7 +98,9 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                     // The answer was resolved when this card was drawn, so the feedback
                     // line costs no extra lookup.
                     val answer = prefs.getString(key(widgetId, "answer"), null)
-                    val mark = if (rating == Rating.GOOD) "✓" else "✗"
+                    // Again is the only lapse; Hard/Good/Easy are all passes, so the echo
+                    // just reports pass vs miss (the exact grade lives in the schedule).
+                    val mark = if (rating == Rating.AGAIN) "✗" else "✓"
                     echo = answer?.let { "$mark  $it" }
                 }
                 val prevId = prefs.getString(key(widgetId, "item"), null)
@@ -111,7 +118,6 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                     editor.putString(key(widgetId, "kind"), next.item.kind)
                     editor.putString(key(widgetId, "front"), next.front)
                     editor.putString(key(widgetId, "answer"), next.answer)
-                    editor.putString(key(widgetId, "deck"), next.deckLabel)
                     // A just-graded card, or any change of card, comes up face-down; a plain
                     // redraw of the same card (list edited, launcher restarted) keeps its
                     // flip state so an app-poked update can't un-reveal under your thumb.
@@ -134,10 +140,10 @@ class PracticeWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val ACTION_GRADE = "com.hanzidictionary.app.widget.GRADE"
         private const val ACTION_FLIP = "com.hanzidictionary.app.widget.FLIP"
-        private const val EXTRA_KNEW = "knew"
+        private const val EXTRA_RATING = "rating"
         private const val INVALID_ID = AppWidgetManager.INVALID_APPWIDGET_ID
         private const val PREFS = "practice_widget"
-        private val FIELDS = listOf("item", "kind", "front", "answer", "deck", "echo", "revealed")
+        private val FIELDS = listOf("item", "kind", "front", "answer", "echo", "revealed")
 
         private fun prefs(context: Context): SharedPreferences =
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -149,13 +155,18 @@ class PracticeWidgetProvider : AppWidgetProvider() {
             val item: StudyItem,
             val front: String,
             val answer: String,
-            val deckLabel: String,
         )
 
         /**
          * The next card from whatever list is active. [avoid] skips the card just graded:
          * a lapsed card becomes due again in a minute, which is right inside the app but
          * on a widget would just redraw the same character under your thumb.
+         *
+         * Selection is semi-random, mirroring the practice screen: a never-seen card wins
+         * (a first look is the only way to gain any signal on it, and [buildDeck][
+         * com.hanzidictionary.core.StudyRepository.buildDeck] already shuffled the new ones
+         * to the front); otherwise pick a *random* due review rather than always the single
+         * lowest-retrievability card, so the widget doesn't march the same fixed order.
          */
         private fun pickCard(
             app: HanziApp,
@@ -165,23 +176,22 @@ class PracticeWidgetProvider : AppWidgetProvider() {
         ): WidgetCard? {
             val activeId = app.studyRepository.activeListId()
             val source = if (activeId != null) DeckSource.UserList(activeId) else DeckSource.Everything
-            val label = activeId
-                ?.let { id -> app.studyRepository.lists().firstOrNull { it.id == id }?.name }
-                ?: "Everything"
 
             val deck = app.studyRepository.deckFor(source, limit = 12)
             if (deck.isEmpty()) return null
-            // A plain redraw (list edited, launcher restarted) shouldn't shuffle the card
-            // out from under the user.
+            val available = deck.filterNot { it.item.itemId == avoid }
             val entry = deck.firstOrNull { keepCurrent && it.item.itemId == currentId }
-                ?: deck.firstOrNull { it.item.itemId != avoid }
+                // A never-graded card (card == null) keeps priority for signal.
+                ?: available.firstOrNull { it.card == null }
+                // Otherwise vary which review comes up instead of a fixed march.
+                ?: available.randomOrNull()
                 ?: deck.first()
 
             val summary = app.repository.itemSummaries(listOf(entry.item)).firstOrNull() ?: return null
             val answer = listOfNotNull(summary.pinyin, summary.gloss?.take(48))
                 .joinToString(" · ")
                 .ifBlank { summary.text }
-            return WidgetCard(entry.item, summary.text, answer, label)
+            return WidgetCard(entry.item, summary.text, answer)
         }
 
         private fun render(context: Context, widgetId: Int) {
@@ -194,11 +204,9 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                 // Keep the last answer visible when the deck runs dry: the tap that
                 // emptied it deserves its feedback too.
                 val echo = prefs.getString(key(widgetId, "echo"), "").orEmpty()
-                views.setTextViewText(R.id.widget_deck, "Nothing to practice")
                 views.setTextViewText(R.id.widget_card, "字")
                 views.setTextViewText(R.id.widget_echo, echo.ifBlank { "Tap to open" })
             } else {
-                views.setTextViewText(R.id.widget_deck, prefs.getString(key(widgetId, "deck"), "").orEmpty())
                 views.setTextViewText(R.id.widget_card, front)
                 if (revealed) {
                     // Flipped: the bottom line becomes this card's own answer (pinyin +
@@ -210,8 +218,10 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                 }
             }
 
-            views.setOnClickPendingIntent(R.id.zone_miss, gradeIntent(context, widgetId, knew = false))
-            views.setOnClickPendingIntent(R.id.zone_knew, gradeIntent(context, widgetId, knew = true))
+            views.setOnClickPendingIntent(R.id.zone_miss, gradeIntent(context, widgetId, Rating.AGAIN))
+            views.setOnClickPendingIntent(R.id.zone_hard, gradeIntent(context, widgetId, Rating.HARD))
+            views.setOnClickPendingIntent(R.id.zone_knew, gradeIntent(context, widgetId, Rating.GOOD))
+            views.setOnClickPendingIntent(R.id.zone_easy, gradeIntent(context, widgetId, Rating.EASY))
             // First tap flips a face-down card in place; once it's revealed (or the deck is
             // empty) the middle opens the app on that card.
             val cardIntent =
@@ -236,13 +246,14 @@ class PracticeWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        private fun gradeIntent(context: Context, widgetId: Int, knew: Boolean): PendingIntent {
+        private fun gradeIntent(context: Context, widgetId: Int, rating: Rating): PendingIntent {
             val intent = Intent(context, PracticeWidgetProvider::class.java).apply {
                 action = ACTION_GRADE
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                putExtra(EXTRA_KNEW, knew)
-                // Extras alone don't distinguish PendingIntents; the data URI does.
-                data = android.net.Uri.parse("hanzi://widget/$widgetId/${if (knew) "knew" else "missed"}")
+                putExtra(EXTRA_RATING, rating.name)
+                // Extras alone don't distinguish PendingIntents; the data URI does — one per
+                // grade so the four gutter zones don't collapse onto a single intent.
+                data = android.net.Uri.parse("hanzi://widget/$widgetId/grade/${rating.name}")
             }
             return PendingIntent.getBroadcast(
                 context,

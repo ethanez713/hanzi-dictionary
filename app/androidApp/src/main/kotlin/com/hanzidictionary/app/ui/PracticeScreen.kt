@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -94,11 +93,10 @@ fun PracticeScreen(
     var showAnswer by remember { mutableStateOf(startRevealed) }
     var loaded by remember { mutableStateOf(false) }
     var back by remember { mutableStateOf<CardBack?>(null) }
-    var reloads by remember { mutableIntStateOf(0) }
     var dealt by remember { mutableIntStateOf(0) }
     var showInfo by remember { mutableStateOf(false) }
 
-    LaunchedEffect(source, reloads) {
+    LaunchedEffect(source) {
         loaded = false
         val built = withContext(Dispatchers.IO) {
             val candidates = resolveCandidates(app, repository, hskLevels, source)
@@ -183,7 +181,21 @@ fun PracticeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Practice") },
+                // The deck's source (list name / HSK band / "Recently encountered") lives up
+                // here beside the header, not as a chip in the scroll row — it's a label, not
+                // a control, so it belongs where the screen names itself.
+                title = {
+                    Column {
+                        Text("Practice", fontSize = 20.sp)
+                        Text(
+                            sourceLabel(source),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
                 navigationIcon = { BackButton(onBack) },
                 actions = { TextButton(onClick = onOpenArchive) { Text("Archive") } },
             )
@@ -200,13 +212,20 @@ fun PracticeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AssistChip(onClick = { reloads++ }, label = { Text(sourceLabel(source)) })
+                // Both are chips so they read as one row of toggles/actions rather than a
+                // chip next to a differently-shaped button. "Meaning → character" reflects a
+                // real on/off state; "Look-alikes" is a one-shot jump, so it never looks
+                // selected.
                 FilterChip(
                     selected = reverse,
                     onClick = { reverse = !reverse; showAnswer = false },
                     label = { Text("Meaning → character") },
                 )
-                OutlinedButton(onClick = onOpenConfusables) { Text("Look-alikes") }
+                FilterChip(
+                    selected = false,
+                    onClick = onOpenConfusables,
+                    label = { Text("Look-alikes") },
+                )
             }
 
             when {

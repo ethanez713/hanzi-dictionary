@@ -5,6 +5,7 @@
     <color name="widget_text_muted">#99FFFFFF</color>
     <color name="widget_zone_miss">#1FEF9A9A</color>
     <color name="widget_zone_knew">#1FA5D6A7</color>
+    <color name="widget_divider">#33FFFFFF</color>
     <color name="widget_icon_miss">#CCEF9A9A</color>
     <color name="widget_icon_knew">#CCA5D6A7</color>
 </resources>

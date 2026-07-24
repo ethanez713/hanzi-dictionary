@@ -9,6 +9,8 @@
     <color name="widget_text_muted">#8A000000</color>
     <color name="widget_zone_miss">#14C62828</color>
     <color name="widget_zone_knew">#142E7D32</color>
+    <!-- Hairline between the two stacked grades in each gutter (again/hard, knew/easy). -->
+    <color name="widget_divider">#1F000000</color>
     <color name="widget_icon_miss">#B3C62828</color>
     <color name="widget_icon_knew">#B32E7D32</color>
 </resources>
