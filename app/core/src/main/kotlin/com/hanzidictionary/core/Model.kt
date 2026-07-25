@@ -129,6 +129,16 @@ data class WordPage(
     val hsk: Long?,
     val chars: List<WordCharView>,  // distinct constituent characters, in order
     val sentences: List<SentenceExample>,  // Tatoeba examples using this word
+    val lookAlikes: List<LookAlike>,  // characters easily confused with this word's characters
+)
+
+/** A character a learner might confuse with one of a word's characters — a phonetic-series
+ * sibling or a visually-confusable pair — carrying enough to teach the difference at a glance. */
+data class LookAlike(
+    val glyphId: String,
+    val char: String,
+    val pinyin: String?,
+    val gloss: String?,
 )
 
 /** A Tatoeba example sentence (spec §9 word page): the Mandarin, and its English gloss

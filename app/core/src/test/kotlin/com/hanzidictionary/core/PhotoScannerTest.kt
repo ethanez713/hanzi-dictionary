@@ -90,4 +90,46 @@ class PhotoScannerTest {
         // supplementary-plane (Extension B) chars survive intact, Hangul is excluded
         assertEquals(listOf("𠀀", "好"), extractHanzi("𠀀한好"))
     }
+
+    private val qing get() = glyphIdOfChar("请")
+    private fun scan(photos: List<PhotoRef>, texts: Map<String, String>, now: Long = System.currentTimeMillis()) =
+        PhotoScanner(FakePhotoSource(photos), FakeRecognizer(texts), user).scanNewPhotos(now)
+
+    @Test
+    fun dismissingHidesAWordFromTheFeed() {
+        scan(listOf(PhotoRef("p1", 1000)), mapOf("p1" to "请"))
+        assertTrue(user.recentPhotoFinds().any { it.glyphId == qing })
+        user.dismissPhotoWord(qing, ts = 5000)
+        assertTrue(user.recentPhotoFinds().none { it.glyphId == qing }, "dismissed word still in feed")
+    }
+
+    @Test
+    fun rePhotographingBringsADismissedWordBack() {
+        scan(listOf(PhotoRef("p1", 1000)), mapOf("p1" to "请"))
+        user.dismissPhotoWord(qing, ts = 5000)
+        assertTrue(user.recentPhotoFinds().none { it.glyphId == qing })
+        // A new photo of the same character is a fresh, live find (now stays within retention
+        // so the old dismissal is NOT GC'd — the return is due to the new find, not cleanup).
+        scan(listOf(PhotoRef("p1", 1000), PhotoRef("p2", 9000)), mapOf("p2" to "请"), now = 6000)
+        assertTrue(user.recentPhotoFinds().any { it.glyphId == qing }, "re-photographed word did not return")
+    }
+
+    @Test
+    fun undoRestoresADismissedWord() {
+        scan(listOf(PhotoRef("p1", 1000)), mapOf("p1" to "请"))
+        val ts = user.dismissPhotoWord(qing, ts = 5000)
+        user.undismissPhotoWord(qing, ts)
+        assertTrue(user.recentPhotoFinds().any { it.glyphId == qing }, "undo did not restore the word")
+    }
+
+    @Test
+    fun oldDismissalsAreGarbageCollectedSoUndoCanNoLongerRestore() {
+        scan(listOf(PhotoRef("p1", 1000)), mapOf("p1" to "请"))
+        val ts = user.dismissPhotoWord(qing, ts = 5000)
+        // A later scan past the retention window drops the dismissed find entirely...
+        scan(listOf(PhotoRef("p1", 1000)), emptyMap(), now = ts + PhotoScanner.DISMISS_RETENTION_MS + 1)
+        // ...so even an Undo can't bring it back — the row is gone.
+        user.undismissPhotoWord(qing, ts)
+        assertTrue(user.recentPhotoFinds().none { it.glyphId == qing }, "GC did not drop the aged dismissal")
+    }
 }

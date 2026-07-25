@@ -1,0 +1,7 @@
+-- v2 -> v3: triage the "From your photos" feed. A dismissed find is hidden from the feed;
+-- re-photographing the character adds a fresh (non-dismissed) find so it returns.
+--
+-- Additive: dismissed_at defaults to NULL, so every existing photo find stays visible and
+-- no history is lost.
+
+ALTER TABLE photo_find ADD COLUMN dismissed_at INTEGER;

@@ -163,6 +163,24 @@ fun WordScreen(
                     }
                 }
             }
+
+            // Characters a learner confuses with this word's characters — series siblings and
+            // visual look-alikes — as full rows (same element as the photo feed), each opening
+            // its own character page.
+            if (p.lookAlikes.isNotEmpty()) {
+                SectionTitle("Look-alikes")
+                Column {
+                    for (la in p.lookAlikes) {
+                        ItemRow(
+                            text = la.char,
+                            pinyin = la.pinyin,
+                            gloss = la.gloss,
+                            glossLines = 1,
+                            onClick = { onOpenCharacter(la.glyphId) },
+                        )
+                    }
+                }
+            }
         }
     }
 }

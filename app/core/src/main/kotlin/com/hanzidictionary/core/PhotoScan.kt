@@ -35,13 +35,18 @@ class PhotoScanner(
     private val recognizer: ImageTextRecognizer,
     private val user: UserRepository,
     private val maxPhotos: Int = 10,
+    private val dismissRetentionMillis: Long = DISMISS_RETENTION_MS,
 ) {
     /**
      * Scan photos newer than the stored watermark (bounded to the most recent [maxPhotos]),
      * oldest-new first so the watermark advances monotonically even if scanning is
      * interrupted. Idempotent: with no new photos it does nothing.
+     *
+     * Also garbage-collects photo-feed dismissals older than the retention window — we only
+     * need to remember "recently evicted" words, not forever.
      */
-    fun scanNewPhotos(): ScanResult {
+    fun scanNewPhotos(now: Long = System.currentTimeMillis()): ScanResult {
+        user.gcDismissedPhotoFinds(now - dismissRetentionMillis)
         val watermark = user.lastScanTimestamp()
         val toScan = source.recentPhotos(maxPhotos)
             .filter { it.timestampMillis > watermark }
@@ -60,6 +65,11 @@ class PhotoScanner(
         }
         if (newWatermark > watermark) user.setLastScanTimestamp(newWatermark)
         return ScanResult(photosScanned = toScan.size, finds = finds)
+    }
+
+    companion object {
+        /** How long a dismissed photo word is remembered as evicted before we forget it. */
+        const val DISMISS_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
     }
 }
 

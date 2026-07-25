@@ -61,9 +61,22 @@ class UserRepository(driver: SqlDriver) {
     fun recordPhotoFind(glyphId: String, photoId: String, foundAt: Long) =
         q.insertPhotoFind(glyphId, photoId, foundAt)
 
-    /** Distinct characters found in photos, most-recently-seen first. */
+    /** Distinct *live* (non-dismissed) characters found in photos, most-recently-seen first. */
     fun recentPhotoFinds(limit: Long = 200): List<PhotoFindRow> =
         q.recentPhotoFinds(limit).executeAsList().map { PhotoFindRow(it.glyph_id, it.found_at ?: 0L) }
+
+    /** Triage a photo character out of the feed. Returns the dismissal timestamp so an Undo
+     * can restore exactly these finds; re-photographing the character adds a fresh live find
+     * that reappears regardless. */
+    fun dismissPhotoWord(glyphId: String, ts: Long = now()): Long {
+        q.dismissPhotoFinds(ts, glyphId)
+        return ts
+    }
+
+    fun undismissPhotoWord(glyphId: String, ts: Long) = q.undismissPhotoFinds(glyphId, ts)
+
+    /** Drops dismissed finds older than [cutoff] — we only track "recently evicted" words. */
+    fun gcDismissedPhotoFinds(cutoff: Long) = q.gcDismissedPhotoFinds(cutoff)
 
     /** The practice deck: characters encountered (lookups + photo finds) but not yet
      * archived as known, most recently seen first. Marking one known removes it. */

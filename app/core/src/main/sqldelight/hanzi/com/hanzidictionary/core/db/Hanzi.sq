@@ -181,6 +181,28 @@ SELECT * FROM word WHERE id IN :ids;
 sentencesForWord:
 SELECT zh, en FROM sentence WHERE simp = :simp LIMIT :limit;
 
+-- Phonetic-series look-alikes: characters that share the phonetic component of any of :ids
+-- (请/清/晴/情 all carry 青), common ones first. Self-exclusion is done by the caller.
+seriesSiblings:
+SELECT DISTINCT g.id, g.char, g.definition, g.freq_rank,
+    (SELECT r.value FROM reading r WHERE r.glyph_id = g.id AND r.system = 'pinyin'
+     ORDER BY (r.freq IS NULL), r.freq DESC LIMIT 1) AS pinyin
+FROM component_use cu_self
+JOIN component_use cu_other ON cu_other.component_id = cu_self.component_id
+JOIN glyph g ON g.id = cu_other.glyph_id
+WHERE cu_self.glyph_id IN :ids
+  AND cu_self.function = 'phonetic'
+  AND cu_self.component_id NOT LIKE 'ids:%'
+  AND g.freq_rank IS NOT NULL AND g.freq_rank <= :maxRank
+ORDER BY g.freq_rank
+LIMIT :limit;
+
+glyphWithPinyin:
+SELECT g.id, g.char, g.definition,
+    (SELECT r.value FROM reading r WHERE r.glyph_id = g.id AND r.system = 'pinyin'
+     ORDER BY (r.freq IS NULL), r.freq DESC LIMIT 1) AS pinyin
+FROM glyph g WHERE g.id = :glyphId;
+
 wordById:
 SELECT * FROM word WHERE id = :id;
 

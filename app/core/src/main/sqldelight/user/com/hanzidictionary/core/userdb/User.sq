@@ -81,10 +81,13 @@ CREATE TABLE scan_state (
 
 -- Chinese characters recognized in the user's photos, powering the "From your photos"
 -- feed. A char can be found in several photos; this is an append log, deduped at read.
+-- dismissed_at (NULL = live) triages a char out of the feed once the user has dealt with
+-- it; keyed per photo, so re-photographing the char adds a fresh, live find that returns.
 CREATE TABLE photo_find (
-    glyph_id TEXT NOT NULL,
-    photo_id TEXT NOT NULL,
-    found_at INTEGER NOT NULL
+    glyph_id     TEXT NOT NULL,
+    photo_id     TEXT NOT NULL,
+    found_at     INTEGER NOT NULL,
+    dismissed_at INTEGER
 );
 
 -- ---- queries ----
@@ -124,7 +127,20 @@ INSERT INTO photo_find(glyph_id, photo_id, found_at) VALUES (?, ?, ?);
 
 recentPhotoFinds:
 SELECT glyph_id, MAX(found_at) AS found_at FROM photo_find
+WHERE dismissed_at IS NULL
 GROUP BY glyph_id ORDER BY found_at DESC LIMIT :limit;
+
+-- Triage a character out of the feed: mark all its live finds dismissed at :ts.
+dismissPhotoFinds:
+UPDATE photo_find SET dismissed_at = :ts WHERE glyph_id = :glyphId AND dismissed_at IS NULL;
+
+-- Undo a dismissal (snackbar): restore exactly the finds dismissed in that action.
+undismissPhotoFinds:
+UPDATE photo_find SET dismissed_at = NULL WHERE glyph_id = :glyphId AND dismissed_at = :ts;
+
+-- Forget dismissals once they age out of the "recently evicted" window.
+gcDismissedPhotoFinds:
+DELETE FROM photo_find WHERE dismissed_at IS NOT NULL AND dismissed_at < :cutoff;
 
 -- The practice deck: characters the user has ENCOUNTERED (looked up, or found in a
 -- photo) but not archived as known — most recently seen first.

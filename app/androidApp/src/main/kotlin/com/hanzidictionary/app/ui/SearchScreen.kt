@@ -165,6 +165,24 @@ fun SearchScreen(
         }
     }
 
+    // Swipe-left removes a triaged character from the photo feed (already filed to a list, or
+    // looked up and discarded), keeping the feed to newly-imported words. An Undo restores it;
+    // re-photographing the character brings it back regardless.
+    fun dismiss(find: SearchResult) {
+        scope.launch {
+            val ts = withContext(Dispatchers.IO) { app.userRepository.dismissPhotoWord(find.glyphId) }
+            photoFinds = photoFinds?.filterNot { it.glyphId == find.glyphId }
+            val result = snackbar.showSnackbar("Removed ${find.char}", actionLabel = "Undo")
+            if (result == SnackbarResult.ActionPerformed) {
+                photoFinds = withContext(Dispatchers.IO) {
+                    app.userRepository.undismissPhotoWord(find.glyphId, ts)
+                    val rows = app.userRepository.recentPhotoFinds()
+                    repository.glyphSummaries(rows.map { it.glyphId }).filter { glyphPaint.hasGlyph(it.char) }
+                }
+            }
+        }
+    }
+
     // Component-compose mode (spec §9 / M3.7): the query's CJK characters are read as
     // PARTS and results are the characters containing all of them (氵青 → 清).
     var composeMode by remember { mutableStateOf(false) }
@@ -233,6 +251,7 @@ fun SearchScreen(
                     onRescan = { rescans++ },
                     onOpenCharacter = onOpenCharacter,
                     onFileAway = ::fileAway,
+                    onDismiss = ::dismiss,
                 )
             } else if (results.isEmpty() && wordHits.isEmpty()) {
                 Text(
@@ -313,6 +332,7 @@ private fun PhotoFeed(
     onRescan: () -> Unit,
     onOpenCharacter: (String) -> Unit,
     onFileAway: (StudyItem, String) -> Unit,
+    onDismiss: (SearchResult) -> Unit,
 ) {
     val muted = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
     LazyColumn(Modifier.fillMaxSize()) {
@@ -363,8 +383,8 @@ private fun PhotoFeed(
             else -> {
                 item(key = "swipe-hint") {
                     Text(
-                        activeListName?.let { "Swipe a row right to add it to “$it”." }
-                            ?: "Swipe a row right to start studying it.",
+                        activeListName?.let { "Swipe right to add to “$it”, left to remove." }
+                            ?: "Swipe right to study it, left to remove.",
                         fontSize = 12.sp,
                         color = muted,
                         modifier = Modifier.padding(bottom = 2.dp),
@@ -373,7 +393,9 @@ private fun PhotoFeed(
                 items(finds, key = { it.glyphId }) { f ->
                     SwipeRow(
                         rightAction = AddAction,
+                        leftAction = RemoveAction,
                         onSwipeRight = { onFileAway(StudyItem.character(f.glyphId), f.char) },
+                        onSwipeLeft = { onDismiss(f) },
                     ) {
                         ItemRow(
                             text = f.char,

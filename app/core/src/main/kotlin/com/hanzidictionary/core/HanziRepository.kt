@@ -368,7 +368,41 @@ class HanziRepository(
         }
         val sentences = db.hanziQueries.sentencesForWord(w.simp, SENTENCE_LIMIT).executeAsList()
             .map { SentenceExample(it.zh, it.en) }
-        return WordPage(w.id, w.simp, w.trad, w.pinyin, parseSenses(w.defs), w.hsk, charViews, sentences)
+        val lookAlikes = lookAlikesForGlyphs(charViews.map { it.glyphId })
+        return WordPage(w.id, w.simp, w.trad, w.pinyin, parseSenses(w.defs), w.hsk, charViews, sentences, lookAlikes)
+    }
+
+    /**
+     * Characters a learner might confuse with a word's [glyphIds]: visually-confusable pairs
+     * (Unihan kSpoofingVariant) first — the highest-signal, rarest ones — then phonetic-series
+     * siblings (share a phonetic component: 请/清/晴/情 all carry 青), common ones first. Deduped
+     * by glyph, the word's own characters excluded, each carrying pinyin + a short gloss.
+     */
+    fun lookAlikesForGlyphs(glyphIds: List<String>, maxRank: Long = 4000, limit: Int = 12): List<LookAlike> {
+        if (glyphIds.isEmpty()) return emptyList()
+        val self = glyphIds.toSet()
+        val out = LinkedHashMap<String, LookAlike>()
+
+        fun enrich(glyphId: String): LookAlike? {
+            if (glyphId in self || glyphId in out) return null
+            val g = db.hanziQueries.glyphWithPinyin(glyphId).executeAsOneOrNull() ?: return null
+            return LookAlike(g.id, g.char, g.pinyin, g.definition?.let(::firstSense))
+        }
+
+        // Visual confusables of each character first (rare, so high-signal).
+        for (gid in glyphIds) {
+            for (row in db.hanziQueries.confusablesFor(gid).executeAsList()) {
+                val other = if (row.glyph_a == gid) row.glyph_b else row.glyph_a
+                enrich(other)?.let { out[it.glyphId] = it }
+            }
+        }
+        // Then phonetic-series siblings, common ones first, until we hit the cap.
+        for (row in db.hanziQueries.seriesSiblings(glyphIds, maxRank, (limit * 4).toLong()).executeAsList()) {
+            if (out.size >= limit) break
+            if (row.id in self || row.id in out) continue
+            out[row.id] = LookAlike(row.id, row.char, row.pinyin, row.definition?.let(::firstSense))
+        }
+        return out.values.take(limit)
     }
 
     private companion object {
