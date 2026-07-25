@@ -157,16 +157,20 @@ fun SearchScreen(
     // (scanned, total) of the current OCR pass, for a determinate progress bar; null before
     // the batch size is known.
     var scanProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    // The live (non-dismissed) photo finds, resolved to drawable rows — used both after a
+    // scan and to rebuild the feed when an Undo un-dismisses a row.
+    suspend fun loadPhotoFinds(): List<SearchResult> = withContext(Dispatchers.IO) {
+        val rows = app.userRepository.recentPhotoFinds()
+        repository.glyphSummaries(rows.map { it.glyphId }).filter { glyphPaint.hasGlyph(it.char) }
+    }
     LaunchedEffect(photosGranted, rescans) {
         if (!photosGranted) return@LaunchedEffect
         photoFinds = null
         scanProgress = null
-        photoFinds = withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             app.createPhotoScanner().scanNewPhotos { done, total -> scanProgress = done to total }
-            val rows = app.userRepository.recentPhotoFinds()
-            repository.glyphSummaries(rows.map { it.glyphId })
-                .filter { glyphPaint.hasGlyph(it.char) }
         }
+        photoFinds = loadPhotoFinds()
     }
 
     // Swipe-left removes a triaged character from the photo feed (already filed to a list, or
@@ -178,11 +182,8 @@ fun SearchScreen(
             photoFinds = photoFinds?.filterNot { it.glyphId == find.glyphId }
             val result = snackbar.showSnackbar("Removed ${find.char}", actionLabel = "Undo")
             if (result == SnackbarResult.ActionPerformed) {
-                photoFinds = withContext(Dispatchers.IO) {
-                    app.userRepository.undismissPhotoWord(find.glyphId, ts)
-                    val rows = app.userRepository.recentPhotoFinds()
-                    repository.glyphSummaries(rows.map { it.glyphId }).filter { glyphPaint.hasGlyph(it.char) }
-                }
+                withContext(Dispatchers.IO) { app.userRepository.undismissPhotoWord(find.glyphId, ts) }
+                photoFinds = loadPhotoFinds()
             }
         }
     }

@@ -42,8 +42,10 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   derive learner glosses from their parent, e.g. "words, speech"), CC-CEDICT ingested
   (~110k words, "In words" section, tone-marked pinyin, word-level HSK), English search
   over glosses, word search (word_fts: CJK prefix / pinyin syllables / English) with
-  word pages (both forms, senses, per-character strip, device-TTS word audio), and the
-  in-app ⓘ attributions dialog.
+  word pages (both forms, senses, per-character strip, device-TTS word audio,
+  **Tatoeba example sentences** with English translations, and a **look-alikes** section —
+  phonetic-series siblings + visual confusables; tapping a word in "In words" opens its
+  page), and the in-app ⓘ attributions dialog.
 - **M3.7 (capture/search completion)** — partial: SEND share target (share text from any
   app; one hanzi opens its page, more prefill search) and paste-on-open (clipboard hanzi
   offered as a one-tap search when the window gains focus). Remaining: component-compose
@@ -52,12 +54,16 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   edited from one bottom sheet (membership checkboxes + a global archive action); "Add to
   list" is the primary button on character and word pages. Practice is scheduled by
   **FSRS-6** (`core/Fsrs.kt`, no dependency, checked against py-fsrs's golden interval
-  sequence): due cards first in ascending predicted recall, a per-day cap on new cards,
-  then practice-ahead so the deck is never empty. Swipe interaction throughout — right
-  affirms (save / knew it / archive), left negates (didn't know / remove). The intro screen
-  shows the whole photo feed as detailed rows with **Scan again**. A home-screen widget
-  serves one card from the active list: tap left/right to grade, tap the middle to open it
-  in Practice. Spec §17.
+  sequence): **new cards lead** (a first look is the only way to gain signal; capped per day),
+  then due cards in ascending predicted recall, then practice-ahead so the deck is never
+  empty. Swipe interaction throughout — right affirms (save / knew it / archive), left
+  negates (didn't know / remove), **up skips** a card without grading it. The intro screen
+  shows the photo feed as detailed rows (looks back up to 200 photos with a scan progress
+  bar); **swipe a row left to dismiss** an already-triaged character (Undo snackbar;
+  re-photographing brings it back). A home-screen widget serves one card from the active
+  list: two tap-zone gutters per side give the full four-grade scale (again/hard, knew/easy),
+  and the middle **flips** the card to reveal pinyin+definition, then opens it in Practice.
+  Spec §17.
 - **Learning features (beyond spec)** — practice deck sources (encountered / HSK band /
   component series), reverse (production-recall) cards, confusable drills writing
   confusion_event, per-HSK progress bars on the Archive.
