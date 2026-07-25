@@ -124,12 +124,14 @@ def build_sentences(
     subset actually linked from a Mandarin sentence, so memory stays bounded despite the
     full English dump being large."""
 
+    # Tatoeba rows are "id \t lang \t text"; ids are positive integers. The .isdigit() guards
+    # skip a malformed line in a future dump rather than crashing the whole build on int().
     def load_all(path: Path) -> dict[int, str]:
         out: dict[int, str] = {}
         with path.open(encoding="utf-8") as f:
             for line in f:
                 parts = line.rstrip("\n").split("\t")
-                if len(parts) >= 3:
+                if len(parts) >= 3 and parts[0].isdigit():
                     out[int(parts[0])] = parts[2]
         return out
 
@@ -137,8 +139,8 @@ def build_sentences(
         ids: set[int] = set()
         with path.open(encoding="utf-8") as f:
             for line in f:
-                head, _, _ = line.partition("\t")
-                if head:
+                head = line.partition("\t")[0]
+                if head.isdigit():
                     ids.add(int(head))
         return ids
 
@@ -147,8 +149,10 @@ def build_sentences(
         with path.open(encoding="utf-8") as f:
             for line in f:
                 parts = line.rstrip("\n").split("\t")
-                if len(parts) >= 3 and int(parts[0]) in wanted:
-                    out[int(parts[0])] = parts[2]
+                if len(parts) >= 3 and parts[0].isdigit():
+                    sid = int(parts[0])
+                    if sid in wanted:
+                        out[sid] = parts[2]
         return out
 
     cmn = load_all(tatoeba_dir / "cmn_sentences.tsv")
@@ -160,14 +164,13 @@ def build_sentences(
     cmn_to_eng: dict[int, int] = {}
     with (tatoeba_dir / "links.csv").open(encoding="utf-8") as f:
         for line in f:
-            a, _, b = line.rstrip("\n").partition("\t")
-            if not b:
+            a, _, b = line.partition("\t")
+            a, b = a.strip(), b.strip()
+            if not (a.isdigit() and b.isdigit()):
                 continue
             ai = int(a)
-            if ai in cmn_ids and ai not in cmn_to_eng:
-                bi = int(b)
-                if bi in eng_ids:
-                    cmn_to_eng[ai] = bi
+            if ai in cmn_ids and ai not in cmn_to_eng and int(b) in eng_ids:
+                cmn_to_eng[ai] = int(b)
     eng = load_texts(tatoeba_dir / "eng_sentences.tsv", set(cmn_to_eng.values()))
 
     # Shortest first, so the examples we keep are the cleanest.

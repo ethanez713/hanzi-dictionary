@@ -378,7 +378,11 @@ class HanziRepository(
      * siblings (share a phonetic component: 请/清/晴/情 all carry 青), common ones first. Deduped
      * by glyph, the word's own characters excluded, each carrying pinyin + a short gloss.
      */
-    fun lookAlikesForGlyphs(glyphIds: List<String>, maxRank: Long = 4000, limit: Int = 12): List<LookAlike> {
+    fun lookAlikesForGlyphs(
+        glyphIds: List<String>,
+        maxRank: Long = LOOKALIKE_MAX_RANK,
+        limit: Int = LOOKALIKE_LIMIT,
+    ): List<LookAlike> {
         if (glyphIds.isEmpty()) return emptyList()
         val self = glyphIds.toSet()
         val out = LinkedHashMap<String, LookAlike>()
@@ -396,8 +400,10 @@ class HanziRepository(
                 enrich(other)?.let { out[it.glyphId] = it }
             }
         }
-        // Then phonetic-series siblings, common ones first, until we hit the cap.
-        for (row in db.hanziQueries.seriesSiblings(glyphIds, maxRank, (limit * 4).toLong()).executeAsList()) {
+        // Then phonetic-series siblings, common ones first, until we hit the cap. Over-fetch
+        // so self-exclusion and dedupe against the confusables above still leave enough to fill.
+        val pool = (limit * LOOKALIKE_POOL_FACTOR).toLong()
+        for (row in db.hanziQueries.seriesSiblings(glyphIds, maxRank, pool).executeAsList()) {
             if (out.size >= limit) break
             if (row.id in self || row.id in out) continue
             out[row.id] = LookAlike(row.id, row.char, row.pinyin, row.definition?.let(::firstSense))
@@ -408,6 +414,13 @@ class HanziRepository(
     private companion object {
         /** A few examples is plenty on a word page; more would bury the definitions. */
         const val SENTENCE_LIMIT = 4L
+
+        /** Word-page look-alikes: how many to show, the frequency ceiling for series
+         * siblings (keep them to characters a learner actually meets), and how far to
+         * over-fetch the candidate pool before deduping down to the cap. */
+        const val LOOKALIKE_LIMIT = 12
+        const val LOOKALIKE_MAX_RANK = 4000L
+        const val LOOKALIKE_POOL_FACTOR = 4
     }
 
     private fun rawStringList(target: SqlDriver, sql: String, arg: String, limit: Long): List<String> {
