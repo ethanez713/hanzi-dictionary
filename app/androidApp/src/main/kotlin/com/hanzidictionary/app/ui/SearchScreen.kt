@@ -154,11 +154,15 @@ fun SearchScreen(
     }
     var rescans by remember { mutableIntStateOf(0) }
     var photoFinds by remember { mutableStateOf<List<SearchResult>?>(null) }
+    // (scanned, total) of the current OCR pass, for a determinate progress bar; null before
+    // the batch size is known.
+    var scanProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     LaunchedEffect(photosGranted, rescans) {
         if (!photosGranted) return@LaunchedEffect
         photoFinds = null
+        scanProgress = null
         photoFinds = withContext(Dispatchers.IO) {
-            app.createPhotoScanner().scanNewPhotos()
+            app.createPhotoScanner().scanNewPhotos { done, total -> scanProgress = done to total }
             val rows = app.userRepository.recentPhotoFinds()
             repository.glyphSummaries(rows.map { it.glyphId })
                 .filter { glyphPaint.hasGlyph(it.char) }
@@ -244,6 +248,7 @@ fun SearchScreen(
                 PhotoFeed(
                     granted = photosGranted,
                     finds = photoFinds,
+                    scanProgress = scanProgress,
                     activeListName = activeListName,
                     clipSuggestion = clipSuggestion,
                     onUseClipboard = { onQueryChange(it) },
@@ -325,6 +330,7 @@ fun SearchScreen(
 private fun PhotoFeed(
     granted: Boolean,
     finds: List<SearchResult>?,
+    scanProgress: Pair<Int, Int>?,
     activeListName: String?,
     clipSuggestion: String?,
     onUseClipboard: (String) -> Unit,
@@ -368,8 +374,17 @@ private fun PhotoFeed(
             }
             finds == null -> item(key = "scanning") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
-                    Text("Scanning recent photos…", fontSize = 12.sp, color = muted)
+                    val p = scanProgress
+                    if (p != null && p.second > 0) {
+                        LinearProgressIndicator(
+                            progress = p.first.toFloat() / p.second,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text("Scanning photo ${p.first} of ${p.second}…", fontSize = 12.sp, color = muted)
+                    } else {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text("Scanning recent photos…", fontSize = 12.sp, color = muted)
+                    }
                 }
             }
             finds.isEmpty() -> item(key = "empty") {

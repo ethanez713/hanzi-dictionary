@@ -45,7 +45,10 @@ class PhotoScanner(
      * Also garbage-collects photo-feed dismissals older than the retention window — we only
      * need to remember "recently evicted" words, not forever.
      */
-    fun scanNewPhotos(now: Long = System.currentTimeMillis()): ScanResult {
+    fun scanNewPhotos(
+        now: Long = System.currentTimeMillis(),
+        onProgress: (scanned: Int, total: Int) -> Unit = { _, _ -> },
+    ): ScanResult {
         user.gcDismissedPhotoFinds(now - dismissRetentionMillis)
         val watermark = user.lastScanTimestamp()
         val toScan = source.recentPhotos(maxPhotos)
@@ -54,7 +57,10 @@ class PhotoScanner(
 
         val finds = mutableListOf<PhotoFind>()
         var newWatermark = watermark
-        for (photo in toScan) {
+        // Report the batch size up front so a progress bar can go determinate immediately,
+        // then tick after each photo's OCR. On a normal open toScan is tiny (or empty).
+        onProgress(0, toScan.size)
+        for ((index, photo) in toScan.withIndex()) {
             val text = recognizer.recognize(photo)
             for (ch in extractHanzi(text)) {
                 val gid = glyphIdOfChar(ch)
@@ -62,6 +68,7 @@ class PhotoScanner(
                 finds += PhotoFind(gid, ch, photo.id, photo.timestampMillis)
             }
             if (photo.timestampMillis > newWatermark) newWatermark = photo.timestampMillis
+            onProgress(index + 1, toScan.size)
         }
         if (newWatermark > watermark) user.setLastScanTimestamp(newWatermark)
         return ScanResult(photosScanned = toScan.size, finds = finds)

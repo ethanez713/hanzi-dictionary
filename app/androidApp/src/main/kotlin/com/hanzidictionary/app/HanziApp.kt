@@ -43,6 +43,11 @@ class HanziApp : Application() {
             source = MediaStorePhotoSource(this),
             recognizer = textRecognizer,
             user = userRepository,
+            // Look back up to 200 photos, so a big backlog since the last open is still
+            // caught. The watermark keeps the actual OCR batch small on a normal open —
+            // only photos newer than the last scan are recognized — so this ceiling only
+            // matters after a long absence.
+            maxPhotos = 200,
         )
 
     /** HSK level -> glyph ids, from the bundled hsk-levels.json asset, for the import
