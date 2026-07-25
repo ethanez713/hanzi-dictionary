@@ -127,6 +127,7 @@ data class WordPage(
     val pinyin: String?,
     val senses: List<String>,
     val hsk: Long?,
+    val freqRank: Long?,            // corpus frequency rank (1 = most common), null if unranked
     val chars: List<WordCharView>,  // distinct constituent characters, in order
     val sentences: List<SentenceExample>,  // Tatoeba examples using this word
     val lookAlikes: List<LookAlike>,  // characters easily confused with this word's characters

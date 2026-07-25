@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
@@ -173,6 +174,14 @@ fun SearchScreen(
         photoFinds = loadPhotoFinds()
     }
 
+    // Characters the user recently opened, so the home screen is a quick way back to what
+    // they were studying. Re-queried on each entry (navigating back re-enters composition).
+    val recentlyViewed by produceState(emptyList<SearchResult>(), rescans) {
+        value = withContext(Dispatchers.IO) {
+            repository.glyphSummaries(app.userRepository.recentLookups()).filter { glyphPaint.hasGlyph(it.char) }
+        }
+    }
+
     // Swipe-left removes a triaged character from the photo feed (already filed to a list, or
     // looked up and discarded), keeping the feed to newly-imported words. An Undo restores it;
     // re-photographing the character brings it back regardless.
@@ -232,6 +241,13 @@ fun SearchScreen(
                 onValueChange = onQueryChange,
                 label = { Text("Character, pinyin, or English") },
                 singleLine = true,
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             )
             // The compose-mode chip appears only when the query holds usable parts
@@ -250,6 +266,7 @@ fun SearchScreen(
                     granted = photosGranted,
                     finds = photoFinds,
                     scanProgress = scanProgress,
+                    recentlyViewed = recentlyViewed,
                     activeListName = activeListName,
                     clipSuggestion = clipSuggestion,
                     onUseClipboard = { onQueryChange(it) },
@@ -332,6 +349,7 @@ private fun PhotoFeed(
     granted: Boolean,
     finds: List<SearchResult>?,
     scanProgress: Pair<Int, Int>?,
+    recentlyViewed: List<SearchResult>,
     activeListName: String?,
     clipSuggestion: String?,
     onUseClipboard: (String) -> Unit,
@@ -349,6 +367,19 @@ private fun PhotoFeed(
                     onClick = { onUseClipboard(s) },
                     label = { Text("From clipboard: $s") },
                 )
+            }
+        }
+        if (recentlyViewed.isNotEmpty()) {
+            item(key = "recent-header") { SectionTitle("Recently viewed") }
+            items(recentlyViewed, key = { "recent-${it.glyphId}" }) { r ->
+                ItemRow(
+                    text = r.char,
+                    pinyin = r.primaryPinyin,
+                    gloss = r.definition?.let { displayGloss(it) },
+                    glossLines = 1,
+                    onClick = { onOpenCharacter(r.glyphId) },
+                )
+                HorizontalDivider()
             }
         }
         item(key = "photos-header") {

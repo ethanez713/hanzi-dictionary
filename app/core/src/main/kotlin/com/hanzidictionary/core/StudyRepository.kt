@@ -271,6 +271,15 @@ class StudyRepository(
     fun reviewsToday(now: Long = System.currentTimeMillis()): Long =
         q.reviewCountSince(startOfDay(now)).executeAsOne()
 
+    /** Distinct list items whose card is due now and not archived — the "M due" pulse on
+     * the Study screen. Counts each item once even if it's filed in several lists. */
+    fun dueNow(now: Long = System.currentTimeMillis()): Int {
+        val known = q.allKnownIds().executeAsList().toSet()
+        val itemIds = allListItems().map { it.itemId }.toSet()
+        val cards = cardStates(itemIds)
+        return itemIds.count { it !in known && (cards[it]?.due ?: Long.MAX_VALUE) <= now }
+    }
+
     /** Local midnight. Computed from the raw offset rather than java.time so this module
      * stays as close to plain Kotlin as the rest of `core`. */
     private fun startOfDay(now: Long): Long {

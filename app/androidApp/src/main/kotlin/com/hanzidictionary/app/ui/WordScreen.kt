@@ -25,7 +25,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.audio.MandarinTts
@@ -88,6 +93,7 @@ fun WordScreen(
                         Text("🔊", fontSize = 18.sp, modifier = Modifier.clickable { tts.speak(p.simp) })
                     }
                     p.hsk?.let { Chip("HSK $it") }
+                    if (isCommon(p.freqRank)) Chip("Common")
                 }
             }
 
@@ -112,7 +118,12 @@ fun WordScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(s.zh, fontSize = 17.sp, lineHeight = 24.sp, modifier = Modifier.weight(1f))
+                                Text(
+                                    highlightWord(s.zh, p.simp),
+                                    fontSize = 17.sp,
+                                    lineHeight = 24.sp,
+                                    modifier = Modifier.weight(1f),
+                                )
                                 if (tts.available) {
                                     Text("🔊", fontSize = 15.sp, modifier = Modifier.clickable { tts.speak(s.zh) })
                                 }
@@ -189,5 +200,21 @@ fun WordScreen(
 private fun Chip(text: String) {
     Card {
         Text(text, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 12.sp)
+    }
+}
+
+/** The Mandarin sentence with every occurrence of [word] in bold, so it's obvious at a
+ * glance which word the example is illustrating. */
+private fun highlightWord(sentence: String, word: String): AnnotatedString = buildAnnotatedString {
+    var i = 0
+    while (true) {
+        val at = sentence.indexOf(word, i)
+        if (at < 0) {
+            append(sentence.substring(i))
+            break
+        }
+        append(sentence.substring(i, at))
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(word) }
+        i = at + word.length
     }
 }

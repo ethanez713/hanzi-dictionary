@@ -83,6 +83,10 @@ class UserRepository(driver: SqlDriver) {
     fun practiceQueue(limit: Long = 50): List<String> =
         q.practiceQueue(limit).executeAsList().map { it.gid }
 
+    /** Items the user recently opened, most-recent first, for the "Recently viewed" feed. */
+    fun recentLookups(limit: Long = 30): List<String> =
+        q.recentLookups(limit).executeAsList().map { it.item_id }
+
     private fun now(): Long = System.currentTimeMillis()
 
     companion object {

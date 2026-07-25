@@ -44,6 +44,12 @@ fun SectionTitle(text: String) {
     Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
 }
 
+/** Corpus-frequency rank at/under which an item earns a "Common" badge on its page (rank
+ * 1 = most frequent). Roughly the everyday-vocabulary band a beginner should prioritize. */
+const val COMMON_FREQ_RANK = 1000L
+
+fun isCommon(freqRank: Long?): Boolean = freqRank != null && freqRank <= COMMON_FREQ_RANK
+
 /**
  * The dense "what is this character/word" row used by search results, the photo list and
  * list screens: the glyph, then its sound and meaning. One definition of the row keeps

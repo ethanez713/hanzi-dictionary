@@ -161,6 +161,7 @@ private fun Header(p: CharacterPage, tts: MandarinTts) {
                     }
                 }
                 Definition(p.definition)
+                if (isCommon(p.freqRank)) Chip("Common")
             }
         }
     }

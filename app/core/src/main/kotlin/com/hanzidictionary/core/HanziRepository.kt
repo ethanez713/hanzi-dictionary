@@ -369,7 +369,10 @@ class HanziRepository(
         val sentences = db.hanziQueries.sentencesForWord(w.simp, SENTENCE_LIMIT).executeAsList()
             .map { SentenceExample(it.zh, it.en) }
         val lookAlikes = lookAlikesForGlyphs(charViews.map { it.glyphId })
-        return WordPage(w.id, w.simp, w.trad, w.pinyin, parseSenses(w.defs), w.hsk, charViews, sentences, lookAlikes)
+        return WordPage(
+            w.id, w.simp, w.trad, w.pinyin, parseSenses(w.defs), w.hsk, w.freq_rank,
+            charViews, sentences, lookAlikes,
+        )
     }
 
     /**

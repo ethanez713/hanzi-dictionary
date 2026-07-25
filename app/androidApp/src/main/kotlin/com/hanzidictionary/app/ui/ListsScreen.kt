@@ -52,6 +52,8 @@ private data class ListsState(
     val stats: Map<Long, ListStats> = emptyMap(),
     val activeId: Long? = null,
     val encounteredCount: Int = 0,
+    val reviewedToday: Long = 0,
+    val dueNow: Int = 0,
 )
 
 /**
@@ -88,6 +90,8 @@ fun ListsScreen(
                 stats = app.studyRepository.statsByList(),
                 activeId = app.studyRepository.activeListId(),
                 encounteredCount = app.userRepository.practiceQueue().size,
+                reviewedToday = app.studyRepository.reviewsToday(),
+                dueNow = app.studyRepository.dueNow(),
             )
         }
     }
@@ -107,6 +111,18 @@ fun ListsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            // A quick pulse of the study loop, so opening this screen answers "how am I
+            // doing today / is anything waiting".
+            Text(
+                buildString {
+                    append("Today: ${state.reviewedToday} reviewed")
+                    if (state.dueNow > 0) append("  ·  ${state.dueNow} due now")
+                },
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+
             // Saving destination, stated where you can change it — swipes elsewhere in
             // the app land here, so it must never be a mystery.
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
