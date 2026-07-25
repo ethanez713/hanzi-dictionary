@@ -103,6 +103,17 @@ CREATE TABLE word_char (
 );
 CREATE INDEX idx_word_char_glyph ON word_char(glyph_id);
 
+-- Example sentences (Tatoeba, CC BY 2.0 FR), keyed by the word's simplified form so any
+-- word entry sharing that form finds them. A handful of short Mandarin sentences per word,
+-- each with an English translation where Tatoeba links one.
+CREATE TABLE sentence (
+    simp       TEXT NOT NULL,   -- word.simp this sentence exemplifies
+    zh         TEXT NOT NULL,   -- Mandarin sentence
+    en         TEXT,            -- English translation (may be absent)
+    tatoeba_id INTEGER          -- source cmn sentence id (attribution / dedup)
+);
+CREATE INDEX idx_sentence_simp ON sentence(simp);
+
 CREATE TABLE script_form (
     glyph_id  TEXT NOT NULL REFERENCES glyph(id),
     era       TEXT NOT NULL,

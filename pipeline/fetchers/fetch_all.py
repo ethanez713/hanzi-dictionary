@@ -8,6 +8,7 @@ from fetchers import (
     fetch_hsk,
     fetch_makemeahanzi,
     fetch_opencc,
+    fetch_tatoeba,
     fetch_unihan,
     fetch_wiktextract,
     fetch_wordfreq,
@@ -21,6 +22,7 @@ FETCHERS = [
     ("wiktextract", fetch_wiktextract.fetch),
     ("hsk", fetch_hsk.fetch),
     ("wordfreq", fetch_wordfreq.fetch),
+    ("tatoeba", fetch_tatoeba.fetch),
 ]
 
 

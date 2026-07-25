@@ -110,6 +110,93 @@ def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[l
     return word_rows, word_char_rows
 
 
+def build_sentences(
+    tatoeba_dir: Path,
+    word_simps: set[str],
+    per_word: int = 3,
+    max_len: int = 30,
+) -> list[tuple]:
+    """Tatoeba Mandarin sentences (with an English translation) as example rows keyed by
+    word simp. Keeps the shortest few sentences containing each word, so common words get
+    clean, short examples. Rows: (simp, zh, en, tatoeba_id).
+
+    Join is cmn_sentences -> links -> eng_sentences. English texts are loaded only for the
+    subset actually linked from a Mandarin sentence, so memory stays bounded despite the
+    full English dump being large."""
+
+    def load_all(path: Path) -> dict[int, str]:
+        out: dict[int, str] = {}
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 3:
+                    out[int(parts[0])] = parts[2]
+        return out
+
+    def load_ids(path: Path) -> set[int]:
+        ids: set[int] = set()
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                head, _, _ = line.partition("\t")
+                if head:
+                    ids.add(int(head))
+        return ids
+
+    def load_texts(path: Path, wanted: set[int]) -> dict[int, str]:
+        out: dict[int, str] = {}
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 3 and int(parts[0]) in wanted:
+                    out[int(parts[0])] = parts[2]
+        return out
+
+    cmn = load_all(tatoeba_dir / "cmn_sentences.tsv")
+    cmn_ids = set(cmn)
+    eng_ids = load_ids(tatoeba_dir / "eng_sentences.tsv")
+
+    # First English translation per Mandarin sentence (links are bidirectional in the dump,
+    # so scanning the cmn->eng direction covers every pair).
+    cmn_to_eng: dict[int, int] = {}
+    with (tatoeba_dir / "links.csv").open(encoding="utf-8") as f:
+        for line in f:
+            a, _, b = line.rstrip("\n").partition("\t")
+            if not b:
+                continue
+            ai = int(a)
+            if ai in cmn_ids and ai not in cmn_to_eng:
+                bi = int(b)
+                if bi in eng_ids:
+                    cmn_to_eng[ai] = bi
+    eng = load_texts(tatoeba_dir / "eng_sentences.tsv", set(cmn_to_eng.values()))
+
+    # Shortest first, so the examples we keep are the cleanest.
+    candidates = sorted(
+        (len(cmn[cid]), cid, cmn[cid], eng[eid])
+        for cid, eid in cmn_to_eng.items()
+        if 0 < len(cmn[cid]) <= max_len
+    )
+
+    max_wl = min(max((len(s) for s in word_simps), default=0), 8)
+    picked: dict[str, int] = {}
+    rows: list[tuple] = []
+    for _, cid, zh, en in candidates:
+        n = len(zh)
+        seen: set[str] = set()
+        for i in range(n):
+            for length in range(2, max_wl + 1):
+                if i + length > n:
+                    break
+                sub = zh[i:i + length]
+                if sub in seen or sub not in word_simps:
+                    continue
+                seen.add(sub)
+                if picked.get(sub, 0) < per_word:
+                    picked[sub] = picked.get(sub, 0) + 1
+                    rows.append((sub, zh, en, cid))
+    return rows
+
+
 def build() -> Path:
     snapshot_paths = {name: latest_snapshot(name) for name in SOURCES}
     manifests = load_manifests(snapshot_paths)
@@ -188,6 +275,12 @@ def build() -> Path:
 
     word_rows, word_char_rows = build_words(snapshot_paths, glyph_ids={f"U+{cp:04X}" for cp in selected})
 
+    # Example sentences (Tatoeba) — resolved on its own so the SOURCES list that drives
+    # normalize stays character-data only; its manifest still joins the source table.
+    tatoeba_dir = latest_snapshot("tatoeba")
+    manifests["tatoeba"] = json.loads((tatoeba_dir / "manifest.json").read_text())
+    sentence_rows = build_sentences(tatoeba_dir, word_simps={row[1] for row in word_rows})
+
     series_rows_typed = phonetic.compute_phonetic_series(component_use_objects, freq_rank_map)
     phonetic_series_rows = [
         (s.component_id, s.member_count, s.reliability, s.best_stratum) for s in series_rows_typed
@@ -225,6 +318,7 @@ def build() -> Path:
     load.load_confusables(conn, confusable_rows)
     load.load_words(conn, word_rows)
     load.load_word_chars(conn, word_char_rows)
+    load.load_sentences(conn, sentence_rows)
     conn.commit()
     conn.close()
 
@@ -232,7 +326,7 @@ def build() -> Path:
     print(f"  glyphs={len(glyph_rows)} readings={len(reading_rows)} decompositions={len(decomposition_rows)}")
     print(f"  component_use={len(component_use_rows)} claims={len(claim_rows)}")
     print(f"  variant_edges={len(variant_edge_rows)} phonetic_series={len(phonetic_series_rows)} confusables={len(confusable_rows)}")
-    print(f"  words={len(word_rows)} word_chars={len(word_char_rows)}")
+    print(f"  words={len(word_rows)} word_chars={len(word_char_rows)} sentences={len(sentence_rows)}")
     return db_path
 
 

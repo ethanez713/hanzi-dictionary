@@ -101,6 +101,40 @@ fun WordScreen(
                 }
             }
 
+            // Seeing the word in real sentences is the point of the page (spec §9). Each
+            // Mandarin line can be spoken; the English gloss sits under it, muted.
+            if (p.sentences.isNotEmpty()) {
+                SectionTitle("Sentences")
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    for (s in p.sentences) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(s.zh, fontSize = 17.sp, lineHeight = 24.sp, modifier = Modifier.weight(1f))
+                                if (tts.available) {
+                                    Text("🔊", fontSize = 15.sp, modifier = Modifier.clickable { tts.speak(s.zh) })
+                                }
+                            }
+                            s.en?.let {
+                                Text(
+                                    it,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 18.sp,
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        "Sentences from Tatoeba (CC BY 2.0)",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             if (p.chars.isNotEmpty()) {
                 SectionTitle("Characters")
                 FlowRow(

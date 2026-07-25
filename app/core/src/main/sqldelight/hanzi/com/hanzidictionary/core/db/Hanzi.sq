@@ -98,6 +98,15 @@ CREATE TABLE word_char (
     position INTEGER NOT NULL
 );
 
+-- Example sentences (Tatoeba, CC BY 2.0 FR), keyed by the word's simplified form.
+CREATE TABLE sentence (
+    simp       TEXT NOT NULL,
+    zh         TEXT NOT NULL,
+    en         TEXT,
+    tatoeba_id INTEGER
+);
+CREATE INDEX idx_sentence_simp ON sentence(simp);
+
 -- ---- queries ----
 
 glyphByChar:
@@ -168,6 +177,9 @@ LIMIT :limit;
 
 wordsByIds:
 SELECT * FROM word WHERE id IN :ids;
+
+sentencesForWord:
+SELECT zh, en FROM sentence WHERE simp = :simp LIMIT :limit;
 
 wordById:
 SELECT * FROM word WHERE id = :id;

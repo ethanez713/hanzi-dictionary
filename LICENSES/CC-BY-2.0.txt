@@ -1,0 +1,19 @@
+Creative Commons Attribution 2.0 France (CC BY 2.0 FR)
+
+Tatoeba sentence data (https://tatoeba.org) is released under the Creative Commons
+Attribution 2.0 France license. This build uses the Mandarin (cmn) and English (eng)
+sentence exports joined through Tatoeba's sentence links, to show example sentences on
+word pages.
+
+Attribution is given both in the app ("Sentences from Tatoeba (CC BY 2.0)" on every word
+page that shows them) and in docs/ATTRIBUTIONS.md.
+
+The full legal text of this license is published by Creative Commons at:
+
+    https://creativecommons.org/licenses/by/2.0/fr/legalcode
+    https://creativecommons.org/licenses/by/2.0/fr/ (human-readable summary)
+
+Under its terms you are free to share and adapt the material for any purpose, provided you
+give appropriate credit, link to the license, and indicate if changes were made. Here, the
+material is redistributed as a filtered/matched subset (short sentences per word); no
+sentence text is altered.

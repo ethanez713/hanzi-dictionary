@@ -17,6 +17,7 @@ dataset repo's NOTICE and the in-app attributions screen (spec §9's IA item 9,
 | [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | HSK 3.0 level assignments (glyph.hsk, word.hsk, hsk-levels.json import picker) | MIT | (short license, see upstream repo) |
 | [CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict) (MDBG export) | Word-level entries: `word`/`word_char` tables — simplified/traditional forms, pinyin, English definitions ("In words" on character pages) | CC BY-SA 4.0 | [CC-BY-SA-4.0.txt](../LICENSES/CC-BY-SA-4.0.txt) |
 | [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018 zh_cn) | `word.freq_rank` — word-level corpus frequency used for result ranking. Chosen over SUBTLEX-CH (research-use terms): same subtitle lineage, open license | CC BY-SA 4.0 | [CC-BY-SA-4.0.txt](../LICENSES/CC-BY-SA-4.0.txt) |
+| [Tatoeba](https://tatoeba.org) (cmn + eng sentence exports, joined via links) | `sentence` table — example Mandarin sentences with English translations shown on word pages (spec §9). Short sentences containing each word, credited in-app | CC BY 2.0 FR | [CC-BY-2.0.txt](../LICENSES/CC-BY-2.0.txt) |
 | [hanzi-writer-data](https://github.com/chanind/hanzi-writer-data) (makemeahanzi graphics, Arphic KaiTi outlines) | App launcher icon only: the brush-stroke outline paths of 字 (not shipped in the data pack) | Arphic Public License | [Arphic-Public-License.txt](../LICENSES/Arphic-Public-License.txt) |
 
 ## Bundled app assets (not part of the dataset)

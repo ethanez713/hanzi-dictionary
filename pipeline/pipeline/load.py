@@ -75,3 +75,7 @@ def load_words(conn: sqlite3.Connection, rows: list[tuple]) -> None:
 
 def load_word_chars(conn: sqlite3.Connection, rows: list[tuple]) -> None:
     conn.executemany("INSERT INTO word_char VALUES (?,?,?)", rows)
+
+
+def load_sentences(conn: sqlite3.Connection, rows: list[tuple]) -> None:
+    conn.executemany("INSERT INTO sentence (simp, zh, en, tatoeba_id) VALUES (?,?,?,?)", rows)

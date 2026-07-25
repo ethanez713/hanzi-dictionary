@@ -128,7 +128,12 @@ data class WordPage(
     val senses: List<String>,
     val hsk: Long?,
     val chars: List<WordCharView>,  // distinct constituent characters, in order
+    val sentences: List<SentenceExample>,  // Tatoeba examples using this word
 )
+
+/** A Tatoeba example sentence (spec §9 word page): the Mandarin, and its English gloss
+ * where one is linked. */
+data class SentenceExample(val zh: String, val en: String?)
 
 /** A visually-confusable pair (Unihan kSpoofingVariant), for the confusable drill. */
 data class ConfusablePair(

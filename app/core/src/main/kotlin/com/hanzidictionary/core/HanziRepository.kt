@@ -366,7 +366,14 @@ class HanziRepository(
             db.hanziQueries.glyphByChar(ch).executeAsList().firstOrNull()
                 ?.let { WordCharView(it.id, it.char, it.definition) }
         }
-        return WordPage(w.id, w.simp, w.trad, w.pinyin, parseSenses(w.defs), w.hsk, charViews)
+        val sentences = db.hanziQueries.sentencesForWord(w.simp, SENTENCE_LIMIT).executeAsList()
+            .map { SentenceExample(it.zh, it.en) }
+        return WordPage(w.id, w.simp, w.trad, w.pinyin, parseSenses(w.defs), w.hsk, charViews, sentences)
+    }
+
+    private companion object {
+        /** A few examples is plenty on a word page; more would bury the definitions. */
+        const val SENTENCE_LIMIT = 4L
     }
 
     private fun rawStringList(target: SqlDriver, sql: String, arg: String, limit: Long): List<String> {
