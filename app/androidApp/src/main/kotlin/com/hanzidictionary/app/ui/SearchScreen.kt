@@ -369,19 +369,6 @@ private fun PhotoFeed(
                 )
             }
         }
-        if (recentlyViewed.isNotEmpty()) {
-            item(key = "recent-header") { SectionTitle("Recently viewed") }
-            items(recentlyViewed, key = { "recent-${it.glyphId}" }) { r ->
-                ItemRow(
-                    text = r.char,
-                    pinyin = r.primaryPinyin,
-                    gloss = r.definition?.let { displayGloss(it) },
-                    glossLines = 1,
-                    onClick = { onOpenCharacter(r.glyphId) },
-                )
-                HorizontalDivider()
-            }
-        }
         item(key = "photos-header") {
             Row(
                 Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -454,6 +441,21 @@ private fun PhotoFeed(
                     }
                     HorizontalDivider()
                 }
+            }
+        }
+        if (recentlyViewed.isNotEmpty()) {
+            item(key = "recent-header") {
+                SectionTitle("Recently viewed")
+            }
+            items(recentlyViewed, key = { "recent-${it.glyphId}" }) { r ->
+                ItemRow(
+                    text = r.char,
+                    pinyin = r.primaryPinyin,
+                    gloss = r.definition?.let { displayGloss(it) },
+                    glossLines = 1,
+                    onClick = { onOpenCharacter(r.glyphId) },
+                )
+                HorizontalDivider()
             }
         }
         item(key = "hint") {
