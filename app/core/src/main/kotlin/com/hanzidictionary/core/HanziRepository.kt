@@ -201,7 +201,7 @@ class HanziRepository(
      * defs is a JSON array of CC-CEDICT senses; the first two make a compact gloss. */
     fun wordsForGlyph(glyphId: String, limit: Long = 6): List<WordView> =
         db.hanziQueries.wordsForGlyph(glyphId, limit).executeAsList().map { w ->
-            WordView(w.simp, w.trad, w.pinyin, firstSenses(w.defs), w.hsk)
+            WordView(w.id, w.simp, w.trad, w.pinyin, firstSenses(w.defs), w.hsk)
         }
 
     private fun firstSenses(defsJson: String?, count: Int = 2): String? =

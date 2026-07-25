@@ -193,6 +193,7 @@ fun AppRoot(
                 glyphId = glyphId,
                 onOpenComponent = { componentId -> nav.navigate("component/${enc(componentId)}") },
                 onOpenCharacter = { gid -> nav.navigate("character/${enc(gid)}") },
+                onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
                 onBack = { nav.popBackStack() },
             )
         }

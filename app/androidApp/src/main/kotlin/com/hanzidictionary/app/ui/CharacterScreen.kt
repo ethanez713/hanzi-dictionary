@@ -52,6 +52,7 @@ fun CharacterScreen(
     glyphId: String,
     onOpenComponent: (String) -> Unit,
     onOpenCharacter: (String) -> Unit,
+    onOpenWord: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     // null page is ambiguous (still loading vs. not in the pack), so track load completion
@@ -121,7 +122,7 @@ fun CharacterScreen(
                     p.ids?.let { Chip(it) }
                 }
             }
-            if (p.words.isNotEmpty()) Words(p.words)
+            if (p.words.isNotEmpty()) Words(p.words, onOpenWord)
             BreakdownStrip(p, tts, onOpenComponent)
             SoundLine(p)
             Formation(p)
@@ -168,11 +169,11 @@ private fun Header(p: CharacterPage, tts: MandarinTts) {
 /** Common words containing this character (spec §9 IA item 6 "In your words"), the
  * "phrases that use the word" a learner actually meets it in. */
 @Composable
-private fun Words(words: List<WordView>) {
+private fun Words(words: List<WordView>, onOpenWord: (String) -> Unit) {
     SectionTitle("In words")
     for (w in words) {
         Row(
-            Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth().clickable { onOpenWord(w.id) },
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

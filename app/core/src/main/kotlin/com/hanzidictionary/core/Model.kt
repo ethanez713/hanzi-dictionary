@@ -54,6 +54,7 @@ data class ConfusableView(
 
 /** A word containing the page's character (CC-CEDICT, spec §9 IA item 6). */
 data class WordView(
+    val id: String,            // word/{id} route target
     val simp: String,
     val trad: String,          // may equal simp
     val pinyin: String?,
