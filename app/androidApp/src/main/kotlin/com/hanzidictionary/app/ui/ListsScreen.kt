@@ -72,6 +72,7 @@ fun ListsScreen(
     onPractice: (DeckSource) -> Unit,
     onOpenArchive: () -> Unit,
     onOpenConfusables: () -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -102,7 +103,10 @@ fun ListsScreen(
             TopAppBar(
                 title = { Text("Study") },
                 navigationIcon = { BackButton(onBack) },
-                actions = { TextButton(onClick = onOpenArchive) { Text("Archive") } },
+                actions = {
+                    TextButton(onClick = onOpenArchive) { Text("Archive") }
+                    HomeButton(onHome)
+                },
             )
         },
     ) { padding ->

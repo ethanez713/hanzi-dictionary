@@ -3,22 +3,35 @@ package com.hanzidictionary.app.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -56,12 +69,23 @@ import kotlinx.coroutines.withContext
 /**
  * Flashcard practice, scheduled by FSRS (spec §17).
  *
- * The card is the interface: **tap** reveals the answer (**tap again** opens its full
- * page), **swipe right** says you knew it, **swipe left** says you didn't — the same two
- * verbs the home-screen widget offers, so the muscle memory transfers. **Swipe up** skips
- * a card without touching its memory. Revealing is optional on purpose: recognising a
- * character and knowing you recognised it is the thing being tested, and forcing a reveal
- * first would slow the common case down.
+ * **The card is the whole interface, and grading is swipe-only.** Swipe right = knew it,
+ * left = didn't, up = skip without touching the card's memory; tap reveals the answer, tap
+ * again opens the full page. There are deliberately no grade *buttons* beside the gestures:
+ * a screen that offers both teaches neither, and the two swipe verbs are exactly what the
+ * home-screen widget's two gutters do, so the muscle memory transfers intact. (Hard/Easy
+ * are gone for the same reason — FSRS-6 still accepts all four grades, but the UI only ever
+ * emits Again and Good.)
+ *
+ * Everything that isn't a grade lives in the card's own top-right corner — the ⓘ that
+ * explains scheduling, and a ⋮ menu holding "I know this", the one irreversible action here.
+ * Putting them on the card rather than in the app bar keeps the whole verb set in one place
+ * and leaves the bar free for navigation.
+ *
+ * Revealing is optional on purpose: recognising a character and knowing you recognised it is
+ * the thing being tested, and forcing a reveal first would slow the common case down. The
+ * revealed side is budgeted to fit one screen without scrolling — sound, meaning, component
+ * breakdown, and the words it shows up in.
  *
  * A missed card goes to the back of the session queue rather than out of it, so within a
  * sitting you do see the ones you don't know more often — and across days FSRS decides,
@@ -79,12 +103,13 @@ fun PracticeScreen(
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
     onOpenConfusables: () -> Unit,
-    onOpenArchive: () -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
     val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
 
     var reverse by remember { mutableStateOf(false) }
     // All the in-session deck state (which card, its position, whether it's flipped) lives in
@@ -149,11 +174,25 @@ fun PracticeScreen(
 
     fun archive() {
         val entry = state.current ?: return
+        val label = summaries[entry.item.itemId]?.text ?: entry.item.itemId
         scope.launch {
             withContext(Dispatchers.IO) {
                 app.userRepository.setKnown(entry.item.itemId, true, entry.item.kind)
             }
             PracticeWidgetUpdater.refresh(context)
+            // Archiving drops an item out of every list's practice for good, and it now
+            // lives behind a menu instead of a button with a warning under it — so the
+            // safety net moved to an Undo, the same one the list screens offer.
+            val result = snackbar.showSnackbar(
+                "Archived $label — out of practice everywhere",
+                actionLabel = "Undo",
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                withContext(Dispatchers.IO) {
+                    app.userRepository.setKnown(entry.item.itemId, false, entry.item.kind)
+                }
+                PracticeWidgetUpdater.refresh(context)
+            }
         }
         state = state.advance(requeue = false)
     }
@@ -168,6 +207,7 @@ fun PracticeScreen(
     if (showInfo) GradingInfoDialog(onDismiss = { showInfo = false })
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 // The deck's source (list name / HSK band / "Recently encountered") lives up
@@ -186,7 +226,7 @@ fun PracticeScreen(
                     }
                 },
                 navigationIcon = { BackButton(onBack) },
-                actions = { TextButton(onClick = onOpenArchive) { Text("Archive") } },
+                actions = { HomeButton(onHome) },
             )
         },
     ) { padding ->
@@ -249,34 +289,12 @@ fun PracticeScreen(
                             tts = tts,
                             onReveal = { state = state.reveal() },
                             onOpenFull = openFull,
+                            onShowGradingInfo = { showInfo = true },
+                            onArchive = { archive() },
                         )
                     }
                     SwipeLegend(MissedAction, KnewAction, up = SkipAction)
-
-                    if (state.revealed) {
-                        // Four-grade FSRS is measurably better than two, so Hard/Easy are
-                        // here for when the difference is obvious — but the swipes stay
-                        // the primary path, and they are the only two the widget has. The
-                        // ⓘ explains what any of these do to the schedule.
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OutlinedButton(onClick = { grade(Rating.HARD) }) { Text("Hard") }
-                            OutlinedButton(onClick = { grade(Rating.EASY) }) { Text("Easy") }
-                            TextButton(onClick = { showInfo = true }) {
-                                Text("ⓘ", fontSize = 20.sp)
-                            }
-                        }
-                        Button(onClick = { archive() }) { Text("I know this — archive it") }
-                        Text(
-                            "Archiving removes it from every list's practice for good.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
-                        entry.card?.let { CardHistory(it) }
-                    }
+                    if (state.revealed) entry.card?.let { CardHistory(it) }
                 }
             }
         }
@@ -287,6 +305,7 @@ fun PracticeScreen(
 private data class CardBack(
     val pinyin: String?,
     val gloss: String?,
+    val components: List<CardComponent>,
     val wordsLabel: String,
     val words: List<BackWord>,
     val speakText: String,
@@ -296,17 +315,27 @@ private data class CardBack(
  * card) one of its constituent characters. */
 private data class BackWord(val text: String, val pinyin: String?, val gloss: String?)
 
+/**
+ * One part of the character, flattened for the card: the glyph, its role, and the single
+ * thing it contributes. The character page's breakdown cards carry provenance badges and
+ * drift confidences too; on a flashcard that's noise — what earns its space is "氵 means
+ * water, 青 sounds like qīng", because that is the mnemonic that makes the character
+ * recallable rather than a shape to memorise.
+ */
+private data class CardComponent(val char: String, val function: String, val hint: String?)
+
 private suspend fun loadBack(repository: HanziRepository, item: StudyItem): CardBack? =
     if (item.isWord) {
         repository.wordPage(item.itemId)?.let { w ->
             CardBack(
                 pinyin = w.pinyin,
                 gloss = w.senses.take(3).joinToString("; "),
-                // A word can't be "used in" much, so its back teaches what it's built from.
+                // A word's parts are its characters, and they're already listed under
+                // "Made of" — decomposing each of those into radicals as well would bury
+                // the word itself.
+                components = emptyList(),
                 wordsLabel = "Made of",
-                words = w.chars.map {
-                    BackWord(it.char, null, it.definition?.substringBefore(";")?.trim())
-                },
+                words = w.chars.map { BackWord(it.char, null, it.definition?.let(::shortGloss)) },
                 speakText = w.simp,
             )
         }
@@ -318,6 +347,13 @@ private suspend fun loadBack(repository: HanziRepository, item: StudyItem): Card
                     .joinToString("  ") { it.value }
                     .ifBlank { null },
                 gloss = c.definition,
+                components = c.breakdown.mapNotNull { b ->
+                    // displayChar is null only for "ids:" pseudo-components — a dashed
+                    // layout box teaches nothing on a card, so those are dropped.
+                    b.displayChar?.let { ch ->
+                        CardComponent(ch, b.function, componentHint(b.function, b.pinyin, b.definition))
+                    }
+                },
                 // c.words is already learner-ordered (HSK, then length), so the first few
                 // are the words most worth recognising this character in.
                 wordsLabel = "Used in words",
@@ -327,6 +363,37 @@ private suspend fun loadBack(repository: HanziRepository, item: StudyItem): Card
         }
     }
 
+/** What a component contributes, in one line: its reading if it's carrying the sound, its
+ * gloss otherwise. A "both" component gets both, since that's the whole point of it. */
+private fun componentHint(function: String, pinyin: String?, definition: String?): String? {
+    val gloss = definition?.let(::shortGloss)
+    return when (function) {
+        "phonetic" -> pinyin
+        "both" -> listOfNotNull(pinyin, gloss).joinToString(" · ").ifBlank { null }
+        else -> gloss
+    }
+}
+
+/** How many words the revealed card lists. Six filled the card on its own once the
+ * component breakdown joined it; three still shows the character in real vocabulary, which
+ * is all this band is for. */
+private const val CARD_WORDS = 3
+
+/** Components shown on the card. Each one takes an equal share of the row's width, so past
+ * four they're too narrow to read — and a character with five parts is better served by the
+ * full page anyway. */
+private const val CARD_COMPONENTS = 4
+
+/** Height of the card's floating ⓘ/⋮ corner — also the top inset the reverse-mode prompt
+ * needs to clear it. Kept next to [CardCorner]'s button size so the two can't drift. */
+private val CARD_CORNER_HEIGHT = 38.dp
+
+/**
+ * The card itself. The revealed side is three bands separated by hairlines rather than by
+ * headings — **answer**, **what it's built from**, **where you'll meet it** — because a
+ * label like "Components" costs a whole line to say what the row of coloured glyphs under
+ * it already says. Structure carries the meaning; the ink goes to content.
+ */
 @Composable
 private fun PracticeCard(
     summary: ItemSummary?,
@@ -336,6 +403,8 @@ private fun PracticeCard(
     tts: MandarinTts,
     onReveal: () -> Unit,
     onOpenFull: () -> Unit,
+    onShowGradingInfo: () -> Unit,
+    onArchive: () -> Unit,
 ) {
     // One tap reveals the answer; once it's showing, the next tap opens the full page —
     // the card itself is the link, so there's no separate button to hunt for.
@@ -344,86 +413,234 @@ private fun PracticeCard(
             if (!showAnswer) onReveal() else onOpenFull()
         },
     ) {
-        Column(
-            Modifier.fillMaxWidth().heightIn(min = 220.dp).padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (summary == null) {
-                Text("…", fontSize = 80.sp)
-                return@Card
-            }
-            val gloss = back?.gloss ?: summary.gloss ?: "No English gloss for this."
-            // Words are longer than characters, so they get a smaller face — a five-
-            // character phrase at 88sp wraps into a wall.
-            val faceSize = if (summary.text.length > 2) 52.sp else 88.sp
+        Box(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(min = 210.dp).padding(
+                    start = 14.dp,
+                    end = 14.dp,
+                    bottom = 14.dp,
+                    // Reverse mode leads with prose, and prose is the one thing wide enough
+                    // to reach the corner controls — so in that mode the stack starts below
+                    // them. Character-first cards lead with a centred glyph that never gets
+                    // near the corner, and they keep the tighter inset.
+                    top = if (reverse) CARD_CORNER_HEIGHT else 14.dp,
+                ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                // Face-down the glyph sits in the middle of the card, where the eye lands
+                // and where a card you're about to throw belongs; revealed, the stack flows
+                // from the top so the bands under it hold still as the words load in.
+                verticalArrangement = Arrangement.spacedBy(
+                    6.dp,
+                    if (showAnswer) Alignment.Top else Alignment.CenterVertically,
+                ),
+            ) {
+                if (summary == null) {
+                    Text("…", fontSize = 80.sp)
+                    return@Column
+                }
+                val gloss = back?.gloss ?: summary.gloss ?: "No English gloss for this."
+                // Words are longer than characters, so they get a smaller face — a five-
+                // character phrase at 80sp wraps into a wall.
+                val faceSize = if (summary.text.length > 2) 52.sp else 80.sp
 
-            if (!reverse) {
-                Text(summary.text, fontSize = faceSize, lineHeight = faceSize * 1.1f)
-            } else {
-                Text(gloss, fontSize = 20.sp, textAlign = TextAlign.Center, lineHeight = 27.sp)
-            }
+                if (!reverse) {
+                    Text(summary.text, fontSize = faceSize, lineHeight = faceSize * 1.1f)
+                } else {
+                    Text(gloss, fontSize = 19.sp, textAlign = TextAlign.Center, lineHeight = 26.sp)
+                }
 
-            if (!showAnswer) {
-                Text(
-                    "Tap to reveal",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
+                if (!showAnswer) {
+                    Text(
+                        "Tap to reveal",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    return@Column
+                }
+
                 if (reverse) Text(summary.text, fontSize = faceSize, lineHeight = faceSize * 1.1f)
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     (back?.pinyin ?: summary.pinyin)?.let { Text(it, fontSize = 22.sp) }
                     if (tts.available) {
-                        TextButton(onClick = { tts.speak(back?.speakText ?: summary.text) }) {
-                            Text("🔊")
-                        }
+                        TextButton(
+                            onClick = { tts.speak(back?.speakText ?: summary.text) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) { Text("🔊", fontSize = 16.sp) }
                     }
                 }
                 if (!reverse) {
-                    Text(gloss, fontSize = 16.sp, textAlign = TextAlign.Center)
+                    Text(gloss, fontSize = 15.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
                 }
-                back?.words?.take(6)?.takeIf { it.isNotEmpty() }?.let { words ->
+
+                val components = back?.components.orEmpty()
+                if (components.isNotEmpty()) {
+                    CardRule()
+                    ComponentStrip(components)
+                }
+                val words = back?.words?.take(CARD_WORDS).orEmpty()
+                if (words.isNotEmpty()) {
+                    CardRule()
                     Column(
-                        Modifier.fillMaxWidth().padding(top = 2.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            back.wordsLabel,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        words.forEach { w ->
+                        Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) { words.forEach { BackWordRow(it) } }
+                }
+            }
+
+            // The corner controls float over the card instead of taking a row of their own:
+            // in the flow they read as a toolbar and pushed the glyph — the thing you're
+            // actually here to look at — a third of the way down the card. Nothing else ever
+            // reaches this corner (the glyph is centred, the bands below start lower), so
+            // there's nothing for them to cover.
+            CardCorner(
+                modifier = Modifier.align(Alignment.TopEnd),
+                onShowGradingInfo = onShowGradingInfo,
+                onArchive = onArchive,
+            )
+        }
+    }
+}
+
+/** The hairline between two bands of the revealed card — the whole reason it needs no
+ * headings. Inset from the edges so it reads as a separator, not as a border. */
+@Composable
+private fun CardRule() {
+    HorizontalDivider(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
+    )
+}
+
+/**
+ * The card's action corner: ⓘ (what the grades do to the schedule) and a ⋮ menu holding
+ * "I know this". Both are deliberately *not* grades — the grades are gestures, and a
+ * tappable grade here would reintroduce the two-input-systems problem this layout exists to
+ * remove.
+ */
+@Composable
+private fun CardCorner(
+    modifier: Modifier = Modifier,
+    onShowGradingInfo: () -> Unit,
+    onArchive: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onShowGradingInfo, modifier = Modifier.size(CARD_CORNER_HEIGHT)) {
+            Icon(
+                Icons.Filled.Info,
+                contentDescription = "How grading works",
+                modifier = Modifier.size(19.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(CARD_CORNER_HEIGHT)) {
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = "Card options",
+                modifier = Modifier.size(19.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text("I know this — archive it") },
+                onClick = { menuOpen = false; onArchive() },
+            )
+        }
+    }
+}
+
+/**
+ * The component breakdown, compressed to fit a flashcard: one chip per part, each carrying
+ * the glyph in its function colour, the role in words, and the single thing that part
+ * contributes. Chips (rather than the character page's stacked full-width cards) because
+ * they read as *parts of one character* sitting side by side, which is the fact being
+ * taught; the colour coding is [functionColor], shared with the character page, so the two
+ * read as the same thing at two levels of detail.
+ */
+@Composable
+private fun ComponentStrip(components: List<CardComponent>) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        for (c in components.take(CARD_COMPONENTS)) {
+            val color = functionColor(c.function)
+            val label = functionLabel(c.function)
+            // Equal shares, so the chips line up and a long gloss ellipsizes instead of
+            // shoving its neighbour off the card.
+            Card(
+                Modifier.weight(1f),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(c.char, fontSize = 24.sp, color = color)
+                    Column {
+                        // The role is spelled out, not left to colour alone — the strip has
+                        // to work for a colour-blind reader too.
+                        if (label.isNotEmpty()) {
                             Text(
-                                buildString {
-                                    append(w.text)
-                                    w.pinyin?.let { append("  "); append(it) }
-                                    w.gloss?.let { append(" — "); append(it) }
-                                },
-                                fontSize = 13.sp,
-                                textAlign = TextAlign.Center,
+                                label,
+                                fontSize = 9.sp,
+                                lineHeight = 11.sp,
+                                color = color,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        c.hint?.let {
+                            Text(
+                                it,
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
                 }
-                Text(
-                    "Tap card for full page →",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
             }
         }
     }
 }
 
-/** Explains what the grades and swipes do to a card's schedule (spec §17 grading). */
+/** One line of the card's bottom band: the word, its sound, its meaning — the same
+ * glyph-then-reading-then-gloss order as [ItemRow], so it scans like every other list of
+ * words in the app. */
+@Composable
+private fun BackWordRow(w: BackWord) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(w.text, fontSize = 17.sp)
+        w.pinyin?.let {
+            Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        w.gloss?.let {
+            Text(
+                it,
+                Modifier.weight(1f),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** Explains what the three swipes do to a card's schedule (spec §17 grading). */
 @Composable
 private fun GradingInfoDialog(onDismiss: () -> Unit) {
     AlertDialog(
@@ -437,11 +654,16 @@ private fun GradingInfoDialog(onDismiss: () -> Unit) {
                         "when you'll see it again — the better you knew it, the longer the gap.",
                     fontSize = 14.sp,
                 )
-                Text("✗  Didn't know  (swipe left) — comes back within the minute, then often.", fontSize = 13.sp)
-                Text("Hard — you got it, but barely; it returns sooner than a normal card.", fontSize = 13.sp)
-                Text("✓  Knew it  (swipe right) — a normal step; the gap grows each time.", fontSize = 13.sp)
-                Text("Easy — effortless; the next gap jumps well past normal.", fontSize = 13.sp)
-                Text("↑  Swipe up to skip — move on without changing the card's schedule.", fontSize = 13.sp)
+                Text("←  Didn't know — comes back within the minute, then often.", fontSize = 13.sp)
+                Text("→  Knew it — the gap grows every time you get it again.", fontSize = 13.sp)
+                Text("↑  Skip — move on without changing the card's schedule.", fontSize = 13.sp)
+                Text(
+                    "Swipes are the only way to grade, here and on the home-screen widget, " +
+                        "so the same three motions work in both places. Tap the card to turn " +
+                        "it over, and tap it again to open its full page.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
     )

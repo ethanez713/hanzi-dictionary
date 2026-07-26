@@ -88,6 +88,19 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   `SwipeToDismissBox`) — **do not "fix" this by bumping the compose BOM**. `SwipeCard` is a
   2D drag (horizontal = graded verbs, vertical-up = skip); every swipe also exposes a
   TalkBack `CustomAccessibilityAction`.
+- **Grading is swipe-only, and only two grades.** Left/right/up on the practice card are the
+  *whole* grading interface — no grade buttons beside them, and **no Hard/Easy anywhere**
+  (`Fsrs.kt` still implements all four ratings; the UI only ever emits `AGAIN` and `GOOD`).
+  The widget's two gutters mirror exactly this. Don't reintroduce a tappable grade — a screen
+  offering both input systems teaches neither.
+- **Every screen but home carries a `HomeButton` in its top-bar `actions`**, last before any
+  overflow `⋮`. Browsing here goes character → component → character and gets deep, so Back
+  alone isn't enough. It pops to `HOME_ROUTE` rather than navigating (see `goHome` in
+  `AppRoot.kt`). It's a top-bar action, not a bottom nav bar, because Practice is budgeted to
+  fit one screen without scrolling and a nav bar would spend that budget.
+- **The practice card uses structure, not headings.** Its revealed side is three bands split
+  by hairlines (`CardRule`) — answer / components / words. Don't add section labels back;
+  vertical space on that card is the scarce resource.
 - **Comments justify _why_, not _what_.** The codebase is heavily commented in this style;
   match it. Keep it that way.
 - **Route args are percent-encoded with `android.net.Uri.encode`, not `URLEncoder`**
@@ -98,7 +111,7 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
 ### Home-screen widget — platform constraints that bite
 
 - **`RemoteViews` gets taps only — no gestures/drag.** The app's swipe verbs become tap
-  zones (four grade gutters + a middle card that flips then opens).
+  zones (two grade gutters — Again / Good — plus a middle card that flips then opens).
 - **`RemoteViews` inflates only a whitelist of view classes.** A bare `<View>` throws
   `Class not allowed to be inflated` → launcher shows "Couldn't add widget." Use
   `TextView`/`ImageView`/`LinearLayout`/etc. only (a 1dp `TextView` is the divider trick).

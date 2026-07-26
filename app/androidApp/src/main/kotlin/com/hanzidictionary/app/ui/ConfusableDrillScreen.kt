@@ -57,6 +57,7 @@ fun ConfusableDrillScreen(
     repository: HanziRepository,
     userRepository: UserRepository,
     onOpenCharacter: (String) -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -86,6 +87,7 @@ fun ConfusableDrillScreen(
             TopAppBar(
                 title = { Text("Look-alikes") },
                 navigationIcon = { BackButton(onBack) },
+                actions = { HomeButton(onHome) },
             )
         },
     ) { padding ->

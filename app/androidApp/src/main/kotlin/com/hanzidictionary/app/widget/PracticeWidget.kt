@@ -28,12 +28,11 @@ import kotlinx.coroutines.launch
  * Home-screen flashcard (spec §17).
  *
  * Launchers hand widgets taps and nothing else — no gestures — so the app's swipe grammar
- * becomes tap zones. Each side gutter is split into two stacked grades: the left "struggled"
- * gutter is Again (top) / Hard (bottom), the right "recalled" gutter is Good (top) / Easy
- * (bottom) — the full four-grade FSRS scale in the same small footprint. Tapping the card in
- * the middle **flips it** to reveal the pinyin and definition in place; tapping the revealed
- * card opens the app on that exact card. Grading stays on the gutters only, and archiving an
- * item for good is a decision that deserves the full page, not a home-screen mis-tap.
+ * becomes tap zones: the left gutter is Again, the right gutter is Good, the same two verbs
+ * the practice screen's left/right swipes grade with. Tapping the card in the middle **flips
+ * it** to reveal the pinyin and definition in place; tapping the revealed card opens the app
+ * on that exact card. Grading stays on the gutters only, and archiving an item for good is a
+ * decision that deserves the full page, not a home-screen mis-tap.
  *
  * The deck follows the app's **active list**. The card shown is picked semi-randomly —
  * never-seen cards first, otherwise a random due review — so the widget doesn't march a
@@ -179,9 +178,7 @@ class PracticeWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_echo, view.detail)
 
             views.setOnClickPendingIntent(R.id.zone_miss, gradeIntent(context, widgetId, Rating.AGAIN))
-            views.setOnClickPendingIntent(R.id.zone_hard, gradeIntent(context, widgetId, Rating.HARD))
             views.setOnClickPendingIntent(R.id.zone_knew, gradeIntent(context, widgetId, Rating.GOOD))
-            views.setOnClickPendingIntent(R.id.zone_easy, gradeIntent(context, widgetId, Rating.EASY))
             // Face-down → the middle flips the card; revealed or empty → it opens the app.
             val cardIntent =
                 if (view.cardTapOpensApp) openIntent(context, widgetId, state.card?.item)

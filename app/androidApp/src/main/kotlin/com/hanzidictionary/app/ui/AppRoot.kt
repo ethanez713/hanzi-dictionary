@@ -40,6 +40,10 @@ private fun encodeSource(source: DeckSource): String = when (source) {
     is DeckSource.Series -> "series:${enc(source.componentId)}"
 }
 
+/** The dictionary home — the start destination, and what the top bars' Home button
+ * unwinds to. */
+private const val HOME_ROUTE = "search"
+
 private fun decodeSource(raw: String?): DeckSource {
     val value = raw?.let { dec(it) } ?: return DeckSource.Everything
     val parts = value.split(":")
@@ -67,6 +71,11 @@ fun AppRoot(
 ) {
     val nav = rememberNavController()
     var query by rememberSaveable { mutableStateOf("") }
+
+    // "Home" unwinds the stack rather than pushing another copy of the start destination:
+    // search is always the bottom of the stack, so popping back to it leaves a clean
+    // one-entry history and Back from home still exits the app.
+    val goHome = { nav.popBackStack(HOME_ROUTE, inclusive = false); Unit }
 
     // Shared text (SEND target, spec §9 capture): one hanzi jumps straight to its page;
     // several prefill search (word search picks up multi-char words from there).
@@ -99,8 +108,8 @@ fun AppRoot(
         }
     }
 
-    NavHost(navController = nav, startDestination = "search") {
-        composable("search") {
+    NavHost(navController = nav, startDestination = HOME_ROUTE) {
+        composable(HOME_ROUTE) {
             SearchScreen(
                 repository = repository,
                 query = query,
@@ -119,6 +128,7 @@ fun AppRoot(
                 tts = tts,
                 wordId = dec(entry.arguments?.getString("wordId").orEmpty()),
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onHome = goHome,
                 onBack = { nav.popBackStack() },
             )
         }
@@ -129,6 +139,7 @@ fun AppRoot(
                 onPractice = { source -> nav.navigate("practice?source=${enc(encodeSource(source))}") },
                 onOpenArchive = { nav.navigate("known") },
                 onOpenConfusables = { nav.navigate("confusables") },
+                onHome = goHome,
                 onBack = { nav.popBackStack() },
             )
         }
@@ -143,6 +154,7 @@ fun AppRoot(
                     else nav.navigate("character/${enc(item.itemId)}")
                 },
                 onPractice = { source -> nav.navigate("practice?source=${enc(encodeSource(source))}") },
+                onHome = goHome,
                 onBack = { nav.popBackStack() },
             )
         }
@@ -169,7 +181,7 @@ fun AppRoot(
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
                 onOpenConfusables = { nav.navigate("confusables") },
-                onOpenArchive = { nav.navigate("known") },
+                onHome = goHome,
                 onBack = { nav.popBackStack() },
             )
         }
@@ -178,6 +190,7 @@ fun AppRoot(
                 repository = repository,
                 userRepository = userRepository,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onHome = goHome,
                 onBack = { nav.popBackStack() },
             )
         }
@@ -194,6 +207,7 @@ fun AppRoot(
                 onOpenComponent = { componentId -> nav.navigate("component/${enc(componentId)}") },
                 onOpenCharacter = { gid -> nav.navigate("character/${enc(gid)}") },
                 onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
+                onHome = goHome,
                 onBack = { nav.popBackStack() },
             )
         }
@@ -211,6 +225,7 @@ fun AppRoot(
                 onPracticeSeries = {
                     nav.navigate("practice?source=${enc(encodeSource(DeckSource.Series(componentId)))}")
                 },
+                onHome = goHome,
                 onBack = { nav.popBackStack() },
             )
         }
@@ -219,6 +234,7 @@ fun AppRoot(
                 userRepository = userRepository,
                 hskLevels = hskLevels,
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                onHome = goHome,
                 onBack = { nav.popBackStack() },
             )
         }

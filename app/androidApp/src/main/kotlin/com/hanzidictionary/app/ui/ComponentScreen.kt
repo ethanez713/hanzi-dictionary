@@ -45,6 +45,7 @@ fun ComponentScreen(
     onOpenCharacter: (String) -> Unit,
     onOpenComponent: (String) -> Unit,
     onPracticeSeries: () -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val page by produceState<ComponentPage?>(initialValue = null, componentId) {
@@ -58,6 +59,7 @@ fun ComponentScreen(
             TopAppBar(
                 title = { Text(page?.char ?: "component") },
                 navigationIcon = { BackButton(onBack) },
+                actions = { HomeButton(onHome) },
             )
         },
     ) { padding ->

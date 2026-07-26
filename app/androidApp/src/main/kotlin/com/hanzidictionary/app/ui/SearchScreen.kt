@@ -340,9 +340,9 @@ fun SearchScreen(
 
 /**
  * The opening screen: everything the camera roll turned up, as full rows rather than bare
- * chips — this is the app's primary capture path, so the characters arrive already
- * carrying their sound and meaning, and a swipe right files one away to study.
- * finds == null means the scan is still running.
+ * chips — this is the app's primary capture path, so the characters arrive already carrying
+ * their sound, and a swipe right files one away to study. Glosses are deliberately absent
+ * from both feeds here (see the rows below). finds == null means the scan is still running.
  */
 @Composable
 private fun PhotoFeed(
@@ -431,11 +431,14 @@ private fun PhotoFeed(
                         onSwipeRight = { onFileAway(StudyItem.character(f.glyphId), f.char) },
                         onSwipeLeft = { onDismiss(f) },
                     ) {
+                        // Pinyin only, no gloss: this feed is a triage queue, not a
+                        // reading surface — a one-line definition per row turned it into a
+                        // wall of English and halved how many characters fit on screen.
+                        // The meaning is one tap away on the character page.
                         ItemRow(
                             text = f.char,
                             pinyin = f.primaryPinyin,
-                            gloss = f.definition?.let { displayGloss(it) },
-                            glossLines = 1,
+                            gloss = null,
                             onClick = { onOpenCharacter(f.glyphId) },
                         )
                     }
@@ -451,8 +454,7 @@ private fun PhotoFeed(
                 ItemRow(
                     text = r.char,
                     pinyin = r.primaryPinyin,
-                    gloss = r.definition?.let { displayGloss(it) },
-                    glossLines = 1,
+                    gloss = null,
                     onClick = { onOpenCharacter(r.glyphId) },
                 )
                 HorizontalDivider()

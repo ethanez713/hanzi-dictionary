@@ -49,6 +49,7 @@ fun WordScreen(
     tts: MandarinTts,
     wordId: String,
     onOpenCharacter: (String) -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     var loaded by remember(wordId) { mutableStateOf(false) }
@@ -62,6 +63,7 @@ fun WordScreen(
             TopAppBar(
                 title = { Text(page?.simp ?: "…") },
                 navigationIcon = { BackButton(onBack) },
+                actions = { HomeButton(onHome) },
             )
         },
     ) { padding ->

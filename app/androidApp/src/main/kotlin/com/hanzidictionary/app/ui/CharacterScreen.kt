@@ -53,6 +53,7 @@ fun CharacterScreen(
     onOpenComponent: (String) -> Unit,
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     // null page is ambiguous (still loading vs. not in the pack), so track load completion
@@ -72,6 +73,7 @@ fun CharacterScreen(
             TopAppBar(
                 title = { Text(page?.char ?: "…") },
                 navigationIcon = { BackButton(onBack) },
+                actions = { HomeButton(onHome) },
             )
         },
     ) { padding ->
@@ -331,10 +333,6 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
     }
 }
 
-/** First sense only — component cards want a hint ("words, speech"), not the full gloss. */
-private fun shortGloss(definition: String): String =
-    definition.split(";").first().trim()
-
 @Composable
 private fun SoundLine(p: CharacterPage) {
     val phon = p.breakdown.firstOrNull { it.function == "phonetic" || it.function == "both" } ?: return
@@ -468,14 +466,23 @@ private fun scriptLabel(scripts: String): String = when (scripts) {
     else -> "both scripts"
 }
 
+/** A claim field as text, treating an explicit JSON `null` as absent.
+ *
+ * `optString(key, "")` does NOT do this: a JSON null is `JSONObject.NULL`, not a missing
+ * key, so the fallback never fires and the string "null" is what reaches the screen —
+ * which is how "meaning: null · sound: null" ended up rendering on ideographic characters
+ * (they have no semantic or phonetic component by definition). */
+private fun JSONObject.optField(key: String): String =
+    if (isNull(key)) "" else optString(key, "")
+
 private fun prettyClaim(predicate: String, value: String): String = try {
     when (predicate) {
         "component_function" -> {
             val o = JSONObject(value)
-            val type = o.optString("formation_type", "").ifEmpty { "unknown formation" }
-            val hint = o.optString("hint", "")
-            val sem = o.optString("semantic_component", "")
-            val phon = o.optString("phonetic_component", "")
+            val type = o.optField("formation_type").ifEmpty { "unknown formation" }
+            val hint = o.optField("hint")
+            val sem = o.optField("semantic_component")
+            val phon = o.optField("phonetic_component")
             buildString {
                 append(type)
                 if (sem.isNotEmpty()) append("  ·  meaning: $sem")

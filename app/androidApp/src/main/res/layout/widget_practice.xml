@@ -1,72 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Home-screen flashcard (spec §17). Launchers give widgets taps but never gestures, so
-     the app's swipe grammar becomes tap targets. The card is small (min 180dp / 3 cells),
-     so rather than spend columns we split each side gutter into two stacked grades: the
-     left "struggled" gutter is Again (top) / Hard (bottom), the right "recalled" gutter is
-     Knew (top) / Easy (bottom) — the full four-grade FSRS scale in the same footprint. The
-     card in the middle flips to reveal the answer and, once revealed, opens the app on this
-     exact card. No list name is drawn: on a widget that real estate is worth more as card. -->
+     the app's swipe grammar becomes tap targets: one full-height gutter per verb, ✗ on the
+     left and ✓ on the right — exactly the two verbs the practice screen grades with.
+     (Hard/Easy used to split each gutter into stacked halves; they're gone app-wide — a
+     half-height strip on a 3-cell widget is a mis-tap waiting to happen, and having the
+     same two verbs in both places is worth more than the extra scale.) The card in the
+     middle flips to reveal the answer and, once revealed, opens the app on this exact card.
+     No list name is drawn: on a widget that real estate is worth more as card. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_background"
     android:orientation="horizontal">
 
-    <!-- LEFT gutter: you struggled. Again on top (the common miss), Hard below it. -->
+    <!-- LEFT gutter: you didn't know it. -->
     <LinearLayout
+        android:id="@+id/zone_miss"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:background="@drawable/widget_zone_miss"
+        android:gravity="center"
         android:orientation="vertical">
 
-        <LinearLayout
-            android:id="@+id/zone_miss"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Didn't know it"
-                android:text="✗"
-                android:textColor="@color/widget_icon_miss"
-                android:textSize="20sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="again"
-                android:textColor="@color/widget_icon_miss"
-                android:textSize="9sp" />
-        </LinearLayout>
-
-        <!-- A 1dp TextView, not a <View>: RemoteViews only inflates a whitelist of classes
-             and plain android.view.View isn't on it (an empty TextView is). -->
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/widget_divider" />
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Didn't know it"
+            android:text="✗"
+            android:textColor="@color/widget_icon_miss"
+            android:textSize="22sp" />
 
-        <LinearLayout
-            android:id="@+id/zone_hard"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:contentDescription="Knew it, but barely"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="hard"
-                android:textColor="@color/widget_text_muted"
-                android:textSize="11sp" />
-        </LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="again"
+            android:textColor="@color/widget_icon_miss"
+            android:textSize="9sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -87,10 +57,8 @@
             android:textColor="@color/widget_text"
             android:textSize="38sp" />
 
-        <!-- Doubles as the reveal line: when the card is flipped it shows this card's own
-             pinyin + definition; otherwise it echoes the answer to the card you graded a
-             tap ago (a widget can't reveal and then advance on a timer, so that feedback
-             arrives one card late — which still closes the loop on every self-assessment). -->
+        <!-- The reveal line: "Tap to reveal" while the card is face-down, this card's own
+             pinyin + definition once it's been flipped. -->
         <TextView
             android:id="@+id/widget_echo"
             android:layout_width="match_parent"
@@ -103,60 +71,29 @@
             android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- RIGHT gutter: you recalled it. Knew on top (the common hit), Easy below it. -->
+    <!-- RIGHT gutter: you recalled it. -->
     <LinearLayout
+        android:id="@+id/zone_knew"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:background="@drawable/widget_zone_knew"
+        android:gravity="center"
         android:orientation="vertical">
 
-        <LinearLayout
-            android:id="@+id/zone_knew"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Knew it"
-                android:text="✓"
-                android:textColor="@color/widget_icon_knew"
-                android:textSize="20sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="knew"
-                android:textColor="@color/widget_icon_knew"
-                android:textSize="9sp" />
-        </LinearLayout>
-
-        <!-- A 1dp TextView, not a <View>: RemoteViews only inflates a whitelist of classes
-             and plain android.view.View isn't on it (an empty TextView is). -->
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/widget_divider" />
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Knew it"
+            android:text="✓"
+            android:textColor="@color/widget_icon_knew"
+            android:textSize="22sp" />
 
-        <LinearLayout
-            android:id="@+id/zone_easy"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:contentDescription="Knew it easily"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="easy"
-                android:textColor="@color/widget_text_muted"
-                android:textSize="11sp" />
-        </LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="knew"
+            android:textColor="@color/widget_icon_knew"
+            android:textSize="9sp" />
     </LinearLayout>
 </LinearLayout>

@@ -45,6 +45,7 @@ fun KnownScreen(
     userRepository: UserRepository,
     hskLevels: Map<Int, List<String>>,
     onOpenCharacter: (String) -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -67,6 +68,7 @@ fun KnownScreen(
             TopAppBar(
                 title = { Text("Archive") },
                 navigationIcon = { BackButton(onBack) },
+                actions = { HomeButton(onHome) },
             )
         },
     ) { padding ->
