@@ -27,6 +27,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -226,7 +227,16 @@ fun PracticeScreen(
                     }
                 },
                 navigationIcon = { BackButton(onBack) },
-                actions = { HomeButton(onHome) },
+                // ⓘ is a screen-level explainer, not a per-card action — it says the same
+                // thing whatever card is up — so it belongs in the bar beside Home rather
+                // than in the card's corner competing with the one action that *is*
+                // per-card.
+                actions = {
+                    IconButton(onClick = { showInfo = true }) {
+                        Icon(Icons.Filled.Info, contentDescription = "How grading works")
+                    }
+                    HomeButton(onHome)
+                },
             )
         },
     ) { padding ->
@@ -289,7 +299,6 @@ fun PracticeScreen(
                             tts = tts,
                             onReveal = { state = state.reveal() },
                             onOpenFull = openFull,
-                            onShowGradingInfo = { showInfo = true },
                             onArchive = { archive() },
                         )
                     }
@@ -316,13 +325,21 @@ private data class CardBack(
 private data class BackWord(val text: String, val pinyin: String?, val gloss: String?)
 
 /**
- * One part of the character, flattened for the card: the glyph, its role, and the single
- * thing it contributes. The character page's breakdown cards carry provenance badges and
- * drift confidences too; on a flashcard that's noise — what earns its space is "氵 means
- * water, 青 sounds like qīng", because that is the mnemonic that makes the character
- * recallable rather than a shape to memorise.
+ * One part of the character, flattened for the card: the glyph, its role, and what it
+ * contributes. The character page's breakdown cards carry provenance badges and drift
+ * confidences too; on a flashcard that's noise — what earns its space is "氵 means water,
+ * 青 sounds like qīng", because that is the mnemonic that makes the character recallable
+ * rather than a shape to memorise.
+ *
+ * The reading is carried whatever the part's role: a component you can *say* is a component
+ * you can remember, even when it isn't the one lending the character its sound.
  */
-private data class CardComponent(val char: String, val function: String, val hint: String?)
+private data class CardComponent(
+    val char: String,
+    val function: String,
+    val pinyin: String?,
+    val gloss: String?,
+)
 
 private suspend fun loadBack(repository: HanziRepository, item: StudyItem): CardBack? =
     if (item.isWord) {
@@ -351,7 +368,7 @@ private suspend fun loadBack(repository: HanziRepository, item: StudyItem): Card
                     // displayChar is null only for "ids:" pseudo-components — a dashed
                     // layout box teaches nothing on a card, so those are dropped.
                     b.displayChar?.let { ch ->
-                        CardComponent(ch, b.function, componentHint(b.function, b.pinyin, b.definition))
+                        CardComponent(ch, b.function, b.pinyin, b.definition?.let(::shortGloss))
                     }
                 },
                 // c.words is already learner-ordered (HSK, then length), so the first few
@@ -362,17 +379,6 @@ private suspend fun loadBack(repository: HanziRepository, item: StudyItem): Card
             )
         }
     }
-
-/** What a component contributes, in one line: its reading if it's carrying the sound, its
- * gloss otherwise. A "both" component gets both, since that's the whole point of it. */
-private fun componentHint(function: String, pinyin: String?, definition: String?): String? {
-    val gloss = definition?.let(::shortGloss)
-    return when (function) {
-        "phonetic" -> pinyin
-        "both" -> listOfNotNull(pinyin, gloss).joinToString(" · ").ifBlank { null }
-        else -> gloss
-    }
-}
 
 /** How many words the revealed card lists. Six filled the card on its own once the
  * component breakdown joined it; three still shows the character in real vocabulary, which
@@ -403,7 +409,6 @@ private fun PracticeCard(
     tts: MandarinTts,
     onReveal: () -> Unit,
     onOpenFull: () -> Unit,
-    onShowGradingInfo: () -> Unit,
     onArchive: () -> Unit,
 ) {
     // One tap reveals the answer; once it's showing, the next tap opens the full page —
@@ -497,7 +502,6 @@ private fun PracticeCard(
             // there's nothing for them to cover.
             CardCorner(
                 modifier = Modifier.align(Alignment.TopEnd),
-                onShowGradingInfo = onShowGradingInfo,
                 onArchive = onArchive,
             )
         }
@@ -515,27 +519,18 @@ private fun CardRule() {
 }
 
 /**
- * The card's action corner: ⓘ (what the grades do to the schedule) and a ⋮ menu holding
- * "I know this". Both are deliberately *not* grades — the grades are gestures, and a
- * tappable grade here would reintroduce the two-input-systems problem this layout exists to
- * remove.
+ * The card's action corner: a ⋮ menu holding "I know this" — the only action that is *about
+ * this card*, which is why it's the only thing here. (Grading is gestures; a tappable grade
+ * in this corner would reintroduce the two-input-systems problem this layout exists to
+ * remove. The grading ⓘ explains the screen rather than the card, so it lives in the top bar.)
  */
 @Composable
 private fun CardCorner(
     modifier: Modifier = Modifier,
-    onShowGradingInfo: () -> Unit,
     onArchive: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onShowGradingInfo, modifier = Modifier.size(CARD_CORNER_HEIGHT)) {
-            Icon(
-                Icons.Filled.Info,
-                contentDescription = "How grading works",
-                modifier = Modifier.size(19.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
         IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(CARD_CORNER_HEIGHT)) {
             Icon(
                 Icons.Filled.MoreVert,
@@ -585,19 +580,40 @@ private fun ComponentStrip(components: List<CardComponent>) {
                 ) {
                     Text(c.char, fontSize = 24.sp, color = color)
                     Column {
-                        // The role is spelled out, not left to colour alone — the strip has
-                        // to work for a colour-blind reader too.
-                        if (label.isNotEmpty()) {
-                            Text(
-                                label,
-                                fontSize = 9.sp,
-                                lineHeight = 11.sp,
-                                color = color,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                        val sound = isSoundBearing(c.function)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // The reading rides the top line whatever the part's role, but
+                            // only a sound-bearing part gets it at full size: elsewhere it's
+                            // a footnote — useful for saying the part out loud, not a claim
+                            // that it explains how the character is pronounced.
+                            c.pinyin?.let {
+                                Text(
+                                    it,
+                                    fontSize = if (sound) 13.sp else 10.sp,
+                                    lineHeight = 14.sp,
+                                    color = if (sound) LocalContentColor.current
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            // The role is spelled out, not left to colour alone — the strip
+                            // has to work for a colour-blind reader too.
+                            if (label.isNotEmpty()) {
+                                Text(
+                                    label,
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
+                                    color = color,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
-                        c.hint?.let {
+                        c.gloss?.let {
                             Text(
                                 it,
                                 fontSize = 12.sp,

@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -249,8 +250,8 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (c in p.breakdown) {
             val color = functionColor(c.function)
-            val showsSound = c.function == "phonetic" || c.function == "both"
-            val showsMeaning = c.function == "semantic" || c.function == "both"
+            val showsSound = isSoundBearing(c.function)
+            val showsMeaning = isMeaningBearing(c.function)
             Card(
                 modifier = Modifier.fillMaxWidth().then(
                     if (c.navigable) Modifier.clickable { onOpenComponent(c.componentId) } else Modifier,
@@ -290,40 +291,55 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
                         // Sound and meaning share one line — a "both" component on two
                         // lines made every breakdown card a different height.
                         val gloss = c.definition?.let { shortGloss(it) }
-                        if ((showsSound && c.pinyin != null) || (showsMeaning && gloss != null)) {
+                        if (c.pinyin != null || gloss != null) {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (showsSound && c.pinyin != null) {
-                                    Text(c.pinyin!!, fontSize = 15.sp)
-                                    if (tts.available && c.displayChar != null) {
-                                        Text(
-                                            "🔊",
-                                            fontSize = 13.sp,
-                                            modifier = Modifier.clickable { tts.speak(c.displayChar!!) },
-                                        )
-                                    }
-                                }
-                                if (showsMeaning && gloss != null) {
+                                // The reading shows for every part that has one, not just
+                                // the sound-bearing ones — being able to say 兴 xīng is
+                                // useful even in 举, where it lends nothing to the sound.
+                                // Size is what marks the difference: full for a part that
+                                // explains the pronunciation, a muted footnote otherwise, so
+                                // an incidental reading can't be misread as a sound claim.
+                                c.pinyin?.let {
                                     Text(
-                                        gloss,
+                                        it,
+                                        fontSize = if (showsSound) 15.sp else 11.sp,
+                                        color = if (showsSound) LocalContentColor.current
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (showsSound && tts.available && c.displayChar != null) {
+                                    Text(
+                                        "🔊",
                                         fontSize = 13.sp,
+                                        modifier = Modifier.clickable { tts.speak(c.displayChar!!) },
+                                    )
+                                }
+                                // For unclassified parts the gloss is still the most useful
+                                // hint we have — shown muted, not asserted as a role.
+                                gloss?.let {
+                                    Text(
+                                        it,
+                                        fontSize = 13.sp,
+                                        color = if (showsMeaning) LocalContentColor.current
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }
                         }
-                        // For unclassified parts, the component's own gloss is still the
-                        // most useful hint we have — shown muted, not asserted as a role.
-                        if (!showsSound && !showsMeaning && gloss != null) {
+                        // A part the pack can't resolve to a character has no glyph, no
+                        // reading and no gloss — it used to render as a lone ◎ in an
+                        // otherwise empty card, which reads as a rendering bug rather than
+                        // as the gap in the data that it is. Say so instead (spec §7).
+                        if (c.displayChar == null && c.pinyin == null && gloss == null) {
                             Text(
-                                gloss,
-                                fontSize = 13.sp,
+                                "part not in the component index",
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }

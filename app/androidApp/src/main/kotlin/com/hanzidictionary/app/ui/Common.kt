@@ -138,6 +138,16 @@ fun functionColor(function: String): Color = when (function) {
     else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
+/** True when this component is the one lending its character the sound.
+ *
+ * A component's reading is worth showing whatever its role — a part you can *say* is a part
+ * you can remember — but only here is the reading the point, so this is what decides whether
+ * it's set at full size or as a footnote under the gloss. */
+fun isSoundBearing(function: String): Boolean = function == "phonetic" || function == "both"
+
+/** True when this component is the one lending its character the meaning. */
+fun isMeaningBearing(function: String): Boolean = function == "semantic" || function == "both"
+
 /** Empty string means "no useful classification" (the pack stores "unknown" for
  * associative compounds like 好 = 女+子 where neither part is meaning- or sound-bearing).
  * Callers skip rendering a label in that case rather than showing a distracting "unknown". */
