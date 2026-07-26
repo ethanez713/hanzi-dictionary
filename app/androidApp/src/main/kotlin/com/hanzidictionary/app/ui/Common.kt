@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hanzidictionary.core.radicalNameOf
 
 /** The runtime permission the photo-library features need on this OS version (shared by
  * the search screen's photo panel and the full Photos screen). */
@@ -147,6 +148,23 @@ fun isSoundBearing(function: String): Boolean = function == "phonetic" || functi
 
 /** True when this component is the one lending its character the meaning. */
 fun isMeaningBearing(function: String): Boolean = function == "semantic" || function == "both"
+
+/**
+ * What goes on a component's sound line: either a reading or a radical's name, never both.
+ *
+ * [isReading] is what callers style on — only a real reading is ever set at full size or
+ * given a speaker, because only a reading is a claim about how something is pronounced. A
+ * radical's name is a label, so it always reads as a quiet aside.
+ */
+data class ComponentLabel(val text: String, val isReading: Boolean)
+
+/** A combining form is *called* something (氵 = 三点水) but isn't pronounced on its own, so
+ * its name displaces the reading Unihan lists for it; anything that stands as a character in
+ * its own right keeps its reading. */
+fun componentLabel(displayChar: String?, pinyin: String?): ComponentLabel? {
+    displayChar?.let { radicalNameOf(it) }?.let { return ComponentLabel(it, isReading = false) }
+    return pinyin?.let { ComponentLabel(it, isReading = true) }
+}
 
 /** Empty string means "no useful classification" (the pack stores "unknown" for
  * associative compounds like 好 = 女+子 where neither part is meaning- or sound-bearing).

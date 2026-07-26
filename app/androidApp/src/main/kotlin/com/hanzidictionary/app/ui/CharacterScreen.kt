@@ -291,26 +291,29 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
                         // Sound and meaning share one line — a "both" component on two
                         // lines made every breakdown card a different height.
                         val gloss = c.definition?.let { shortGloss(it) }
-                        if (c.pinyin != null || gloss != null) {
+                        val sound = componentLabel(c.displayChar, c.pinyin)
+                        if (sound != null || gloss != null) {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                // The reading shows for every part that has one, not just
-                                // the sound-bearing ones — being able to say 兴 xīng is
-                                // useful even in 举, where it lends nothing to the sound.
-                                // Size is what marks the difference: full for a part that
-                                // explains the pronunciation, a muted footnote otherwise, so
-                                // an incidental reading can't be misread as a sound claim.
-                                c.pinyin?.let {
+                                // A reading shows for every part that has one, not just the
+                                // sound-bearing ones — being able to say 兴 xīng is useful
+                                // even in 举, where it lends nothing to the sound. Size marks
+                                // the difference: full for a part that explains the
+                                // pronunciation, a muted footnote otherwise, so an incidental
+                                // reading can't be misread as a sound claim. A radical's name
+                                // (三点水) takes the same slot and is always the quiet form.
+                                val loud = showsSound && sound?.isReading == true
+                                sound?.let {
                                     Text(
-                                        it,
-                                        fontSize = if (showsSound) 15.sp else 11.sp,
-                                        color = if (showsSound) LocalContentColor.current
+                                        it.text,
+                                        fontSize = if (loud) 15.sp else 11.sp,
+                                        color = if (loud) LocalContentColor.current
                                         else MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                if (showsSound && tts.available && c.displayChar != null) {
+                                if (loud && tts.available && c.displayChar != null) {
                                     Text(
                                         "🔊",
                                         fontSize = 13.sp,
@@ -335,7 +338,7 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
                         // reading and no gloss — it used to render as a lone ◎ in an
                         // otherwise empty card, which reads as a rendering bug rather than
                         // as the gap in the data that it is. Say so instead (spec §7).
-                        if (c.displayChar == null && c.pinyin == null && gloss == null) {
+                        if (c.displayChar == null && sound == null && gloss == null) {
                             Text(
                                 "part not in the component index",
                                 fontSize = 12.sp,

@@ -32,6 +32,7 @@ import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SeriesMember
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.radicalFormsOf
+import com.hanzidictionary.core.radicalNameOf
 import com.hanzidictionary.core.radicalParentOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -92,8 +93,15 @@ fun ComponentScreen(
                     Modifier.weight(1f).padding(top = 2.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
+                    // Same rule as the breakdown cards: a combining form gets the name it's
+                    // known by, and only a standalone character gets a reading — otherwise
+                    // this page would call 氵 "shui" while every card calls it 三点水.
+                    val name = p.char?.let { radicalNameOf(it) }
                     val pinyin = p.ownReadings.filter { it.system == "pinyin" }.joinToString("  ") { it.value }
-                    if (pinyin.isNotEmpty()) Text(pinyin, fontSize = 17.sp)
+                    when {
+                        name != null -> Text(name, fontSize = 17.sp)
+                        pinyin.isNotEmpty() -> Text(pinyin, fontSize = 17.sp)
+                    }
                     p.definition?.let {
                         Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

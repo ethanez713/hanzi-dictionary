@@ -331,13 +331,14 @@ private data class BackWord(val text: String, val pinyin: String?, val gloss: St
  * 青 sounds like qīng", because that is the mnemonic that makes the character recallable
  * rather than a shape to memorise.
  *
- * The reading is carried whatever the part's role: a component you can *say* is a component
- * you can remember, even when it isn't the one lending the character its sound.
+ * The sound line is carried whatever the part's role: a component you can *say* is a
+ * component you can remember, even when it isn't the one lending the character its sound.
+ * For a combining form that's its name rather than a reading — see [componentLabel].
  */
 private data class CardComponent(
     val char: String,
     val function: String,
-    val pinyin: String?,
+    val label: ComponentLabel?,
     val gloss: String?,
 )
 
@@ -368,7 +369,12 @@ private suspend fun loadBack(repository: HanziRepository, item: StudyItem): Card
                     // displayChar is null only for "ids:" pseudo-components — a dashed
                     // layout box teaches nothing on a card, so those are dropped.
                     b.displayChar?.let { ch ->
-                        CardComponent(ch, b.function, b.pinyin, b.definition?.let(::shortGloss))
+                        CardComponent(
+                            ch,
+                            b.function,
+                            componentLabel(ch, b.pinyin),
+                            b.definition?.let(::shortGloss),
+                        )
                     }
                 },
                 // c.words is already learner-ordered (HSK, then length), so the first few
@@ -379,11 +385,6 @@ private suspend fun loadBack(repository: HanziRepository, item: StudyItem): Card
             )
         }
     }
-
-/** How many words the revealed card lists. Six filled the card on its own once the
- * component breakdown joined it; three still shows the character in real vocabulary, which
- * is all this band is for. */
-private const val CARD_WORDS = 3
 
 /** Components shown on the card. Each one takes an equal share of the row's width, so past
  * four they're too narrow to read — and a character with five parts is better served by the
@@ -485,7 +486,10 @@ private fun PracticeCard(
                     CardRule()
                     ComponentStrip(components)
                 }
-                val words = back?.words?.take(CARD_WORDS).orEmpty()
+                // Every word the pack ranks as learner-relevant for this character, not a
+                // sample of them: once the card stopped spending lines on headings there was
+                // room, and the whole point of the band is meeting the character in context.
+                val words = back?.words.orEmpty()
                 if (words.isNotEmpty()) {
                     CardRule()
                     Column(
@@ -580,21 +584,21 @@ private fun ComponentStrip(components: List<CardComponent>) {
                 ) {
                     Text(c.char, fontSize = 24.sp, color = color)
                     Column {
-                        val sound = isSoundBearing(c.function)
+                        // The sound line rides the top of the chip whatever the part's role,
+                        // but only a real reading on a sound-bearing part gets full size:
+                        // everything else is a footnote — useful for saying the part out
+                        // loud, not a claim about how the character is pronounced.
+                        val loud = isSoundBearing(c.function) && c.label?.isReading == true
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(5.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // The reading rides the top line whatever the part's role, but
-                            // only a sound-bearing part gets it at full size: elsewhere it's
-                            // a footnote — useful for saying the part out loud, not a claim
-                            // that it explains how the character is pronounced.
-                            c.pinyin?.let {
+                            c.label?.let {
                                 Text(
-                                    it,
-                                    fontSize = if (sound) 13.sp else 10.sp,
+                                    it.text,
+                                    fontSize = if (loud) 13.sp else 10.sp,
                                     lineHeight = 14.sp,
-                                    color = if (sound) LocalContentColor.current
+                                    color = if (loud) LocalContentColor.current
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
