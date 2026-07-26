@@ -3,10 +3,16 @@ package com.hanzidictionary.app.ui
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,12 +20,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -39,6 +49,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +93,10 @@ fun SearchScreen(
     val app = context.applicationContext as HanziApp
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+
+    // Which density the home feed is in. Saveable so flipping to definitions, opening a
+    // character and coming back doesn't silently snap you into tiles again.
+    var showDefinitions by rememberSaveable { mutableStateOf(false) }
 
     var showAttributions by remember { mutableStateOf(false) }
     if (showAttributions) {
@@ -227,7 +242,12 @@ fun SearchScreen(
             TopAppBar(
                 title = { Text("Hanzi Dictionary") },
                 actions = {
-                    TextButton(onClick = onOpenStudy) { Text("Study") }
+                    // A filled button, not a text link: this is the way into the study loop,
+                    // which is what the app is *for* — the dictionary is how you feed it.
+                    Button(
+                        onClick = onOpenStudy,
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    ) { Text("Study") }
                     IconButton(onClick = { showAttributions = true }) {
                         Icon(Icons.Filled.Info, contentDescription = "Data sources")
                     }
@@ -269,6 +289,8 @@ fun SearchScreen(
                     recentlyViewed = recentlyViewed,
                     activeListName = activeListName,
                     clipSuggestion = clipSuggestion,
+                    showDefinitions = showDefinitions,
+                    onToggleDefinitions = { showDefinitions = !showDefinitions },
                     onUseClipboard = { onQueryChange(it) },
                     onAllow = { permissionLauncher.launch(photoPermission) },
                     onRescan = { rescans++ },
@@ -338,12 +360,26 @@ fun SearchScreen(
     }
 }
 
+/** Characters per row in the compact tile grid. Five keeps every tile comfortably above the
+ * 48dp minimum touch target on a phone while fitting five times what a full-width row did. */
+private const val FEED_COLUMNS = 5
+
 /**
- * The opening screen: everything the camera roll turned up, as full rows rather than bare
- * chips — this is the app's primary capture path, so the characters arrive already carrying
- * their sound, and a swipe right files one away to study. Glosses are deliberately absent
- * from both feeds here (see the rows below). finds == null means the scan is still running.
+ * The opening screen: everything the camera roll turned up, plus what you looked at recently.
+ *
+ * Two densities, one switch. By default each character is a bare **tile** — the glyph and
+ * nothing else — because this feed is a triage queue: you are deciding *keep or drop* on
+ * characters you photographed minutes ago, and you recognise them by shape. A full-width row
+ * per character spent an entire line on one glyph and a word of pinyin. **Show definitions**
+ * flips both sections back to rows carrying pinyin *and* meaning, for when you're reading
+ * rather than triaging.
+ *
+ * Section headers stick to the top as you scroll, so a screen of bare glyphs always says
+ * which pile you're looking at.
+ *
+ * finds == null means the scan is still running.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PhotoFeed(
     granted: Boolean,
@@ -352,6 +388,8 @@ private fun PhotoFeed(
     recentlyViewed: List<SearchResult>,
     activeListName: String?,
     clipSuggestion: String?,
+    showDefinitions: Boolean,
+    onToggleDefinitions: () -> Unit,
     onUseClipboard: (String) -> Unit,
     onAllow: () -> Unit,
     onRescan: () -> Unit,
@@ -369,15 +407,17 @@ private fun PhotoFeed(
                 )
             }
         }
-        item(key = "photos-header") {
-            Row(
-                Modifier.fillMaxWidth().padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SectionTitle("From your photos")
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = onRescan, enabled = granted && finds != null) {
-                    Text("Scan again")
+        stickyHeader(key = "photos-header") {
+            FeedHeader("From your photos") {
+                // The one control that changes what every row below looks like sits in the
+                // header that's pinned while you scroll them.
+                FilterChip(
+                    selected = showDefinitions,
+                    onClick = onToggleDefinitions,
+                    label = { Text("Definitions", fontSize = 12.sp) },
+                )
+                IconButton(onClick = onRescan, enabled = granted && finds != null) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Scan photos again")
                 }
             }
         }
@@ -409,55 +449,86 @@ private fun PhotoFeed(
             finds.isEmpty() -> item(key = "empty") {
                 Text(
                     "No characters in recent photos yet. Photograph something with Chinese " +
-                        "text on it, then tap Scan again.",
+                        "text on it, then tap ↻.",
                     fontSize = 13.sp,
                     color = muted,
                 )
             }
             else -> {
                 item(key = "swipe-hint") {
+                    val destination = activeListName?.let { "“$it”" } ?: "your list"
                     Text(
-                        activeListName?.let { "Swipe right to add to “$it”, left to remove." }
-                            ?: "Swipe right to study it, left to remove.",
+                        if (showDefinitions) {
+                            "Swipe right to add to $destination, left to remove."
+                        } else {
+                            "Drag a character across the screen — right adds it to " +
+                                "$destination, left removes it."
+                        },
                         fontSize = 12.sp,
                         color = muted,
-                        modifier = Modifier.padding(bottom = 2.dp),
+                        modifier = Modifier.padding(bottom = 4.dp),
                     )
                 }
-                items(finds, key = { it.glyphId }) { f ->
-                    SwipeRow(
-                        rightAction = AddAction,
-                        leftAction = RemoveAction,
-                        onSwipeRight = { onFileAway(StudyItem.character(f.glyphId), f.char) },
-                        onSwipeLeft = { onDismiss(f) },
-                    ) {
-                        // Pinyin only, no gloss: this feed is a triage queue, not a
-                        // reading surface — a one-line definition per row turned it into a
-                        // wall of English and halved how many characters fit on screen.
-                        // The meaning is one tap away on the character page.
-                        ItemRow(
-                            text = f.char,
-                            pinyin = f.primaryPinyin,
-                            gloss = null,
-                            onClick = { onOpenCharacter(f.glyphId) },
-                        )
+                if (showDefinitions) {
+                    items(finds, key = { it.glyphId }) { f ->
+                        SwipeRow(
+                            rightAction = AddAction,
+                            leftAction = RemoveAction,
+                            onSwipeRight = { onFileAway(StudyItem.character(f.glyphId), f.char) },
+                            onSwipeLeft = { onDismiss(f) },
+                        ) {
+                            ItemRow(
+                                text = f.char,
+                                pinyin = f.primaryPinyin,
+                                gloss = f.definition?.let { displayGloss(it) },
+                                glossLines = 1,
+                                onClick = { onOpenCharacter(f.glyphId) },
+                            )
+                        }
+                        HorizontalDivider()
                     }
-                    HorizontalDivider()
+                } else {
+                    // Chunked into fixed rows rather than a LazyVerticalGrid: a grid can't
+                    // nest inside this LazyColumn (unbounded height), and the column is what
+                    // gives the section headers their stickiness.
+                    items(finds.chunked(FEED_COLUMNS), key = { it.first().glyphId }) { row ->
+                        TileRow(row) { f ->
+                            SwipeTile(
+                                key = f.glyphId,
+                                rightAction = AddAction,
+                                leftAction = RemoveAction,
+                                onSwipeRight = { onFileAway(StudyItem.character(f.glyphId), f.char) },
+                                onSwipeLeft = { onDismiss(f) },
+                            ) {
+                                CharacterTile(f.char) { onOpenCharacter(f.glyphId) }
+                            }
+                        }
+                    }
                 }
             }
         }
         if (recentlyViewed.isNotEmpty()) {
-            item(key = "recent-header") {
-                SectionTitle("Recently viewed")
-            }
-            items(recentlyViewed, key = { "recent-${it.glyphId}" }) { r ->
-                ItemRow(
-                    text = r.char,
-                    pinyin = r.primaryPinyin,
-                    gloss = null,
-                    onClick = { onOpenCharacter(r.glyphId) },
-                )
-                HorizontalDivider()
+            stickyHeader(key = "recent-header") { FeedHeader("Recently viewed") }
+            if (showDefinitions) {
+                items(recentlyViewed, key = { "recent-${it.glyphId}" }) { r ->
+                    ItemRow(
+                        text = r.char,
+                        pinyin = r.primaryPinyin,
+                        gloss = r.definition?.let { displayGloss(it) },
+                        glossLines = 1,
+                        onClick = { onOpenCharacter(r.glyphId) },
+                    )
+                    HorizontalDivider()
+                }
+            } else {
+                // No swipe verbs here: this section is a way back to what you were reading,
+                // not a queue to triage.
+                items(
+                    recentlyViewed.chunked(FEED_COLUMNS),
+                    key = { "recent-${it.first().glyphId}" },
+                ) { row ->
+                    TileRow(row) { r -> CharacterTile(r.char) { onOpenCharacter(r.glyphId) } }
+                }
             }
         }
         item(key = "hint") {
@@ -470,6 +541,46 @@ private fun PhotoFeed(
                 )
                 Spacer(Modifier.height(24.dp))
             }
+        }
+    }
+}
+
+/** A pinned section header. Opaque on purpose — a transparent sticky header lets the tiles
+ * scroll through the title behind it. */
+@Composable
+private fun FeedHeader(title: String, actions: @Composable RowScope.() -> Unit = {}) {
+    Row(
+        Modifier.fillMaxWidth()
+            .background(androidx.compose.material3.MaterialTheme.colorScheme.background)
+            .padding(top = 6.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SectionTitle(title)
+        Spacer(Modifier.weight(1f))
+        actions()
+    }
+}
+
+/** One row of the tile grid, padded out so a short last row's tiles keep their size instead
+ * of stretching to fill the width. */
+@Composable
+private fun <T> TileRow(items: List<T>, tile: @Composable (T) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        for (item in items) Box(Modifier.weight(1f)) { tile(item) }
+        repeat(FEED_COLUMNS - items.size) { Spacer(Modifier.weight(1f)) }
+    }
+}
+
+/** A character on its own — the whole tile. Square so the grid reads as a grid. */
+@Composable
+private fun CharacterTile(char: String, onClick: () -> Unit) {
+    Card(Modifier.fillMaxWidth().aspectRatio(1f).clickable(onClick = onClick)) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(char, fontSize = 30.sp)
         }
     }
 }

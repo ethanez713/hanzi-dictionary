@@ -26,8 +26,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -254,6 +257,124 @@ fun SwipeCard(
                     }
                 },
         ) { content() }
+    }
+}
+
+/** Fraction of the screen's width a grid tile must travel before its action will fire. See
+ * [SwipeTile] for why it's this far. */
+private const val TILE_COMMIT_FRACTION = 0.42f
+
+/**
+ * A grid tile that fires [onSwipeRight]/[onSwipeLeft] only once dragged nearly halfway
+ * across the screen — a deliberately expensive gesture.
+ *
+ * [SwipeRow]'s 88dp threshold is right for a full-width row you're reading one at a time,
+ * but wrong for a dense grid: the tiles are small, they sit shoulder to shoulder, and one of
+ * the two actions files something into a study list while the other takes it out of the
+ * feed. A flick that costs 88dp is a flick you make by accident while scrolling.
+ *
+ * The three guards, which are the standard ones for a destructive-ish swipe:
+ *   - **distance** — the tile has to cross most of the screen, which no scroll gesture does;
+ *   - **haptics** — a tick the moment the action arms, so you feel the commit point *before*
+ *     lifting your finger and can still back out by dragging back;
+ *   - **visible state** — the tile tints toward the action's colour as it travels and only
+ *     shows the action's icon once armed, so "will this fire?" is never a guess.
+ *
+ * Undo (the caller's snackbar) is the fourth. Vertical scrolling is untouched: this reads
+ * horizontal drags only.
+ */
+@Composable
+fun SwipeTile(
+    key: Any?,
+    rightAction: SwipeAction? = null,
+    leftAction: SwipeAction? = null,
+    onSwipeRight: (() -> Unit)? = null,
+    onSwipeLeft: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val offset = remember { Animatable(0f) }
+    val haptics = LocalHapticFeedback.current
+    val threshold = with(LocalDensity.current) {
+        (LocalConfiguration.current.screenWidthDp * TILE_COMMIT_FRACTION).dp.toPx()
+    }
+    val right by rememberUpdatedState(onSwipeRight)
+    val left by rememberUpdatedState(onSwipeLeft)
+
+    // A new tile in this slot starts centred — otherwise a dismissed find leaves the next
+    // one already half-dragged.
+    LaunchedEffect(key) { offset.snapTo(0f) }
+
+    val travelled = abs(offset.value)
+    val armed = travelled >= threshold
+    // Fires on the false -> true edge only, which is exactly the moment worth announcing.
+    LaunchedEffect(armed) {
+        if (armed) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+    }
+
+    val actions = buildList {
+        if (right != null && rightAction != null) {
+            add(CustomAccessibilityAction(rightAction.label) { right?.invoke(); true })
+        }
+        if (left != null && leftAction != null) {
+            add(CustomAccessibilityAction(leftAction.label) { left?.invoke(); true })
+        }
+    }
+
+    Box(modifier.semantics { customActions = actions }) {
+        val hint = if (offset.value > 0) rightAction else leftAction
+        Box(
+            Modifier
+                .graphicsLayer {
+                    translationX = offset.value
+                    // Lifting the tile as it travels separates it from the grid it's
+                    // leaving, so a long drag looks intentional rather than like a glitch.
+                    val lift = 1f + 0.08f * (travelled / threshold).coerceIn(0f, 1f)
+                    scaleX = lift
+                    scaleY = lift
+                    rotationZ = (offset.value / 60f).coerceIn(-10f, 10f)
+                }
+                .pointerInput(key) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            val fired = when {
+                                offset.value >= threshold -> right
+                                offset.value <= -threshold -> left
+                                else -> null
+                            }
+                            fired?.invoke()
+                            scope.launch { offset.animateTo(0f, tween(220)) }
+                        },
+                        onDragCancel = { scope.launch { offset.animateTo(0f, tween(220)) } },
+                    ) { change, dragAmount ->
+                        val allowed = when {
+                            dragAmount > 0 && right == null -> 0f
+                            dragAmount < 0 && left == null -> 0f
+                            else -> dragAmount
+                        }
+                        if (allowed != 0f) {
+                            change.consume()
+                            scope.launch { offset.snapTo(offset.value + allowed) }
+                        }
+                    }
+                },
+        ) {
+            content()
+            if (hint != null && travelled > 0f) {
+                val progress = (travelled / threshold).coerceIn(0f, 1f)
+                Box(
+                    Modifier.matchParentSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(hint.color.copy(alpha = 0.12f + 0.55f * progress)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // The icon appearing *is* the "you've gone far enough" signal, so it
+                    // shows only once armed rather than fading in the whole way.
+                    if (armed) Text(hint.icon, color = Color.White, fontSize = 26.sp)
+                }
+            }
+        }
     }
 }
 
