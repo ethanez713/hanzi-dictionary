@@ -516,7 +516,7 @@ private fun PhotoFeed(
                         if (showDefinitions) {
                             "Swipe right to add to $destination, left to remove."
                         } else {
-                            "Drag a character across the screen — right adds it to " +
+                            "Drag a character to the edge of the screen — right adds it to " +
                                 "$destination, left removes it."
                         },
                         fontSize = 12.sp,

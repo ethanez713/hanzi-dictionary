@@ -3,6 +3,8 @@ package com.hanzidictionary.app.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -200,6 +202,7 @@ fun ListSheet(
  * replaced "I know this" as the default action, since filing something to study is the
  * common case and archiving is the rare one), plus a state chip once it's archived.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun StudyActionRow(item: StudyItem, label: String, trailing: @Composable (() -> Unit)? = null) {
     val context = LocalContext.current
@@ -218,9 +221,12 @@ fun StudyActionRow(item: StudyItem, label: String, trailing: @Composable (() -> 
         listCount = state.second
     }
 
-    Row(
+    // FlowRow, not Row: a screen can hang two drawers off [trailing], and with an archived
+    // item's "✓ Known" beside them that overflows a phone's width — wrapping is better than
+    // a clipped control.
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Button(onClick = { sheetOpen = true }) {
             Text(
@@ -236,6 +242,7 @@ fun StudyActionRow(item: StudyItem, label: String, trailing: @Composable (() -> 
                 "✓ Known",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterVertically),
             )
         }
         trailing?.invoke()

@@ -17,9 +17,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +30,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -63,6 +67,25 @@ val RemoveAction = SwipeAction("Remove", "✕", Color(0xFFC62828))
 // red/green axis, and rides the vertical direction the left/right grammar leaves free.
 val SkipAction = SwipeAction("Skip", "↑", Color(0xFF9E9E9E))
 
+/** How much of the room a finger has left — from where it went down to that edge of the
+ * screen — counts as "dragged to the edge". Under 1 because a drag ends the instant the
+ * finger leaves the glass, so the last few dp at the bezel are never actually delivered. */
+private const val EDGE_FRACTION = 0.8f
+
+/**
+ * How far a drag has to travel to commit, given the [base] distance the gesture asks for and
+ * how much room ([available]) the finger has between where it went down and the edge it's
+ * heading for.
+ *
+ * A flat threshold is unreachable whenever the grab starts near that edge: a tile in the last
+ * column of the photo grid already sits ~90% of the way across the screen, so its
+ * 42%-of-screen commit distance ran off the glass and the action could *never* fire — the
+ * drag just ended when the finger did. Once the room runs short the gesture becomes "drag it
+ * to the edge", which is always reachable.
+ */
+private fun commitDistance(base: Float, available: Float): Float =
+    minOf(base, available * EDGE_FRACTION)
+
 /**
  * A list row that fires [onSwipeRight]/[onSwipeLeft] once dragged past a threshold, then
  * springs back. Either action may be null, in which case that direction resists.
@@ -80,7 +103,15 @@ fun SwipeRow(
 ) {
     val scope = rememberCoroutineScope()
     val offset = remember { Animatable(0f) }
-    val threshold = with(LocalDensity.current) { 88.dp.toPx() }
+    val base = with(LocalDensity.current) { 88.dp.toPx() }
+    val screenWidth = with(LocalDensity.current) {
+        LocalConfiguration.current.screenWidthDp.dp.toPx()
+    }
+    // Where this row sits in the window, so the drag below knows how much screen it has to
+    // work with on each side of the point the finger went down.
+    var originX by remember { mutableFloatStateOf(0f) }
+    var rightThreshold by remember { mutableFloatStateOf(base) }
+    var leftThreshold by remember { mutableFloatStateOf(base) }
     val right by rememberUpdatedState(onSwipeRight)
     val left by rememberUpdatedState(onSwipeLeft)
 
@@ -93,12 +124,17 @@ fun SwipeRow(
         }
     }
 
-    Box(Modifier.fillMaxWidth().semantics { customActions = actions }) {
+    Box(
+        Modifier.fillMaxWidth()
+            .semantics { customActions = actions }
+            .onGloballyPositioned { originX = it.positionInWindow().x },
+    ) {
         // The action behind the row, revealed proportionally to the drag so the gesture
         // explains itself the first time rather than needing a tutorial.
         val revealed = if (offset.value > 0) rightAction else leftAction
         if (revealed != null && offset.value != 0f) {
-            val progress = (abs(offset.value) / threshold).coerceIn(0f, 1f)
+            val goal = if (offset.value > 0) rightThreshold else leftThreshold
+            val progress = (abs(offset.value) / goal).coerceIn(0f, 1f)
             Row(
                 Modifier.matchParentSize()
                     .clip(RoundedCornerShape(8.dp))
@@ -123,10 +159,15 @@ fun SwipeRow(
                 // mid-drag. rememberUpdatedState keeps the reads below current instead.
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
+                        onDragStart = { start ->
+                            val x = originX + start.x
+                            rightThreshold = commitDistance(base, screenWidth - x)
+                            leftThreshold = commitDistance(base, x)
+                        },
                         onDragEnd = {
                             val fired = when {
-                                offset.value >= threshold -> right
-                                offset.value <= -threshold -> left
+                                offset.value >= rightThreshold -> right
+                                offset.value <= -leftThreshold -> left
                                 else -> null
                             }
                             fired?.invoke()
@@ -280,7 +321,8 @@ private const val TILE_COMMIT_FRACTION = 0.42f
 
 /**
  * A grid tile that fires [onSwipeRight]/[onSwipeLeft] only once dragged nearly halfway
- * across the screen — a deliberately expensive gesture.
+ * across the screen — or, when it starts too close to that edge for half a screen to exist,
+ * once dragged to the edge (see [commitDistance]) — a deliberately expensive gesture.
  *
  * [SwipeRow]'s 88dp threshold is right for a full-width row you're reading one at a time,
  * but wrong for a dense grid: the tiles are small, they sit shoulder to shoulder, and one of
@@ -288,7 +330,8 @@ private const val TILE_COMMIT_FRACTION = 0.42f
  * feed. A flick that costs 88dp is a flick you make by accident while scrolling.
  *
  * The three guards, which are the standard ones for a destructive-ish swipe:
- *   - **distance** — the tile has to cross most of the screen, which no scroll gesture does;
+ *   - **distance** — the tile has to cross most of the screen it can reach, which no scroll
+ *     gesture does;
  *   - **haptics** — a tick the moment the action arms, so you feel the commit point *before*
  *     lifting your finger and can still back out by dragging back;
  *   - **visible state** — the tile tints toward the action's colour as it travels and only
@@ -310,9 +353,17 @@ fun SwipeTile(
     val scope = rememberCoroutineScope()
     val offset = remember { Animatable(0f) }
     val haptics = LocalHapticFeedback.current
-    val threshold = with(LocalDensity.current) {
-        (LocalConfiguration.current.screenWidthDp * TILE_COMMIT_FRACTION).dp.toPx()
+    val screenWidth = with(LocalDensity.current) {
+        LocalConfiguration.current.screenWidthDp.dp.toPx()
     }
+    val base = screenWidth * TILE_COMMIT_FRACTION
+    // Where this tile sits in the window. A tile in the last column starts most of the way
+    // across the screen, so how far its drag can go depends entirely on this.
+    var originX by remember { mutableFloatStateOf(0f) }
+    // Per-direction commit distances, fixed at the moment the finger goes down (that point,
+    // not the tile's own edge, is what limits the drag).
+    var rightThreshold by remember { mutableFloatStateOf(base) }
+    var leftThreshold by remember { mutableFloatStateOf(base) }
     val right by rememberUpdatedState(onSwipeRight)
     val left by rememberUpdatedState(onSwipeLeft)
 
@@ -321,6 +372,7 @@ fun SwipeTile(
     LaunchedEffect(key) { offset.snapTo(0f) }
 
     val travelled = abs(offset.value)
+    val threshold = if (offset.value < 0) leftThreshold else rightThreshold
     val armed = travelled >= threshold
     // Fires on the false -> true edge only, which is exactly the moment worth announcing.
     LaunchedEffect(armed) {
@@ -336,7 +388,11 @@ fun SwipeTile(
         }
     }
 
-    Box(modifier.semantics { customActions = actions }) {
+    Box(
+        modifier
+            .semantics { customActions = actions }
+            .onGloballyPositioned { originX = it.positionInWindow().x },
+    ) {
         val hint = if (offset.value > 0) rightAction else leftAction
         Box(
             Modifier
@@ -351,10 +407,15 @@ fun SwipeTile(
                 }
                 .pointerInput(key) {
                     detectHorizontalDragGestures(
+                        onDragStart = { start ->
+                            val x = originX + start.x
+                            rightThreshold = commitDistance(base, screenWidth - x)
+                            leftThreshold = commitDistance(base, x)
+                        },
                         onDragEnd = {
                             val fired = when {
-                                offset.value >= threshold -> right
-                                offset.value <= -threshold -> left
+                                offset.value >= rightThreshold -> right
+                                offset.value <= -leftThreshold -> left
                                 else -> null
                             }
                             fired?.invoke()

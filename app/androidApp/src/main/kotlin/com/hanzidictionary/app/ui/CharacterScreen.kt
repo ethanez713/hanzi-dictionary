@@ -36,6 +36,7 @@ import com.hanzidictionary.app.audio.MandarinTts
 import androidx.compose.ui.text.style.TextOverflow
 import com.hanzidictionary.core.CharacterPage
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.LookAlike
 import com.hanzidictionary.core.ReadingView
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
@@ -68,6 +69,13 @@ fun CharacterScreen(
     LaunchedEffect(glyphId) {
         withContext(Dispatchers.IO) { userRepository.logLookup(glyphId) }
     }
+    // Look-alikes are loaded beside the page rather than as part of it: they're a study aid
+    // you reach for, not part of the definition, and loading them separately keeps them off
+    // the path that decides how fast the page itself paints. Loaded eagerly all the same, so
+    // the button can stay off the row entirely when there's nothing behind it.
+    val lookAlikes by produceState(emptyList<LookAlike>(), glyphId) {
+        value = withContext(Dispatchers.IO) { repository.lookAlikesForGlyphs(listOf(glyphId)) }
+    }
 
     Scaffold(
         topBar = {
@@ -94,19 +102,27 @@ fun CharacterScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Header(p, tts)
-            // One compact row for both controls: the study action — "Add to list", the
-            // common case, with archiving tucked inside its sheet (spec §17) — and the
-            // reference-data drawer. Stacked, these two burned a whole screen row each.
+            // One compact row for all three controls: the study action — "Add to list", the
+            // common case, with archiving tucked inside its sheet (spec §17) — the look-alike
+            // drawer, and the reference-data drawer. Stacked, these burned a whole screen row
+            // each.
             var showDetails by remember { mutableStateOf(false) }
+            var showLookAlikes by remember(glyphId) { mutableStateOf(false) }
             StudyActionRow(
                 item = StudyItem.character(glyphId),
                 label = p.char,
                 trailing = {
+                    if (lookAlikes.isNotEmpty()) {
+                        TextButton(onClick = { showLookAlikes = !showLookAlikes }) {
+                            Text(if (showLookAlikes) "Hide look-alikes ▴" else "Look-alikes ▾")
+                        }
+                    }
                     TextButton(onClick = { showDetails = !showDetails }) {
                         Text(if (showDetails) "Hide details ▴" else "Details ▾")
                     }
                 },
             )
+            if (showLookAlikes) LookAlikes(lookAlikes, onOpenCharacter)
             if (showDetails) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -130,7 +146,6 @@ fun CharacterScreen(
             SoundLine(p)
             Formation(p)
             if (p.variants.isNotEmpty()) ScriptMapping(p, onOpenCharacter)
-            if (p.confusables.isNotEmpty()) Confusables(p, onOpenCharacter)
             Provenance(p)
         }
     }
@@ -442,23 +457,27 @@ private fun ScriptMapping(p: CharacterPage, onOpenCharacter: (String) -> Unit) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * The characters this one actually gets mixed up with: the pack's visually-confusable pairs
+ * (妹/妺) first, then phonetic-series siblings (请/清/晴/情 all carry 青), each with the pinyin
+ * and gloss that make the difference stick. Same rows as the word page's look-alike section
+ * and the photo feed, each opening its own character page.
+ *
+ * Behind a button rather than always on the page — a dozen near-identical characters is the
+ * single densest thing here, and it's a *comparison* you go looking for, not something to
+ * meet on the way down to the components.
+ */
 @Composable
-private fun Confusables(p: CharacterPage, onOpenCharacter: (String) -> Unit) {
-    SectionTitle("Easily confused with")
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (c in p.confusables) {
-            Card(Modifier.clickable { onOpenCharacter(c.glyphId) }) {
-                Row(
-                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(p.char, fontSize = 28.sp)
-                    Text("vs", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(c.char, fontSize = 28.sp)
-                }
-            }
+private fun LookAlikes(items: List<LookAlike>, onOpenCharacter: (String) -> Unit) {
+    Column {
+        for (la in items) {
+            ItemRow(
+                text = la.char,
+                pinyin = la.pinyin,
+                gloss = la.gloss,
+                glossLines = 1,
+                onClick = { onOpenCharacter(la.glyphId) },
+            )
         }
     }
 }

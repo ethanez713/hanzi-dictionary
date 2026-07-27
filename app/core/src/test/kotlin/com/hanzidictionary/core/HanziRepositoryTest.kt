@@ -360,6 +360,21 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun singleCharacterLookAlikesLeadWithVisualConfusables() {
+        // What the character page's look-alike drawer serves: the spoofing variant 妺 ahead
+        // of any series sibling, and never the character you're already looking at.
+        val mei = "U+59B9"   // 妹
+        val out = repo.lookAlikesForGlyphs(listOf(mei))
+        assertEquals("妺", out.first().char, "妹's visual confusable should lead, got ${out.map { it.char }}")
+        assertTrue(out.none { it.glyphId == mei }, "the character itself is not its own look-alike")
+
+        // A character with no confusable still gets its phonetic-series siblings.
+        val qing = repo.lookAlikesForGlyphs(listOf("U+8BF7"))   // 请
+        assertTrue(qing.any { it.char == "清" || it.char == "情" }, "请 should list its 青 series")
+        assertTrue(qing.all { it.pinyin != null }, "each look-alike carries the reading that tells it apart")
+    }
+
+    @Test
     fun composeSearchIntersectsComponents() {
         val results = repo.composeSearch(listOf("氵", "青"))
         assertTrue(results.any { it.char == "清" }, "氵+青 should find 清, got ${results.map { it.char }}")
