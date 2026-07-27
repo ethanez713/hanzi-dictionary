@@ -38,9 +38,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -153,25 +151,6 @@ fun SearchScreen(
         activeListName = loaded.first
         activeSource = loaded.second
     }
-    fun fileAway(item: StudyItem, label: String) {
-        scope.launch {
-            val list = withContext(Dispatchers.IO) {
-                app.studyRepository.ensureActiveList().also {
-                    app.studyRepository.addToList(it.id, item)
-                }
-            }
-            listRefresh++
-            PracticeWidgetUpdater.refresh(context)
-            val result = snackbar.showSnackbar("Added $label to ${list.name}", actionLabel = "Undo")
-            if (result == SnackbarResult.ActionPerformed) {
-                withContext(Dispatchers.IO) {
-                    app.studyRepository.removeFromList(list.id, item.itemId)
-                }
-                PracticeWidgetUpdater.refresh(context)
-            }
-        }
-    }
-
     // "From your photos": kick the (watermark-deduped) scan off immediately so the search
     // box is usable while OCR runs; null = still scanning. Re-entering with no new photos
     // costs one MediaStore metadata query and zero OCR.
@@ -212,15 +191,38 @@ fun SearchScreen(
         }
     }
 
-    // Swipe-left removes a triaged character from the photo feed (already filed to a list, or
-    // looked up and discarded), keeping the feed to newly-imported words. An Undo restores it;
-    // re-photographing the character brings it back regardless.
+    // Filing a character into the active list also takes it out of the photo feed: that feed
+    // is a triage queue, and a character you've saved is triaged. The row disappears here
+    // immediately; `recentPhotoFinds` keeps it out on every later load (and would drop it just
+    // the same had it been filed from its own page). Undo puts both halves back.
+    fun fileAway(item: StudyItem, label: String) {
+        scope.launch {
+            val list = withContext(Dispatchers.IO) {
+                app.studyRepository.ensureActiveList().also {
+                    app.studyRepository.addToList(it.id, item)
+                }
+            }
+            photoFinds = photoFinds?.filterNot { it.glyphId == item.itemId }
+            listRefresh++
+            PracticeWidgetUpdater.refresh(context)
+            if (snackbar.snack("Added $label to ${list.name}", action = "Undo")) {
+                withContext(Dispatchers.IO) {
+                    app.studyRepository.removeFromList(list.id, item.itemId)
+                }
+                photoFinds = loadPhotoFinds()
+                PracticeWidgetUpdater.refresh(context)
+            }
+        }
+    }
+
+    // Swipe-left removes a character from the photo feed without saving it — looked up and
+    // discarded, or simply not worth studying. An Undo restores it; re-photographing the
+    // character brings it back regardless.
     fun dismiss(find: SearchResult) {
         scope.launch {
             val ts = withContext(Dispatchers.IO) { app.userRepository.dismissPhotoWord(find.glyphId) }
             photoFinds = photoFinds?.filterNot { it.glyphId == find.glyphId }
-            val result = snackbar.showSnackbar("Removed ${find.char}", actionLabel = "Undo")
-            if (result == SnackbarResult.ActionPerformed) {
+            if (snackbar.snack("Removed ${find.char}", action = "Undo")) {
                 withContext(Dispatchers.IO) { app.userRepository.undismissPhotoWord(find.glyphId, ts) }
                 photoFinds = loadPhotoFinds()
             }
@@ -252,7 +254,7 @@ fun SearchScreen(
     }.value
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { AppSnackbarHost(snackbar) },
         // Practice is always one tap away, even once the due card has scrolled off the top.
         // It reads "Practice" rather than a due count on purpose: a number that follows you
         // down the screen is a nag, and the home screen shouldn't be keeping score. The
@@ -324,7 +326,7 @@ fun SearchScreen(
                     deckRefresh = listRefresh,
                     onOpenWord = onOpenWord,
                     onArchived = { label ->
-                        scope.launch { snackbar.showSnackbar("Archived $label") }
+                        scope.launch { snackbar.snack("Archived $label") }
                     },
                     onUseClipboard = { onQueryChange(it) },
                     onAllow = { permissionLauncher.launch(photoPermission) },

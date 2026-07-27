@@ -123,6 +123,29 @@ class PhotoScannerTest {
     }
 
     @Test
+    fun savingAWordToAListTakesItOutOfTheFeed() {
+        // The feed is a triage queue: filing a character is dealing with it, whichever screen
+        // the filing happened on, so it leaves the feed without needing its own dismissal.
+        val study = StudyRepository(driver, Fsrs(enableFuzz = false))
+        scan(listOf(PhotoRef("p1", 1000)), mapOf("p1" to "请"))
+        val listId = study.createList("Signs I saw", 1000)
+        study.addToList(listId, StudyItem.character(qing), 1000)
+        assertTrue(user.recentPhotoFinds().none { it.glyphId == qing }, "saved word still in the feed")
+
+        // Un-saving puts it back in the queue — it's untriaged again, and no dismissal was
+        // ever recorded to keep it hidden.
+        study.removeFromList(listId, qing)
+        assertTrue(user.recentPhotoFinds().any { it.glyphId == qing }, "un-saved word did not return")
+    }
+
+    @Test
+    fun archivingAWordAsKnownTakesItOutOfTheFeed() {
+        scan(listOf(PhotoRef("p1", 1000)), mapOf("p1" to "请"))
+        user.setKnown(qing, true, StudyItem.KIND_CHARACTER)
+        assertTrue(user.recentPhotoFinds().none { it.glyphId == qing }, "archived word still in the feed")
+    }
+
+    @Test
     fun oldDismissalsAreGarbageCollectedSoUndoCanNoLongerRestore() {
         scan(listOf(PhotoRef("p1", 1000)), mapOf("p1" to "请"))
         val ts = user.dismissPhotoWord(qing, ts = 5000)

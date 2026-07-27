@@ -19,9 +19,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -104,8 +102,7 @@ fun ListDetailScreen(
             }
             refresh++
             PracticeWidgetUpdater.refresh(context)
-            val result = snackbar.showSnackbar("Archived ${summary.text}", actionLabel = "Undo")
-            if (result == SnackbarResult.ActionPerformed) {
+            if (snackbar.snack("Archived ${summary.text}", action = "Undo")) {
                 withContext(Dispatchers.IO) {
                     app.userRepository.setKnown(summary.item.itemId, false, summary.item.kind)
                 }
@@ -122,8 +119,7 @@ fun ListDetailScreen(
             }
             refresh++
             PracticeWidgetUpdater.refresh(context)
-            val result = snackbar.showSnackbar("Removed ${summary.text}", actionLabel = "Undo")
-            if (result == SnackbarResult.ActionPerformed) {
+            if (snackbar.snack("Removed ${summary.text}", action = "Undo")) {
                 withContext(Dispatchers.IO) {
                     app.studyRepository.addToList(listId, summary.item)
                 }
@@ -134,7 +130,7 @@ fun ListDetailScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { AppSnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(name.ifBlank { "List" }) },

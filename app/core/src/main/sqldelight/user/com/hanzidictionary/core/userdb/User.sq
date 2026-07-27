@@ -125,9 +125,16 @@ INSERT OR REPLACE INTO scan_state(id, last_photo_timestamp) VALUES (0, ?);
 insertPhotoFind:
 INSERT INTO photo_find(glyph_id, photo_id, found_at) VALUES (?, ?, ?);
 
+-- The feed is a TRIAGE queue, so anything already dealt with leaves it: an explicit
+-- dismissal, filing the character into any study list, or archiving it as known. Doing
+-- this here rather than at each mutation site means every route out — the feed's own
+-- swipe, the character page's list sheet, the widget — clears the character, and taking
+-- it back out of your lists puts it back in the queue where it belongs.
 recentPhotoFinds:
 SELECT glyph_id, MAX(found_at) AS found_at FROM photo_find
 WHERE dismissed_at IS NULL
+  AND glyph_id NOT IN (SELECT item_id FROM list_item)
+  AND glyph_id NOT IN (SELECT item_id FROM known_item WHERE status = 'known')
 GROUP BY glyph_id ORDER BY found_at DESC LIMIT :limit;
 
 -- Triage a character out of the feed: mark all its live finds dismissed at :ts.

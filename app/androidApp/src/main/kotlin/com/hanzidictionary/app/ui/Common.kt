@@ -15,6 +15,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -65,6 +70,40 @@ fun HomeButton(onHome: () -> Unit) {
 fun SectionTitle(text: String) {
     Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
 }
+
+/**
+ * The app's snackbar host. Two Material defaults are wrong for what this app uses snackbars
+ * for, and both were visible bugs:
+ *
+ *  - the default container is `inverseSurface` — in a dark theme a near-white slab that
+ *    reads as another app's UI dropped onto this one. A raised surface from the *current*
+ *    scheme belongs to the page it covers;
+ *  - `showSnackbar` with an action label defaults to [SnackbarDuration.Indefinite], so an
+ *    Undo bar never left on its own. On the photo feed it then sat over the tiles still
+ *    being triaged. [snack] below is the only way these are raised, so it can't come back.
+ */
+@Composable
+fun AppSnackbarHost(state: SnackbarHostState) {
+    SnackbarHost(state) { data ->
+        Snackbar(
+            snackbarData = data,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            actionColor = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+/**
+ * Show [message], optionally offering [action]; returns true when the action was tapped.
+ *
+ * Always short: every one of these bars reports something that already happened, and the
+ * action is only ever the undo for it. Undo has a deadline in any case — a few seconds after
+ * a swipe you have moved on, and the bar is just occluding the next thing you're triaging.
+ */
+suspend fun SnackbarHostState.snack(message: String, action: String? = null): Boolean =
+    showSnackbar(message, actionLabel = action, duration = SnackbarDuration.Short) ==
+        SnackbarResult.ActionPerformed
 
 /** Corpus-frequency rank at/under which an item earns a "Common" badge on its page (rank
  * 1 = most frequent). Roughly the everyday-vocabulary band a beginner should prioritize. */

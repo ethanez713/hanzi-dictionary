@@ -30,9 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -184,11 +182,7 @@ fun PracticeScreen(
             // Archiving drops an item out of every list's practice for good, and it now
             // lives behind a menu instead of a button with a warning under it — so the
             // safety net moved to an Undo, the same one the list screens offer.
-            val result = snackbar.showSnackbar(
-                "Archived $label — out of practice everywhere",
-                actionLabel = "Undo",
-            )
-            if (result == SnackbarResult.ActionPerformed) {
+            if (snackbar.snack("Archived $label — out of practice everywhere", action = "Undo")) {
                 withContext(Dispatchers.IO) {
                     app.userRepository.setKnown(entry.item.itemId, false, entry.item.kind)
                 }
@@ -208,7 +202,7 @@ fun PracticeScreen(
     if (showInfo) GradingInfoDialog(onDismiss = { showInfo = false })
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { AppSnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 // The deck's source (list name / HSK band / "Recently encountered") lives up
