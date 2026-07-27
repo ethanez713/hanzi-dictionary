@@ -71,9 +71,9 @@ fun CharacterScreen(
     }
     // Look-alikes are loaded beside the page rather than as part of it: they're a study aid
     // you reach for, not part of the definition, and loading them separately keeps them off
-    // the path that decides how fast the page itself paints. Loaded eagerly all the same, so
-    // the button can stay off the row entirely when there's nothing behind it.
-    val lookAlikes by produceState(emptyList<LookAlike>(), glyphId) {
+    // the path that decides how fast the page itself paints. null = not loaded yet, so an
+    // empty drawer can say "none" without saying it during the query.
+    val lookAlikes by produceState<List<LookAlike>?>(null, glyphId) {
         value = withContext(Dispatchers.IO) { repository.lookAlikesForGlyphs(listOf(glyphId)) }
     }
 
@@ -112,17 +112,19 @@ fun CharacterScreen(
                 item = StudyItem.character(glyphId),
                 label = p.char,
                 trailing = {
-                    if (lookAlikes.isNotEmpty()) {
-                        TextButton(onClick = { showLookAlikes = !showLookAlikes }) {
-                            Text(if (showLookAlikes) "Hide look-alikes ▴" else "Look-alikes ▾")
-                        }
+                    // Always on the row, even for the many characters the pack has no
+                    // look-alikes for: a control that comes and goes by character can't be
+                    // learned, and "nothing looks like this one" is itself worth being able
+                    // to ask for. The drawer says so rather than the button vanishing.
+                    TextButton(onClick = { showLookAlikes = !showLookAlikes }) {
+                        Text(if (showLookAlikes) "Hide look-alikes ▴" else "Look-alikes ▾")
                     }
                     TextButton(onClick = { showDetails = !showDetails }) {
                         Text(if (showDetails) "Hide details ▴" else "Details ▾")
                     }
                 },
             )
-            if (showLookAlikes) LookAlikes(lookAlikes, onOpenCharacter)
+            if (showLookAlikes) LookAlikes(lookAlikes, p.char, onOpenCharacter)
             if (showDetails) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -468,16 +470,34 @@ private fun ScriptMapping(p: CharacterPage, onOpenCharacter: (String) -> Unit) {
  * meet on the way down to the components.
  */
 @Composable
-private fun LookAlikes(items: List<LookAlike>, onOpenCharacter: (String) -> Unit) {
-    Column {
-        for (la in items) {
-            ItemRow(
-                text = la.char,
-                pinyin = la.pinyin,
-                gloss = la.gloss,
-                glossLines = 1,
-                onClick = { onOpenCharacter(la.glyphId) },
-            )
+private fun LookAlikes(items: List<LookAlike>?, char: String, onOpenCharacter: (String) -> Unit) {
+    when {
+        items == null -> Text(
+            "Loading…",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Coverage honesty (spec §6), and a real answer to the question asked: most of the
+        // commonest characters — 我, 你, 好, 大 — are single units or associative compounds
+        // with no phonetic series to sit in and no confusable on record. That's a fact about
+        // the character, not a gap to paper over with a hidden button.
+        items.isEmpty() -> Text(
+            "Nothing in the pack is easily confused with $char: it has no listed look-alike " +
+                "and no phonetic series to share.",
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        else -> Column {
+            for (la in items) {
+                ItemRow(
+                    text = la.char,
+                    pinyin = la.pinyin,
+                    gloss = la.gloss,
+                    glossLines = 1,
+                    onClick = { onOpenCharacter(la.glyphId) },
+                )
+            }
         }
     }
 }
