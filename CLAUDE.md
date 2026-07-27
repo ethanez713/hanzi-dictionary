@@ -56,6 +56,11 @@ fully replaces the old one.
   venv active from `pipeline/`: `python -m pipeline.build && python -m pipeline.package`, and
   copy the output over the bundled assets:
   `cp data/build/{core,ids}.db ../app/androidApp/src/main/assets/`.
+- **Stop the Gradle/Kotlin daemons before rebuilding the pack** (`app/gradlew -p app --stop`;
+  `pkill -f KotlinCompileDaemon`). The build peaks around 2.5 GB and this box has 6.6 GB —
+  with the daemons resident it gets OOM-killed, and the kill is *silent* under a pipe, so
+  `package` will happily reship the previous `hanzi.db`. If a rebuild seems to change
+  nothing, that's what happened: check the build actually printed its row counts.
 - **`app/androidApp/src/main/assets/*.db` are GITIGNORED** (rebuild them, don't commit them).
 - After changing pack *content or schema*, **bump `BUNDLED_PACK_VERSION` in `PackManager.kt`**
   so installed apps re-copy it. (Currently 10.)
