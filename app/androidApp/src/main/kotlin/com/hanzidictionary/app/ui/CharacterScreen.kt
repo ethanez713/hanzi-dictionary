@@ -74,7 +74,7 @@ fun CharacterScreen(
     // the path that decides how fast the page itself paints. null = not loaded yet, so an
     // empty drawer can say "none" without saying it during the query.
     val lookAlikes by produceState<List<LookAlike>?>(null, glyphId) {
-        value = withContext(Dispatchers.IO) { repository.lookAlikesForGlyphs(listOf(glyphId)) }
+        value = withContext(Dispatchers.IO) { repository.visualLookAlikes(glyphId) }
     }
 
     Scaffold(
@@ -460,10 +460,14 @@ private fun ScriptMapping(p: CharacterPage, onOpenCharacter: (String) -> Unit) {
 }
 
 /**
- * The characters this one actually gets mixed up with: the pack's visually-confusable pairs
- * (妹/妺) first, then phonetic-series siblings (请/清/晴/情 all carry 青), each with the pinyin
- * and gloss that make the difference stick. Same rows as the word page's look-alike section
- * and the photo feed, each opening its own character page.
+ * The characters this one actually gets mixed up with **by sight** — 己/已/巴, 未/木/末 — most
+ * common first, each with the pinyin and gloss that make the difference stick. Same rows as
+ * the word page's look-alike section and the photo feed, each opening its own character page.
+ *
+ * Visual only: the pack's `confusable` table, never the phonetic series. Two characters
+ * sharing 青 sound alike, which is a different question from this one and was answering it
+ * with characters that look nothing like each other. (The word page still shows both — with
+ * several characters in play, every kind of trap is worth naming.)
  *
  * Behind a button rather than always on the page — a dozen near-identical characters is the
  * single densest thing here, and it's a *comparison* you go looking for, not something to
@@ -477,13 +481,11 @@ private fun LookAlikes(items: List<LookAlike>?, char: String, onOpenCharacter: (
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        // Coverage honesty (spec §6), and a real answer to the question asked: most of the
-        // commonest characters — 我, 你, 好, 大 — are single units or associative compounds
-        // with no phonetic series to sit in and no confusable on record. That's a fact about
-        // the character, not a gap to paper over with a hidden button.
+        // Coverage honesty (spec §6), and a real answer to the question asked: plenty of
+        // characters — 我, 说, 请 — have no near-twin at all. That's a fact about the
+        // character, not a gap to paper over by hiding the button.
         items.isEmpty() -> Text(
-            "Nothing in the pack is easily confused with $char: it has no listed look-alike " +
-                "and no phonetic series to share.",
+            "No character in the pack is shaped confusably like $char.",
             fontSize = 13.sp,
             lineHeight = 18.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

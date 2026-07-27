@@ -58,7 +58,7 @@ fully replaces the old one.
   `cp data/build/{core,ids}.db ../app/androidApp/src/main/assets/`.
 - **`app/androidApp/src/main/assets/*.db` are GITIGNORED** (rebuild them, don't commit them).
 - After changing pack *content or schema*, **bump `BUNDLED_PACK_VERSION` in `PackManager.kt`**
-  so installed apps re-copy it. (Currently 8.)
+  so installed apps re-copy it. (Currently 9.)
 - Adding a **table/column to the pack** means editing **both** `pipeline/schema.sql` **and**
   the app's `Hanzi.sq` (keep them in sync), and adding the table to `core_tables` in
   `package.py`. `SCHEMA_USER_VERSION` stays **1** — the read-only pack has no migrations, so

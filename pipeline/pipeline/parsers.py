@@ -31,14 +31,24 @@ def cp_to_int(cp: str) -> int:
     return int(m.group(1), 16)
 
 
-def parse_unihan_file(path: Path) -> dict[int, dict[str, list[str]]]:
-    """Generic Unihan tab file -> {codepoint_int: {field: [values]}}."""
+def parse_unihan_file(path: Path, fields: set[str] | None = None) -> dict[int, dict[str, list[str]]]:
+    """Generic Unihan tab file -> {codepoint_int: {field: [values]}}.
+
+    [fields] restricts what is retained. This matters on DictionaryLikeData, where the two
+    shape encodings we want sit beside kMojiJoho — 52k rows of long Japanese glyph metadata
+    that nothing here reads. Keeping the whole file was enough to push the build past this
+    machine's memory and get it OOM-killed. Streamed line by line for the same reason.
+    """
     out: dict[int, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line or line.startswith("#"):
-            continue
-        cp, field, value = line.split("\t", 2)
-        out[cp_to_int(cp)][field].append(value)
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip("\n")
+            if not line or line.startswith("#"):
+                continue
+            cp, field, value = line.split("\t", 2)
+            if fields is not None and field not in fields:
+                continue
+            out[cp_to_int(cp)][field].append(value)
     return out
 
 

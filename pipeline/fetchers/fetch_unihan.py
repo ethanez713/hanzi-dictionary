@@ -1,4 +1,4 @@
-"""Fetch Unihan.zip (readings, S/T variants, radicals) from unicode.org.
+"""Fetch Unihan.zip (readings, S/T variants, radicals, shape codes) from unicode.org.
 
 License: Unicode Data Files License (permissive). See
 https://www.unicode.org/copyright.html#Exhibit1
@@ -19,10 +19,18 @@ LICENSE = "Unicode Data Files License (permissive)"
 # kJapanese, kHanyuPinyin, and kHanyuPinlu for multi-reading frequency ordering per §15),
 # S/T variants, and radical/stroke counts (kRSUnicode/kTotalStrokes live in IRGSources,
 # not RadicalStrokeCounts, which is Adobe-glyph-collection-specific and not useful here).
+#
+# DictionaryLikeData carries the two SHAPE encodings — kCangjie (the character as a
+# sequence of shape keys) and kFourCornerCode (its four corners as digits) — which is what
+# `pipeline/lookalike.py` computes visually-confusable pairs from. Deriving look-alikes
+# from shape codes is the standard method (Liu et al. 2011 build the Chinese spell-check
+# confusion sets from Cangjie edit distance); this keeps that computation on data whose
+# license we already ship.
 WANTED_FILES = {
     "Unihan_Readings.txt",
     "Unihan_Variants.txt",
     "Unihan_IRGSources.txt",
+    "Unihan_DictionaryLikeData.txt",
 }
 
 

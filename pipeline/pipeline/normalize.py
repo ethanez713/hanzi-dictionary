@@ -41,6 +41,11 @@ class GlyphEntity:
     opencc_simplified_of: list[int] = field(default_factory=list)  # this char (traditional) -> simplified form(s)
     opencc_traditional_of: list[int] = field(default_factory=list)  # this char (simplified) -> traditional form(s)
     spoofing_variants: list[int] = field(default_factory=list)      # Unihan kSpoofingVariant: visually confusable with
+    # Shape encodings, for computing look-alike pairs (see pipeline/lookalike.py): the
+    # Cangjie key sequence, the four-corner shape code, and the KangXi radical number.
+    cangjie: str | None = None
+    four_corner: str | None = None
+    radical: str | None = None
     makemeahanzi: dict | None = None
     wiktextract_entries: list[dict] = field(default_factory=list)
 
@@ -55,6 +60,9 @@ def build_entities(snapshot_paths: dict[str, Path]) -> dict[int, GlyphEntity]:
     readings_raw = parsers.parse_unihan_file(unihan_dir / "Unihan_Readings.txt")
     variants_raw = parsers.parse_unihan_file(unihan_dir / "Unihan_Variants.txt")
     irg_raw = parsers.parse_unihan_file(unihan_dir / "Unihan_IRGSources.txt")
+    dictlike_raw = parsers.parse_unihan_file(
+        unihan_dir / "Unihan_DictionaryLikeData.txt", fields={"kCangjie", "kFourCornerCode"},
+    )
     pinlu = parsers.parse_hanyu_pinlu(readings_raw)
 
     makemeahanzi = parsers.parse_makemeahanzi(snapshot_paths["makemeahanzi"] / "dictionary.txt")
@@ -108,6 +116,19 @@ def build_entities(snapshot_paths: dict[str, Path]) -> dict[int, GlyphEntity]:
                 e.total_strokes = int(irg_fields["kTotalStrokes"][0].split(" ")[0])
             except ValueError:
                 pass
+
+        # kRSUnicode is "radical.additional_strokes", sometimes with a ' marking a
+        # simplified radical form — the radical number alone is what identifies the shape
+        # family (氵 characters all read 85).
+        if irg_fields.get("kRSUnicode"):
+            e.radical = irg_fields["kRSUnicode"][0].split(" ")[0].split(".")[0].rstrip("'")
+
+        dictlike_fields = dictlike_raw.get(cp, {})
+        if dictlike_fields.get("kCangjie"):
+            e.cangjie = dictlike_fields["kCangjie"][0].strip() or None
+        if dictlike_fields.get("kFourCornerCode"):
+            # A character may list several four-corner codes; the first is the primary.
+            e.four_corner = dictlike_fields["kFourCornerCode"][0].split(" ")[0] or None
 
         e.makemeahanzi = makemeahanzi.get(cp)
         if e.makemeahanzi and e.makemeahanzi.get("decomposition"):

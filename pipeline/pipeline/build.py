@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 
 from fetchers.common import SNAPSHOT_ROOT
-from pipeline import load, merge, normalize, parsers, phonetic, pinyin, radicals
+from pipeline import load, lookalike, merge, normalize, parsers, phonetic, pinyin, radicals
 from pipeline.normalize import GlyphEntity
 
 SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract", "hsk", "cedict", "wordfreq"]
@@ -289,12 +289,17 @@ def build() -> Path:
         (s.component_id, s.member_count, s.reliability, s.best_stratum) for s in series_rows_typed
     ]
 
-    # Confusables from Unihan kSpoofingVariant (authoritative visually-confusable pairs,
-    # Unicode-licensed). This replaces the spec's proposed stroke-median + IDS-differs-by-one
-    # computation: a bare IDS-differs-by-one marks every same-radical char (江/河) as
-    # confusable, which is noise, and doing it precisely needs the stroke-median (visual)
-    # signal from makemeahanzi's graphics.txt (Arphic PL), not yet ingested. kSpoofingVariant
-    # is the same product signal (spec §9 IA item 8) from a clean, authoritative source.
+    # Confusables, in two layers (spec §9 IA item 8).
+    #
+    # kind='visual' — Unihan kSpoofingVariant: authoritative, Unicode-licensed, and tiny
+    # (75 pairs here, only one of them between two common characters). It is a spoofing
+    # defence, not a study aid, so on its own it left the app's look-alike surface empty
+    # for nearly every character a learner opens.
+    #
+    # kind='shape' — computed from the Unihan shape encodings; see pipeline/lookalike.py
+    # for why shape codes and not the IDS/component overlap the spec originally proposed
+    # (component overlap marks 江/河 confusable, which is noise). This is the layer that
+    # actually carries 己/已/巳 and 未/术/末.
     confusable_seen: set[tuple[int, int]] = set()
     confusable_rows = []
     for cp in selected:
@@ -306,6 +311,12 @@ def build() -> Path:
                 continue
             confusable_seen.add((lo, hi))
             confusable_rows.append((f"U+{lo:04X}", f"U+{hi:04X}", "visual", None))
+    shape_rows = lookalike.compute_shape_confusables(entities, selected, freq_rank_map)
+    for row in shape_rows:
+        lo, hi = int(row[0][2:], 16), int(row[1][2:], 16)
+        if (lo, hi) not in confusable_seen:   # a kSpoofingVariant pair is already stated
+            confusable_seen.add((lo, hi))
+            confusable_rows.append(row)
 
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     db_path = BUILD_DIR / "hanzi.db"

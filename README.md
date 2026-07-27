@@ -29,7 +29,8 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   component page over the offline pack. Core repository unit-tested against the real pack,
   debug APK builds (~37.5 MB). See `app/README.md`.
 - **M3 (beta)** — mostly done. Verified in-sandbox: HSK levels (glyph.hsk + import picker),
-  confusables (Unihan kSpoofingVariant), the known-characters model (on-device user DB,
+  confusables (Unihan kSpoofingVariant plus shape-code look-alikes computed from
+  kCangjie/kFourCornerCode — see `pipeline/lookalike.py`), the known-characters model (on-device user DB,
   "I know this", My Characters + HSK/paste import, known-first series ordering — the spec's
   headline differentiator), and photo-library scanning (scan recent camera-roll photos for
   hanzi via ML Kit, watermark dedup — workflow logic unit-tested with fakes). Core suite

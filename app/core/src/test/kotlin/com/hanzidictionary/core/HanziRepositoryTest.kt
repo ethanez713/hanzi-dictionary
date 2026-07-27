@@ -360,6 +360,35 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun visualLookAlikesAreShapeNeighboursNotSoundAlikes() {
+        // What the character page's drawer serves. These are the classic 形近字 confusions,
+        // and they exist only because the pipeline computes shape-code pairs — Unihan's own
+        // kSpoofingVariant carries 75 pairs in total, one of them between common characters.
+        fun chars(char: String) = repo.characterPageByChar(char)!!.let { p ->
+            repo.visualLookAlikes(p.glyphId).map { it.char }
+        }
+        assertTrue("已" in chars("己"), "己/已 is the canonical look-alike pair, got ${chars("己")}")
+        assertTrue(chars("未").any { it == "末" || it == "木" }, "未 should list 末/木, got ${chars("未")}")
+        assertTrue("天" in chars("大"), "大/天 differ by one stroke, got ${chars("大")}")
+
+        // And the line this drawer must not cross: 请/清/晴 share 青, which is a fact about
+        // how they SOUND. Answering "what looks like 请?" with them is what this replaced.
+        val qing = chars("请")
+        assertTrue(qing.none { it == "清" || it == "情" || it == "晴" }, "sound-alikes leaked in: $qing")
+    }
+
+    @Test
+    fun visualLookAlikesLeadWithTheCommonOnes() {
+        // A drawer is only worth opening if the characters in it are ones you'll meet: sorted
+        // by corpus frequency, so a rare near-twin never pushes a common one off the list.
+        val page = repo.characterPageByChar("日")!!
+        val ranks = repo.visualLookAlikes(page.glyphId).map { la ->
+            repo.characterPage(la.glyphId)?.freqRank ?: Long.MAX_VALUE
+        }
+        assertEquals(ranks.sorted(), ranks, "look-alikes should be frequency-ordered, got $ranks")
+    }
+
+    @Test
     fun singleCharacterLookAlikesLeadWithVisualConfusables() {
         // What the character page's look-alike drawer serves: the spoofing variant 妺 ahead
         // of any series sibling, and never the character you're already looking at.

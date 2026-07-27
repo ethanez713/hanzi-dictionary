@@ -376,10 +376,32 @@ class HanziRepository(
     }
 
     /**
+     * Characters that genuinely *look* like [glyphId] — the pack's `confusable` table, which
+     * is Unihan kSpoofingVariant plus the shape-code pairs the pipeline computes (己/已/巴,
+     * 未/木/末). Common ones first, since those are the ones you'll actually mix up.
+     *
+     * Deliberately narrower than [lookAlikesForGlyphs]: no phonetic-series siblings. Sharing
+     * 青 is a claim about how 请/清/晴 *sound*, and answering "what looks like this?" with a
+     * sound fact is how the drawer ended up listing characters that look nothing alike.
+     */
+    fun visualLookAlikes(glyphId: String, limit: Int = LOOKALIKE_LIMIT): List<LookAlike> {
+        val others = db.hanziQueries.confusablesFor(glyphId).executeAsList()
+            .map { if (it.glyph_a == glyphId) it.glyph_b else it.glyph_a }
+            .distinct()
+        return sortByFrequency(others).take(limit).mapNotNull { id ->
+            db.hanziQueries.glyphWithPinyin(id).executeAsOneOrNull()
+                ?.let { LookAlike(it.id, it.char, it.pinyin, it.definition?.let(::firstSense)) }
+        }
+    }
+
+    /**
      * Characters a learner might confuse with a word's [glyphIds]: visually-confusable pairs
-     * (Unihan kSpoofingVariant) first — the highest-signal, rarest ones — then phonetic-series
-     * siblings (share a phonetic component: 请/清/晴/情 all carry 青), common ones first. Deduped
-     * by glyph, the word's own characters excluded, each carrying pinyin + a short gloss.
+     * first — the highest-signal ones — then phonetic-series siblings (share a phonetic
+     * component: 请/清/晴/情 all carry 青), common ones first. Deduped by glyph, the word's own
+     * characters excluded, each carrying pinyin + a short gloss.
+     *
+     * The word page keeps both kinds on purpose: with several characters in play, "these are
+     * the traps around this word" is the useful question, and a sound-alike is a trap too.
      */
     fun lookAlikesForGlyphs(
         glyphIds: List<String>,
