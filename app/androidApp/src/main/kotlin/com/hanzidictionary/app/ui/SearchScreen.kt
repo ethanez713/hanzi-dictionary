@@ -138,12 +138,7 @@ fun SearchScreen(
     // the default one the first time so the gesture always has a destination (spec §17).
     var activeListName by remember { mutableStateOf<String?>(null) }
     var activeSource by remember { mutableStateOf<DeckSource>(DeckSource.Everything) }
-    var dueNow by remember { mutableIntStateOf(0) }
     var listRefresh by remember { mutableIntStateOf(0) }
-    // Bumped by every grade on the due card. Deliberately separate from listRefresh: the
-    // count has to follow along as you work through cards, but rebuilding the deck mid-run
-    // would reshuffle the card under your thumb.
-    var gradeTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(listRefresh) {
         val loaded = withContext(Dispatchers.IO) {
             val activeId = app.studyRepository.activeListId()
@@ -157,9 +152,6 @@ fun SearchScreen(
         }
         activeListName = loaded.first
         activeSource = loaded.second
-    }
-    LaunchedEffect(listRefresh, gradeTick) {
-        dueNow = withContext(Dispatchers.IO) { app.studyRepository.dueNow() }
     }
     fun fileAway(item: StudyItem, label: String) {
         scope.launch {
@@ -261,16 +253,16 @@ fun SearchScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        // Practice is always one tap away, even once you've scrolled the due card off the
-        // top — and the count is the only place the home screen states the size of the
-        // backlog. It stays visible at zero due so starting a session ahead of schedule
-        // never means going hunting for the entry point.
+        // Practice is always one tap away, even once the due card has scrolled off the top.
+        // It reads "Practice" rather than a due count on purpose: a number that follows you
+        // down the screen is a nag, and the home screen shouldn't be keeping score. The
+        // Study screen states the backlog for anyone who wants it.
         floatingActionButton = {
             if (query.isBlank()) {
                 ExtendedFloatingActionButton(
                     onClick = { onPractice(activeSource) },
                     icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                    text = { Text(if (dueNow > 0) "$dueNow due" else "Practice") },
+                    text = { Text("Practice") },
                 )
             }
         },
@@ -334,7 +326,6 @@ fun SearchScreen(
                     onArchived = { label ->
                         scope.launch { snackbar.showSnackbar("Archived $label") }
                     },
-                    onGraded = { gradeTick++ },
                     onUseClipboard = { onQueryChange(it) },
                     onAllow = { permissionLauncher.launch(photoPermission) },
                     onRescan = { rescans++ },
@@ -439,7 +430,6 @@ private fun PhotoFeed(
     deckRefresh: Int,
     onOpenWord: (String) -> Unit,
     onArchived: (String) -> Unit,
-    onGraded: () -> Unit,
     onUseClipboard: (String) -> Unit,
     onAllow: () -> Unit,
     onRescan: () -> Unit,
@@ -470,7 +460,6 @@ private fun PhotoFeed(
                 onOpenCharacter = onOpenCharacter,
                 onOpenWord = onOpenWord,
                 onArchived = onArchived,
-                onGraded = onGraded,
             )
         }
         stickyHeader(key = "photos-header") {

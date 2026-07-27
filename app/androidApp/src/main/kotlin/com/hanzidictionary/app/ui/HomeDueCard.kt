@@ -1,11 +1,8 @@
 package com.hanzidictionary.app.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -16,7 +13,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
@@ -60,7 +56,6 @@ fun HomeDueCard(
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
     onArchived: (String) -> Unit,
-    onGraded: () -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
@@ -98,9 +93,6 @@ fun HomeDueCard(
         scope.launch {
             withContext(Dispatchers.IO) { app.studyRepository.grade(entry.item, rating) }
             PracticeWidgetUpdater.refresh(context)
-            // Re-counts what's due without rebuilding this deck — the card you're part-way
-            // through must not be reshuffled just because the tally moved.
-            onGraded()
         }
         state = state.advance(requeue = rating == Rating.AGAIN)
     }
@@ -112,16 +104,16 @@ fun HomeDueCard(
                 app.userRepository.setKnown(entry.item.itemId, true, entry.item.kind)
             }
             PracticeWidgetUpdater.refresh(context)
-            onGraded()
             onArchived(label)
         }
         state = state.advance(requeue = false)
     }
 
-    Column(
-        Modifier.fillMaxWidth().padding(bottom = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    // No swipe legend and no deck tally here, unlike the practice screen. Home is a glance
+    // surface: the card is an invitation, and captioning it with instructions and a backlog
+    // count turns it into a chore list on the screen you opened to look something up. The
+    // gestures are taught where you go to use them.
+    Box(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
         SwipeCard(
             key = entry.item.itemId to state.dealt,
             rightAction = KnewAction,
@@ -143,11 +135,5 @@ fun HomeDueCard(
                 onArchive = { archive() },
             )
         }
-        SwipeLegend(MissedAction, KnewAction)
-        Text(
-            "${state.deck.size - state.index} waiting",
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
