@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hanzidictionary.core.commitDistance
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -67,24 +68,8 @@ val RemoveAction = SwipeAction("Remove", "✕", Color(0xFFC62828))
 // red/green axis, and rides the vertical direction the left/right grammar leaves free.
 val SkipAction = SwipeAction("Skip", "↑", Color(0xFF9E9E9E))
 
-/** How much of the room a finger has left — from where it went down to that edge of the
- * screen — counts as "dragged to the edge". Under 1 because a drag ends the instant the
- * finger leaves the glass, so the last few dp at the bezel are never actually delivered. */
-private const val EDGE_FRACTION = 0.8f
-
-/**
- * How far a drag has to travel to commit, given the [base] distance the gesture asks for and
- * how much room ([available]) the finger has between where it went down and the edge it's
- * heading for.
- *
- * A flat threshold is unreachable whenever the grab starts near that edge: a tile in the last
- * column of the photo grid already sits ~90% of the way across the screen, so its
- * 42%-of-screen commit distance ran off the glass and the action could *never* fire — the
- * drag just ended when the finger did. Once the room runs short the gesture becomes "drag it
- * to the edge", which is always reachable.
- */
-private fun commitDistance(base: Float, available: Float): Float =
-    minOf(base, available * EDGE_FRACTION)
+// The commit-distance rule itself lives in :core (com.hanzidictionary.core.commitDistance)
+// so it can be unit-tested; see its KDoc for why a flat threshold was unreachable.
 
 /**
  * A list row that fires [onSwipeRight]/[onSwipeLeft] once dragged past a threshold, then

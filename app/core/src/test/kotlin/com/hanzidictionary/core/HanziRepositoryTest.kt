@@ -360,6 +360,31 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun breakdownPrefersADecompositionWhosePartsAreAllRealCharacters() {
+        // 举: cjkvi-ids says ⿱兴⿻二丨, whose bottom half is an unencoded shape the app could
+        // only render as "not in the component index" and could not link to. makemeahanzi
+        // names the same part 扌, which has a page, a gloss and a reading — so the pipeline
+        // takes the navigable analysis even though cjkvi-ids normally outranks it.
+        val ju = repo.characterPageByChar("举")
+        assertNotNull(ju)
+        assertEquals(listOf("兴", "扌"), ju.breakdown.map { it.displayChar })
+        assertTrue(ju.breakdown.all { it.navigable }, "every part of 举 should open its own page")
+    }
+
+    @Test
+    fun anUnencodedPartIsStillReportedRatherThanDropped() {
+        // The honest remainder: 用's lower part (⿻二丨) has no codepoint in ANY source, so
+        // no choice of decomposition can name it. It must still appear as a positioned part
+        // — dropping it would silently misrepresent the character as having one component.
+        val yong = repo.characterPageByChar("用")
+        assertNotNull(yong)
+        assertEquals(2, yong.breakdown.size)
+        val unencoded = yong.breakdown.single { it.displayChar == null }
+        assertTrue(unencoded.componentId.startsWith("ids:"), "expected an ids: pseudo-component")
+        assertFalse(unencoded.navigable, "an unencoded shape has no page to open")
+    }
+
+    @Test
     fun visualLookAlikesAreShapeNeighboursNotSoundAlikes() {
         // What the character page's drawer serves. These are the classic 形近字 confusions,
         // and they exist only because the pipeline computes shape-code pairs — Unihan's own

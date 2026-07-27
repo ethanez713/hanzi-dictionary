@@ -8,6 +8,9 @@ pipeline/.venv/
 pipeline/data/raw/
 pipeline/data/snapshots/
 pipeline/data/build/
+# Derived datasets: regenerated from a snapshot by `python -m pipeline.derive_lookalikes`
+# in under a second, so caching them on disk beats carrying them in git.
+pipeline/data/derived/
 *.db
 *.sqlite
 *.sqlite3

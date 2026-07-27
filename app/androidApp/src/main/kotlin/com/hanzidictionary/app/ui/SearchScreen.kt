@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
@@ -285,7 +289,7 @@ fun SearchScreen(
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = FEED_EDGE_PADDING)) {
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
@@ -399,6 +403,10 @@ fun SearchScreen(
 
 /** Characters per row in the compact tile grid. Five keeps every tile comfortably above the
  * 48dp minimum touch target on a phone while fitting five times what a full-width row did. */
+/** The screen's own horizontal padding. Named because the photo feed has to know how much
+ * of the system's gesture strip this already clears (see [PhotoFeed]). */
+private val FEED_EDGE_PADDING = 16.dp
+
 private const val FEED_COLUMNS = 5
 
 /**
@@ -440,9 +448,26 @@ private fun PhotoFeed(
     onDismiss: (SearchResult) -> Unit,
 ) {
     val muted = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+    // Android's back-gesture strip owns the outer ~28dp of both screen edges: a drag that
+    // STARTS there belongs to the system, which is why the first and last tile columns could
+    // not be swiped at all however far you dragged them — the app never saw the gesture.
+    // Inset the feed by whatever this device actually reserves (0 on 3-button navigation) so
+    // no tile ever sits under the strip. Reserving it in the feed is better than asking for
+    // it back with systemGestureExclusion(), which is capped at 200dp per edge for the whole
+    // window — nowhere near a scrolling grid's worth of rows.
+    val gestureInsets = WindowInsets.systemGestures.asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
+    val edgeInset = maxOf(
+        gestureInsets.calculateLeftPadding(layoutDirection),
+        gestureInsets.calculateRightPadding(layoutDirection),
+    ) - FEED_EDGE_PADDING
+    val gestureGap = edgeInset.coerceAtLeast(0.dp)
     // Bottom inset so the last row of tiles can be scrolled clear of the floating Practice
     // button instead of sitting permanently underneath it.
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 76.dp)) {
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = gestureGap, end = gestureGap, bottom = 76.dp),
+    ) {
         clipSuggestion?.let { s ->
             item(key = "clipboard") {
                 AssistChip(

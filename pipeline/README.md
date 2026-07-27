@@ -31,6 +31,16 @@ write an immutable versioned snapshot + manifest (url/version/license/sha256) un
 - `pipeline/ids_parser.py` — minimal IDS tree parser (first-level components only).
 - `pipeline/pinyin.py` / `pipeline/phonetic.py` — the phonetic detector (pinyin stratum
   only for M0; MC/OC strata need dedicated notation parsers, deferred per spec §15).
+- `pipeline/lookalike.py` / `pipeline/derive_lookalikes.py` — visually-confusable pairs
+  computed from Unihan shape codes (kCangjie/kFourCornerCode), cached in
+  `data/derived/lookalikes.tsv`. Derived **once per Unihan snapshot**, not per build: the
+  pairs depend on nothing else, and recomputing them inline cost enough resident memory to
+  get the build OOM-killed on a 6.6 GB box. `pipeline.build` calls `ensure_dataset()`,
+  which rebuilds only when the file is missing, stale (different snapshot or rule version)
+  or corrupt — `validate()` checks provenance, the header's own row count, a floor, row
+  shape, and that the textbook pairs (己/已, 未/末, 大/天, 妹/姑, 日/旦) are present. Run it
+  by hand with `python -m pipeline.derive_lookalikes` (`--check` validates, `--force`
+  rebuilds).
 - `pipeline/load.py` / `pipeline/build.py` — SQLite writer and CLI orchestrator.
 - `pipeline/schema.sql` — canonical schema (spec §7); M0 populates glyph, reading,
   decomposition, component_use, claim, variant_edge, phonetic_series, source. The

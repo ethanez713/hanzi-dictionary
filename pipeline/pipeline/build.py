@@ -311,8 +311,14 @@ def build() -> Path:
                 continue
             confusable_seen.add((lo, hi))
             confusable_rows.append((f"U+{lo:04X}", f"U+{hi:04X}", "visual", None))
-    shape_rows = lookalike.compute_shape_confusables(entities, selected, freq_rank_map)
-    for row in shape_rows:
+    # Read back from data/derived/, derived once per Unihan snapshot rather than recomputed
+    # on every build (lookalike.ensure_dataset explains why, and rebuilds if it has to).
+    cached_pairs = lookalike.ensure_dataset(snapshot_paths["unihan"])
+    selected_ids = {f"U+{cp:04X}" for cp in selected}
+    freq_by_id = {f"U+{cp:04X}": rank for cp, rank in freq_rank_map.items()}
+    for row in lookalike.confusable_rows(
+        cached_pairs, selected_ids, freq_by_id, lookalike.MAX_FREQ_RANK,
+    ):
         lo, hi = int(row[0][2:], 16), int(row[1][2:], 16)
         if (lo, hi) not in confusable_seen:   # a kSpoofingVariant pair is already stated
             confusable_seen.add((lo, hi))

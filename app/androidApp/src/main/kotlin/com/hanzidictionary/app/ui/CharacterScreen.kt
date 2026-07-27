@@ -279,7 +279,16 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(c.displayChar ?: "◎", fontSize = 32.sp, color = color)
+                    // A part with no codepoint of its own (用's ⿻二丨) has no glyph to show.
+                    // Its IDS fragment is the only handle on it there is, and it at least
+                    // draws the shape's structure — better than the anonymous ◎ that told
+                    // you nothing about which part was missing.
+                    val fragment = c.componentId.removePrefix("ids:")
+                    Text(
+                        c.displayChar ?: fragment,
+                        fontSize = if (c.displayChar != null) 32.sp else 18.sp,
+                        color = color,
+                    )
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         val label = functionLabel(c.function)
                         // Provenance badge (spec §7 resolution): computed is the default
@@ -354,10 +363,14 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
                         // A part the pack can't resolve to a character has no glyph, no
                         // reading and no gloss — it used to render as a lone ◎ in an
                         // otherwise empty card, which reads as a rendering bug rather than
-                        // as the gap in the data that it is. Say so instead (spec §7).
+                        // as the gap in the data that it is. Say so instead (spec §7), and
+                        // say *what* the gap is: this shape is genuinely absent from
+                        // Unicode, so no amount of better source data would name it. The
+                        // pipeline already prefers whichever decomposition names all of its
+                        // parts, so a card that still reads like this has no such option.
                         if (c.displayChar == null && sound == null && gloss == null) {
                             Text(
-                                "part not in the component index",
+                                "no character encodes this shape on its own",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

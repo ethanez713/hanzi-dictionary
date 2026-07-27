@@ -28,10 +28,36 @@ class ResolvedDecomposition:
     region: str | None
 
 
+def is_navigable(ids: str) -> bool:
+    """True when every first-level part of [ids] is a real, encoded character.
+
+    An IDS can be structurally right and useless to a reader: cjkvi-ids describes 举 as
+    ⿱兴⿻二丨, where the bottom is a *shape* (two horizontals crossed by a vertical) with no
+    codepoint of its own. The app can only show that as "part not in the component index"
+    and can't link to it, while makemeahanzi's ⿱兴扌 names the same part as 扌, which has a
+    gloss, a reading and a page. Both are true; only one teaches.
+    """
+    try:
+        parts = ids_parser.direct_components(ids)
+    except ids_parser.IdsParseError:
+        return False
+    if len(parts) == 1 and parts[0] == ids:
+        return False   # atomic — no breakdown at all
+    # A part is usable when it's a single encoded character: not a nested IDS fragment, and
+    # not makemeahanzi's ？ placeholder for a part it couldn't identify.
+    return all(len(p) == 1 and p != "？" and p not in ids_parser.ALL_OPERATORS for p in parts)
+
+
 def resolve_decomposition(e: GlyphEntity) -> ResolvedDecomposition | None:
     """Priority: cjkvi-ids > makemeahanzi; within cjkvi-ids, region-preferred > untagged
     > any other region (spec §8.4, §15). is_simp/is_trad inferred from variant edges —
-    a glyph with a distinct traditional form prefers G-tagged IDS, and vice versa."""
+    a glyph with a distinct traditional form prefers G-tagged IDS, and vice versa.
+
+    Cutting across that order: a decomposition whose parts are all *encoded* characters
+    beats a higher-priority one that bottoms out in unencoded shapes (see [is_navigable]).
+    Source priority is about which analysis to trust; this is about whether the answer can
+    be shown at all, which comes first.
+    """
     is_simp_script = bool(e.traditional_variants or e.opencc_traditional_of)
     is_trad_script = bool(e.simplified_variants or e.opencc_simplified_of)
     preferred_region = "G" if is_simp_script and not is_trad_script else ("T" if is_trad_script and not is_simp_script else None)
@@ -45,18 +71,22 @@ def resolve_decomposition(e: GlyphEntity) -> ResolvedDecomposition | None:
                 return d
         return None
 
+    ordered: list[RawDecomposition] = []
     if preferred_region:
         d = pick(cjkvi, preferred_region)
         if d:
-            return ResolvedDecomposition(d.ids, d.source, d.region)
+            ordered.append(d)
     d = pick(cjkvi, None)
     if d:
-        return ResolvedDecomposition(d.ids, d.source, d.region)
-    if cjkvi:
-        d = cjkvi[0]
-        return ResolvedDecomposition(d.ids, d.source, d.region)
-    if mmh:
-        d = mmh[0]
+        ordered.append(d)
+    ordered += [d for d in cjkvi if d not in ordered]
+    ordered += mmh
+
+    for d in ordered:
+        if is_navigable(d.ids):
+            return ResolvedDecomposition(d.ids, d.source, d.region)
+    if ordered:
+        d = ordered[0]
         return ResolvedDecomposition(d.ids, d.source, d.region)
     return None
 
