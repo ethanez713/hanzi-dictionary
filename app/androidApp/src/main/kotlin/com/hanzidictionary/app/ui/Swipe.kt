@@ -158,6 +158,10 @@ fun SwipeRow(
  * card — moves on without touching its memory — so the direction the horizontal grammar
  * leaves free carries the one action that isn't a grade. The dominant axis of the drag
  * decides, so a mostly-sideways throw never registers as a skip and vice-versa.
+ *
+ * Omitting [onSwipeUp] also narrows the card to **horizontal drags only**, which is what lets
+ * it live inside a scrolling list: claiming vertical drags there would eat the scroll (and
+ * every attempt to scroll past the card would register as a skip).
  */
 @Composable
 fun SwipeCard(
@@ -229,31 +233,41 @@ fun SwipeCard(
                     // like a sliding panel.
                     rotationZ = (offset.value.x / 40f).coerceIn(-8f, 8f)
                 }
-                .pointerInput(key) {
-                    detectDragGestures(
-                        onDragEnd = {
-                            val v = offset.value
-                            when {
-                                up != null && -v.y >= threshold && -v.y > abs(v.x) ->
-                                    scope.launch {
-                                        offset.animateTo(Offset(v.x, -flyAway), tween(160))
-                                        up?.invoke()
-                                    }
-                                v.x >= threshold -> scope.launch {
-                                    offset.animateTo(Offset(flyAway, v.y), tween(160))
-                                    right()
+                .pointerInput(key, onSwipeUp != null) {
+                    // Settling is shared; only which drags the card claims differs.
+                    val settle = {
+                        val v = offset.value
+                        when {
+                            up != null && -v.y >= threshold && -v.y > abs(v.x) ->
+                                scope.launch {
+                                    offset.animateTo(Offset(v.x, -flyAway), tween(160))
+                                    up?.invoke()
                                 }
-                                v.x <= -threshold -> scope.launch {
-                                    offset.animateTo(Offset(-flyAway, v.y), tween(160))
-                                    left()
-                                }
-                                else -> scope.launch { offset.animateTo(Offset.Zero, tween(200)) }
+                            v.x >= threshold -> scope.launch {
+                                offset.animateTo(Offset(flyAway, v.y), tween(160))
+                                right()
                             }
-                        },
-                        onDragCancel = { scope.launch { offset.animateTo(Offset.Zero, tween(200)) } },
-                    ) { change, dragAmount ->
-                        change.consume()
-                        scope.launch { offset.snapTo(offset.value + dragAmount) }
+                            v.x <= -threshold -> scope.launch {
+                                offset.animateTo(Offset(-flyAway, v.y), tween(160))
+                                left()
+                            }
+                            else -> scope.launch { offset.animateTo(Offset.Zero, tween(200)) }
+                        }
+                        Unit
+                    }
+                    val cancel = { scope.launch { offset.animateTo(Offset.Zero, tween(200)) }; Unit }
+                    if (up != null) {
+                        detectDragGestures(onDragEnd = settle, onDragCancel = cancel) { change, drag ->
+                            change.consume()
+                            scope.launch { offset.snapTo(offset.value + drag) }
+                        }
+                    } else {
+                        // Horizontal only: vertical drags are left unconsumed so an enclosing
+                        // list can scroll through the card.
+                        detectHorizontalDragGestures(onDragEnd = settle, onDragCancel = cancel) { change, dx ->
+                            change.consume()
+                            scope.launch { offset.snapTo(offset.value.copy(x = offset.value.x + dx)) }
+                        }
                     }
                 },
         ) { content() }

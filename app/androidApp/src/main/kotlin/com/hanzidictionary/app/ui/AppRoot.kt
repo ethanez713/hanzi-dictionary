@@ -117,6 +117,8 @@ fun AppRoot(
                 onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                 onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
                 onOpenStudy = { nav.navigate("lists") },
+                onPractice = { source -> nav.navigate("practice?source=${enc(encodeSource(source))}") },
+                tts = tts,
             )
         }
         composable(

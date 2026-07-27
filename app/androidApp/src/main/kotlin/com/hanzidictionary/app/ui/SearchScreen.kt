@@ -26,10 +26,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -66,6 +68,8 @@ import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hanzidictionary.app.audio.MandarinTts
+import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SearchResult
 import com.hanzidictionary.core.SourceInfo
@@ -88,6 +92,8 @@ fun SearchScreen(
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
     onOpenStudy: () -> Unit,
+    onPractice: (DeckSource) -> Unit,
+    tts: MandarinTts,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
@@ -131,12 +137,29 @@ fun SearchScreen(
     // Swipe-right anywhere on this screen files the item into the active list, creating
     // the default one the first time so the gesture always has a destination (spec §17).
     var activeListName by remember { mutableStateOf<String?>(null) }
+    var activeSource by remember { mutableStateOf<DeckSource>(DeckSource.Everything) }
+    var dueNow by remember { mutableIntStateOf(0) }
     var listRefresh by remember { mutableIntStateOf(0) }
+    // Bumped by every grade on the due card. Deliberately separate from listRefresh: the
+    // count has to follow along as you work through cards, but rebuilding the deck mid-run
+    // would reshuffle the card under your thumb.
+    var gradeTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(listRefresh) {
-        activeListName = withContext(Dispatchers.IO) {
-            app.studyRepository.activeListId()
-                ?.let { id -> app.studyRepository.lists().firstOrNull { it.id == id }?.name }
+        val loaded = withContext(Dispatchers.IO) {
+            val activeId = app.studyRepository.activeListId()
+            val name = activeId?.let { id ->
+                app.studyRepository.lists().firstOrNull { it.id == id }?.name
+            }
+            name to (
+                if (activeId != null) DeckSource.UserList(activeId, name.orEmpty())
+                else DeckSource.Everything
+                )
         }
+        activeListName = loaded.first
+        activeSource = loaded.second
+    }
+    LaunchedEffect(listRefresh, gradeTick) {
+        dueNow = withContext(Dispatchers.IO) { app.studyRepository.dueNow() }
     }
     fun fileAway(item: StudyItem, label: String) {
         scope.launch {
@@ -238,6 +261,19 @@ fun SearchScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        // Practice is always one tap away, even once you've scrolled the due card off the
+        // top — and the count is the only place the home screen states the size of the
+        // backlog. It stays visible at zero due so starting a session ahead of schedule
+        // never means going hunting for the entry point.
+        floatingActionButton = {
+            if (query.isBlank()) {
+                ExtendedFloatingActionButton(
+                    onClick = { onPractice(activeSource) },
+                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                    text = { Text(if (dueNow > 0) "$dueNow due" else "Practice") },
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = { Text("Hanzi Dictionary") },
@@ -291,6 +327,14 @@ fun SearchScreen(
                     clipSuggestion = clipSuggestion,
                     showDefinitions = showDefinitions,
                     onToggleDefinitions = { showDefinitions = !showDefinitions },
+                    repository = repository,
+                    tts = tts,
+                    deckRefresh = listRefresh,
+                    onOpenWord = onOpenWord,
+                    onArchived = { label ->
+                        scope.launch { snackbar.showSnackbar("Archived $label") }
+                    },
+                    onGraded = { gradeTick++ },
                     onUseClipboard = { onQueryChange(it) },
                     onAllow = { permissionLauncher.launch(photoPermission) },
                     onRescan = { rescans++ },
@@ -390,6 +434,12 @@ private fun PhotoFeed(
     clipSuggestion: String?,
     showDefinitions: Boolean,
     onToggleDefinitions: () -> Unit,
+    repository: HanziRepository,
+    tts: MandarinTts,
+    deckRefresh: Int,
+    onOpenWord: (String) -> Unit,
+    onArchived: (String) -> Unit,
+    onGraded: () -> Unit,
     onUseClipboard: (String) -> Unit,
     onAllow: () -> Unit,
     onRescan: () -> Unit,
@@ -398,7 +448,9 @@ private fun PhotoFeed(
     onDismiss: (SearchResult) -> Unit,
 ) {
     val muted = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-    LazyColumn(Modifier.fillMaxSize()) {
+    // Bottom inset so the last row of tiles can be scrolled clear of the floating Practice
+    // button instead of sitting permanently underneath it.
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 76.dp)) {
         clipSuggestion?.let { s ->
             item(key = "clipboard") {
                 AssistChip(
@@ -406,6 +458,20 @@ private fun PhotoFeed(
                     label = { Text("From clipboard: $s") },
                 )
             }
+        }
+        // The due card leads the feed: the loop is photograph → file → review, and this is
+        // the step that used to be invisible from here. It sits *in* the scroll rather than
+        // pinned above it, so looking something up never means dismissing a flashcard first.
+        item(key = "due-card") {
+            HomeDueCard(
+                repository = repository,
+                tts = tts,
+                refreshKey = deckRefresh,
+                onOpenCharacter = onOpenCharacter,
+                onOpenWord = onOpenWord,
+                onArchived = onArchived,
+                onGraded = onGraded,
+            )
         }
         stickyHeader(key = "photos-header") {
             FeedHeader("From your photos") {
