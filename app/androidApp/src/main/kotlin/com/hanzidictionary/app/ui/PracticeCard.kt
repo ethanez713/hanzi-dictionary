@@ -277,7 +277,10 @@ private fun CardCorner(
                 Icons.Filled.MoreVert,
                 contentDescription = "Card options",
                 modifier = Modifier.size(19.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                // Faint on purpose. The card's job is to show you one character; the menu is
+                // a rarely-used escape hatch that only has to be findable once you go looking
+                // for it, so it recedes rather than competing with the glyph.
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
             )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
