@@ -47,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,9 +61,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.core.content.res.ResourcesCompat
 import android.graphics.Paint
 import com.hanzidictionary.app.HanziApp
@@ -194,14 +198,39 @@ fun SearchScreen(
         }
         photoFinds = loadPhotoFinds()
     }
-    // The settle timer, restarted by every swipe and every undo (both mutate `pending`, and
-    // it is the effect's key). One reflow, once you've stopped, instead of the whole grid
-    // shuffling under your finger after each card.
+    // Let the triaged cards go. The writes happened when they were swiped, so this decides
+    // one thing only: when the grid is allowed to reflow. Every path that gets you here has
+    // the same precondition — you are no longer looking at the cards in question.
+    fun settleTriage() {
+        if (pending.isEmpty()) return
+        photoFinds = photoFinds?.filterNot { it.glyphId in pending }
+        pending = emptyMap()
+    }
+    // The backstop: a settle timer, restarted by every swipe and every undo (both mutate
+    // `pending`, which is the effect's key). One reflow, once you've stopped, instead of the
+    // whole grid shuffling under your finger after each card. The paths below usually get
+    // there first — this is for the case where you swipe and then just keep looking.
     LaunchedEffect(pending) {
         if (pending.isEmpty()) return@LaunchedEffect
         delay(TRIAGE_SETTLE_MS)
-        photoFinds = photoFinds?.filterNot { it.glyphId in pending }
-        pending = emptyMap()
+        settleTriage()
+    }
+    // Searching hides the feed. Coming back to a blank query should be a clean queue, not a
+    // screen of tombstones under a timer that has been running the whole time you were
+    // reading a definition.
+    LaunchedEffect(query.isBlank()) {
+        if (query.isNotBlank()) settleTriage()
+    }
+    // Leaving the app does the same. Navigating *within* it — opening a character page,
+    // starting Practice — needs no observer: the destination is disposed, `pending` goes with
+    // it, and the rescan on re-entry rebuilds the feed without the characters you triaged.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) settleTriage()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Characters the user recently opened, so the home screen is a quick way back to what
@@ -468,9 +497,11 @@ private val FEED_EDGE_PADDING = 16.dp
 private const val FEED_COLUMNS = 4
 
 /** How long the feed must sit still — no swipe, no undo — before the cards that have been
- * triaged actually leave. Long enough to reconsider a mis-swipe, and long enough that a run
- * of quick swipes reflows the grid **once**, at the end, rather than shuffling every
- * remaining tile into a new position under the finger after each one. */
+ * triaged actually leave, when nothing else has settled them first. Long enough to reconsider
+ * a mis-swipe, and long enough that a run of quick swipes reflows the grid **once**, at the
+ * end, rather than shuffling every remaining tile into a new position under the finger after
+ * each one. Leaving the feed — a search, a rescan, another screen, another app — settles it
+ * sooner, because by then you are no longer looking at the cards. */
 private const val TRIAGE_SETTLE_MS = 10_000L
 
 /** The undo affordance on a triaged card. A glyph rather than a Material icon: the swipe
