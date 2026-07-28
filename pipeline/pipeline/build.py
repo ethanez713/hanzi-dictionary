@@ -223,6 +223,9 @@ def build() -> Path:
     component_use_rows: list = []
     component_use_objects: list[phonetic.ComponentUseRow] = []
     claim_rows = []
+    # Top-level IDS operator per glyph (⿰, ⿱, …) — how the character is laid out, which the
+    # look-alike pairing needs and the pack schema has nowhere to keep.
+    layout_by_id: dict[str, str] = {}
 
     # Parent definitions for radical-gloss derivation (讠's useful gloss lives on 言).
     parent_defs = {
@@ -248,6 +251,8 @@ def build() -> Path:
         semantic_component = func_claim.get("semantic_component") if func_claim else None
         phonetic_component = func_claim.get("phonetic_component") if func_claim else None
         if resolved:
+            if resolved.ids:
+                layout_by_id[gid] = resolved.ids[0]
             rows = phonetic.compute_component_use(cp, entities, resolved, semantic_component, phonetic_component)
             for row in rows:
                 component_use_objects.append(row)
@@ -296,10 +301,14 @@ def build() -> Path:
     # defence, not a study aid, so on its own it left the app's look-alike surface empty
     # for nearly every character a learner opens.
     #
-    # kind='shape' — computed from the Unihan shape encodings; see pipeline/lookalike.py
-    # for why shape codes and not the IDS/component overlap the spec originally proposed
-    # (component overlap marks 江/河 confusable, which is noise). This is the layer that
-    # actually carries 己/已/巳 and 未/术/末.
+    # kind='shape' — computed from the Unihan shape encodings. This is the layer that
+    # carries 己/已/巳 and 未/术/末: characters of the same size that differ by a stroke.
+    #
+    # kind='component' — pairs sharing a component distinctive enough (and large enough) to
+    # dominate both characters: 斯/期 via 其, 斯/听 via 斤, 请/清/晴 via 青. Shape distance
+    # can't reach these — its stroke gate is ±1 and 听 is five strokes lighter than 斯 — and
+    # a bare "shares a part" rule would drag in 江/河. See pipeline/lookalike.py for the two
+    # gates that separate the two cases.
     confusable_seen: set[tuple[int, int]] = set()
     confusable_rows = []
     for cp in selected:
@@ -321,6 +330,27 @@ def build() -> Path:
     ):
         lo, hi = int(row[0][2:], 16), int(row[1][2:], 16)
         if (lo, hi) not in confusable_seen:   # a kSpoofingVariant pair is already stated
+            confusable_seen.add((lo, hi))
+            confusable_rows.append(row)
+
+    # Stroke counts for the components themselves — they are not all selected glyphs (讠, 辶),
+    # so they come from the entity table, and only for the parts actually referenced.
+    referenced = {row[1] for row in component_use_rows if len(row[1]) == 1}
+    component_strokes = {
+        e.char: e.total_strokes for e in entities.values() if e.char in referenced
+    }
+    glyph_strokes = {row[0]: row[3] for row in glyph_rows}
+    # A simplification edge already says 請/请 are two forms of one character; repeating it as
+    # a look-alike would spend a drawer row on something the variants section states better.
+    variant_pairs = frozenset(
+        (min(v[0], v[1]), max(v[0], v[1])) for v in variant_edge_rows
+    )
+    for row in lookalike.component_pairs(
+        component_use_rows, glyph_strokes, component_strokes, freq_by_id, layout_by_id,
+        lookalike.MAX_FREQ_RANK, variant_pairs,
+    ):
+        lo, hi = int(row[0][2:], 16), int(row[1][2:], 16)
+        if (lo, hi) not in confusable_seen:   # shape distance already vouched for it
             confusable_seen.add((lo, hi))
             confusable_rows.append(row)
 

@@ -133,13 +133,16 @@ data class WordPage(
     val lookAlikes: List<LookAlike>,  // characters easily confused with this word's characters
 )
 
-/** A character a learner might confuse with one of a word's characters — a phonetic-series
- * sibling or a visually-confusable pair — carrying enough to teach the difference at a glance. */
+/** A character a learner might confuse with another — a shape near-twin, a character sharing
+ * a big component, or a phonetic-series sibling — carrying enough to teach the difference at
+ * a glance. [sharedComponent] is the part the two have in common when that is *why* they were
+ * paired (己/已 have no shared part to name, so it is null for shape pairs). */
 data class LookAlike(
     val glyphId: String,
     val char: String,
     val pinyin: String?,
     val gloss: String?,
+    val sharedComponent: String? = null,
 )
 
 /** A Tatoeba example sentence (spec §9 word page): the Mandarin, and its English gloss

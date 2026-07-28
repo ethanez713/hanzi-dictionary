@@ -38,6 +38,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -82,6 +83,7 @@ import com.hanzidictionary.core.displayGloss
 import com.hanzidictionary.core.extractComposeParts
 import com.hanzidictionary.core.extractHanzi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -168,6 +170,9 @@ fun SearchScreen(
     }
     var rescans by remember { mutableIntStateOf(0) }
     var photoFinds by remember { mutableStateOf<List<SearchResult>?>(null) }
+    // Photo finds that have been triaged but are still on screen, holding their slot until
+    // the feed settles. See [TRIAGE_SETTLE_MS] for why the removal is deferred at all.
+    var pending by remember { mutableStateOf<Map<String, PendingTriage>>(emptyMap()) }
     // (scanned, total) of the current OCR pass, for a determinate progress bar; null before
     // the batch size is known.
     var scanProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -181,10 +186,22 @@ fun SearchScreen(
         if (!photosGranted) return@LaunchedEffect
         photoFinds = null
         scanProgress = null
+        // A rescan rebuilds the feed from scratch, which settles everything still pending:
+        // the writes already happened, so a triaged character simply doesn't come back.
+        pending = emptyMap()
         withContext(Dispatchers.IO) {
             app.createPhotoScanner().scanNewPhotos { done, total -> scanProgress = done to total }
         }
         photoFinds = loadPhotoFinds()
+    }
+    // The settle timer, restarted by every swipe and every undo (both mutate `pending`, and
+    // it is the effect's key). One reflow, once you've stopped, instead of the whole grid
+    // shuffling under your finger after each card.
+    LaunchedEffect(pending) {
+        if (pending.isEmpty()) return@LaunchedEffect
+        delay(TRIAGE_SETTLE_MS)
+        photoFinds = photoFinds?.filterNot { it.glyphId in pending }
+        pending = emptyMap()
     }
 
     // Characters the user recently opened, so the home screen is a quick way back to what
@@ -195,10 +212,8 @@ fun SearchScreen(
         }
     }
 
-    // Filing a character into the active list also takes it out of the photo feed: that feed
-    // is a triage queue, and a character you've saved is triaged. The row disappears here
-    // immediately; `recentPhotoFinds` keeps it out on every later load (and would drop it just
-    // the same had it been filed from its own page). Undo puts both halves back.
+    // Filing a search hit into the active list. Undo lives in the snackbar here because the
+    // row itself doesn't change — nothing leaves the results list when you save from it.
     fun fileAway(item: StudyItem, label: String) {
         scope.launch {
             val list = withContext(Dispatchers.IO) {
@@ -219,18 +234,57 @@ fun SearchScreen(
         }
     }
 
+    // The photo feed's two verbs. Both write immediately — the character really is filed, or
+    // really is out of the queue, and the widget hears about it now — but the card stays put,
+    // greyed under an Undo target, until the feed settles. Undo is *on the card* rather than
+    // in a snackbar: during a run of swipes a snackbar is showing the previous card's message
+    // by the time you notice the mistake, and there is only ever one of it.
+    //
+    // Filing a character also takes it out of the feed, which is a triage queue: a character
+    // you've saved is triaged. `recentPhotoFinds` keeps it out on every later load (and would
+    // drop it just the same had it been filed from its own page).
+    fun triageAdd(find: SearchResult) {
+        scope.launch {
+            val item = StudyItem.character(find.glyphId)
+            val list = withContext(Dispatchers.IO) {
+                app.studyRepository.ensureActiveList().also {
+                    app.studyRepository.addToList(it.id, item)
+                }
+            }
+            listRefresh++
+            PracticeWidgetUpdater.refresh(context)
+            pending = pending + (
+                find.glyphId to PendingTriage(AddAction) {
+                    withContext(Dispatchers.IO) {
+                        app.studyRepository.removeFromList(list.id, item.itemId)
+                    }
+                    listRefresh++
+                    PracticeWidgetUpdater.refresh(context)
+                }
+                )
+        }
+    }
+
     // Swipe-left removes a character from the photo feed without saving it — looked up and
-    // discarded, or simply not worth studying. An Undo restores it; re-photographing the
-    // character brings it back regardless.
-    fun dismiss(find: SearchResult) {
+    // discarded, or simply not worth studying. Re-photographing the character brings it back
+    // regardless of the undo.
+    fun triageDismiss(find: SearchResult) {
         scope.launch {
             val ts = withContext(Dispatchers.IO) { app.userRepository.dismissPhotoWord(find.glyphId) }
-            photoFinds = photoFinds?.filterNot { it.glyphId == find.glyphId }
-            if (snackbar.snack("Removed ${find.char}", action = "Undo")) {
-                withContext(Dispatchers.IO) { app.userRepository.undismissPhotoWord(find.glyphId, ts) }
-                photoFinds = loadPhotoFinds()
-            }
+            pending = pending + (
+                find.glyphId to PendingTriage(RemoveAction) {
+                    withContext(Dispatchers.IO) {
+                        app.userRepository.undismissPhotoWord(find.glyphId, ts)
+                    }
+                }
+                )
         }
+    }
+
+    fun undoTriage(glyphId: String) {
+        val triage = pending[glyphId] ?: return
+        pending = pending - glyphId          // also restarts the settle timer
+        scope.launch { triage.undo() }
     }
 
     // Component-compose mode (spec §9 / M3.7): the query's CJK characters are read as
@@ -319,6 +373,7 @@ fun SearchScreen(
                 PhotoFeed(
                     granted = photosGranted,
                     finds = photoFinds,
+                    pending = pending,
                     scanProgress = scanProgress,
                     recentlyViewed = recentlyViewed,
                     activeListName = activeListName,
@@ -336,8 +391,9 @@ fun SearchScreen(
                     onAllow = { permissionLauncher.launch(photoPermission) },
                     onRescan = { rescans++ },
                     onOpenCharacter = onOpenCharacter,
-                    onFileAway = ::fileAway,
-                    onDismiss = ::dismiss,
+                    onAdd = ::triageAdd,
+                    onDismiss = ::triageDismiss,
+                    onUndo = ::undoTriage,
                 )
             } else if (results.isEmpty() && wordHits.isEmpty()) {
                 Text(
@@ -401,13 +457,33 @@ fun SearchScreen(
     }
 }
 
-/** Characters per row in the compact tile grid. Five keeps every tile comfortably above the
- * 48dp minimum touch target on a phone while fitting five times what a full-width row did. */
 /** The screen's own horizontal padding. Named because the photo feed has to know how much
  * of the system's gesture strip this already clears (see [PhotoFeed]). */
 private val FEED_EDGE_PADDING = 16.dp
 
-private const val FEED_COLUMNS = 5
+/** Characters per row in the compact tile grid. Four rather than five because these tiles are
+ * *dragged*, not just tapped: a wider tile lets the finger go down further from the screen
+ * edge, and how much room it has on that side is exactly what decides whether the swipe can
+ * reach its commit distance (see [SwipeTile]). */
+private const val FEED_COLUMNS = 4
+
+/** How long the feed must sit still — no swipe, no undo — before the cards that have been
+ * triaged actually leave. Long enough to reconsider a mis-swipe, and long enough that a run
+ * of quick swipes reflows the grid **once**, at the end, rather than shuffling every
+ * remaining tile into a new position under the finger after each one. */
+private const val TRIAGE_SETTLE_MS = 10_000L
+
+/** The undo affordance on a triaged card. A glyph rather than a Material icon: the swipe
+ * verbs are already drawn as text marks (＋, ✕), and material-icons-extended isn't a
+ * dependency. */
+private const val UNDO_MARK = "↺"
+
+/**
+ * A photo find that has been triaged but is still on screen: the write already happened, the
+ * tile is holding its slot greyed out under an Undo target, and [undo] reverses the write if
+ * the user takes it back before the feed settles.
+ */
+private data class PendingTriage(val action: SwipeAction, val undo: suspend () -> Unit)
 
 /**
  * The opening screen: everything the camera roll turned up, plus what you looked at recently.
@@ -422,6 +498,10 @@ private const val FEED_COLUMNS = 5
  * Section headers stick to the top as you scroll, so a screen of bare glyphs always says
  * which pile you're looking at.
  *
+ * A triaged card doesn't vanish: it stays in [finds], listed in [pending], greyed out under
+ * an Undo target until the queue settles (see [TRIAGE_SETTLE_MS]). So the grid you are
+ * swiping across holds still while you swipe it.
+ *
  * finds == null means the scan is still running.
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -429,6 +509,7 @@ private const val FEED_COLUMNS = 5
 private fun PhotoFeed(
     granted: Boolean,
     finds: List<SearchResult>?,
+    pending: Map<String, PendingTriage>,
     scanProgress: Pair<Int, Int>?,
     recentlyViewed: List<SearchResult>,
     activeListName: String?,
@@ -444,8 +525,9 @@ private fun PhotoFeed(
     onAllow: () -> Unit,
     onRescan: () -> Unit,
     onOpenCharacter: (String) -> Unit,
-    onFileAway: (StudyItem, String) -> Unit,
+    onAdd: (SearchResult) -> Unit,
     onDismiss: (SearchResult) -> Unit,
+    onUndo: (String) -> Unit,
 ) {
     val muted = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
     // Android's back-gesture strip owns the outer ~28dp of both screen edges: a drag that
@@ -541,10 +623,10 @@ private fun PhotoFeed(
                     val destination = activeListName?.let { "“$it”" } ?: "your list"
                     Text(
                         if (showDefinitions) {
-                            "Swipe right to add to $destination, left to remove."
+                            "Swipe right to add to $destination, left to remove. Tap $UNDO_MARK to undo."
                         } else {
                             "Drag a character to the edge of the screen — right adds it to " +
-                                "$destination, left removes it."
+                                "$destination, left removes it. Tap $UNDO_MARK to undo."
                         },
                         fontSize = 12.sp,
                         color = muted,
@@ -553,19 +635,36 @@ private fun PhotoFeed(
                 }
                 if (showDefinitions) {
                     items(finds, key = { it.glyphId }) { f ->
-                        SwipeRow(
-                            rightAction = AddAction,
-                            leftAction = RemoveAction,
-                            onSwipeRight = { onFileAway(StudyItem.character(f.glyphId), f.char) },
-                            onSwipeLeft = { onDismiss(f) },
-                        ) {
+                        val triaged = pending[f.glyphId]
+                        if (triaged != null) {
                             ItemRow(
                                 text = f.char,
                                 pinyin = f.primaryPinyin,
                                 gloss = f.definition?.let { displayGloss(it) },
                                 glossLines = 1,
-                                onClick = { onOpenCharacter(f.glyphId) },
+                                dimmed = true,
+                                onClick = { onUndo(f.glyphId) },
+                                trailing = {
+                                    TextButton(onClick = { onUndo(f.glyphId) }) {
+                                        Text("$UNDO_MARK Undo", color = triaged.action.color)
+                                    }
+                                },
                             )
+                        } else {
+                            SwipeRow(
+                                rightAction = AddAction,
+                                leftAction = RemoveAction,
+                                onSwipeRight = { onAdd(f) },
+                                onSwipeLeft = { onDismiss(f) },
+                            ) {
+                                ItemRow(
+                                    text = f.char,
+                                    pinyin = f.primaryPinyin,
+                                    gloss = f.definition?.let { displayGloss(it) },
+                                    glossLines = 1,
+                                    onClick = { onOpenCharacter(f.glyphId) },
+                                )
+                            }
                         }
                         HorizontalDivider()
                     }
@@ -575,14 +674,19 @@ private fun PhotoFeed(
                     // gives the section headers their stickiness.
                     items(finds.chunked(FEED_COLUMNS), key = { it.first().glyphId }) { row ->
                         TileRow(row) { f ->
-                            SwipeTile(
-                                key = f.glyphId,
-                                rightAction = AddAction,
-                                leftAction = RemoveAction,
-                                onSwipeRight = { onFileAway(StudyItem.character(f.glyphId), f.char) },
-                                onSwipeLeft = { onDismiss(f) },
-                            ) {
-                                CharacterTile(f.char) { onOpenCharacter(f.glyphId) }
+                            val triaged = pending[f.glyphId]
+                            if (triaged != null) {
+                                TriagedTile(f.char, triaged.action) { onUndo(f.glyphId) }
+                            } else {
+                                SwipeTile(
+                                    key = f.glyphId,
+                                    rightAction = AddAction,
+                                    leftAction = RemoveAction,
+                                    onSwipeRight = { onAdd(f) },
+                                    onSwipeLeft = { onDismiss(f) },
+                                ) {
+                                    CharacterTile(f.char) { onOpenCharacter(f.glyphId) }
+                                }
                             }
                         }
                     }
@@ -663,6 +767,30 @@ private fun CharacterTile(char: String, onClick: () -> Unit) {
     Card(Modifier.fillMaxWidth().aspectRatio(1f).clickable(onClick = onClick)) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(char, fontSize = 30.sp)
+        }
+    }
+}
+
+/**
+ * A tile whose character has been triaged and is waiting to leave.
+ *
+ * It keeps its slot, and the character stays visible under the wash — faded, not replaced, so
+ * you can still see *which* one you just swiped — with the undo mark over it in the colour of
+ * the verb that fired: green for added, red for removed. Tapping anywhere on it takes the
+ * action back.
+ */
+@Composable
+private fun TriagedTile(char: String, action: SwipeAction, onUndo: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth().aspectRatio(1f)
+            .clickable(onClickLabel = "Undo") { onUndo() },
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(action.color.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(char, fontSize = 30.sp, color = LocalContentColor.current.copy(alpha = 0.28f))
+            Text(UNDO_MARK, fontSize = 30.sp, color = action.color.copy(alpha = 0.85f))
         }
     }
 }

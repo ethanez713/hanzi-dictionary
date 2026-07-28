@@ -1,18 +1,14 @@
-"""Visually-confusable character pairs, computed from Unihan shape encodings.
+"""Visually-confusable character pairs: two layers, two different kinds of evidence.
 
 Unihan's own kSpoofingVariant is the only *authoritative* "these look alike" assertion,
 and it is deliberately tiny — 75 pairs in this pack, of which exactly one joins two common
 characters. It exists to defend against spoofed identifiers, not to teach 己/已/巳 apart.
 
-The alternative the app shipped first — "shares a phonetic component" — answers a
-different question. 请/清/晴 do look alike, but so, by that rule, do 江/河 (shared 氵) and,
-once the decomposition bottoms out in strokes, 大/不 (both "contain" 一). Sharing a part is
-a fact about how a character is *built*, not about whether you can tell two apart at a
-glance.
+## Layer 1: shape-code distance (`compute_pairs`, the cached dataset)
 
-What the literature actually does — Liu et al. 2011, whose confusion sets underpin the
-SIGHAN Chinese spell-check tasks — is measure **shape-code distance**. Two encodings in
-Unihan give that directly:
+What the literature does — Liu et al. 2011, whose confusion sets underpin the SIGHAN
+Chinese spell-check tasks — is measure **shape-code distance**. Two encodings in Unihan
+give that directly:
 
   * **kCangjie** — the character as a sequence of shape keys (妹 = VJD, 姑 = VJR). One key
     apart means one visual element differs.
@@ -24,7 +20,31 @@ edit apart" the same way 妹 and 姑 are, but nobody confuses 人 with 大. So a
 must also be close in stroke count and share either its radical or its whole four-corner
 code — the constraints that separate a shape near-miss from a coincidence of notation.
 
-## Why this is a cached artifact
+## Layer 2: a shared component big enough to dominate (`component_pairs`)
+
+Shape-code distance only ever pairs characters of nearly the same size — its stroke gate is
+±1 — so it cannot see the *other* everyday confusion: 斯 / 期 (both 其), 斯 / 听 (both 斤),
+请 / 清 / 晴 (all 青). Those differ by several strokes but share most of their ink.
+
+"Shares a component" on its own is the rule this file's first version rejected, and rightly:
+by that rule 江/河 look alike (shared 氵) and, once a decomposition bottoms out, so do 大/不
+(both "contain" 一). What makes the difference is *which* component is shared. Two gates
+turn the rule from noise into signal:
+
+  * **the component is distinctive** — it appears in at most [MAX_SHARED_FAMILY] of the
+    characters common enough to ship. 其 is in 5 of them, 青 12, 斤 14; 氵 is in 179 and 口
+    in 198. A part that files hundreds of characters together is a filing system, not a
+    resemblance — nobody mistakes 江 for 河 because both are wet.
+  * **the component is most of the character** — at least [MIN_SHARED_STROKES] strokes of
+    its own, and at least a third of each character's total. 斤 is 4 of 听's 7 strokes and 4
+    of 斯's 12, so it carries that pair; 一 and 丶 never clear the floor at all, which is
+    what stops a decomposition that bottoms out in strokes from pairing everything.
+  * **it sits in the same place in both** — same top-level IDS operator, same slot within it.
+    Sharing a part you'd have to go looking for is not a resemblance: 的 and 怕 both contain
+    白, on opposite sides, and nobody has ever mixed them up. 情/清/晴 keep 青 on the right in
+    every member, which is exactly why that set is hard.
+
+## Why layer 1 is a cached artifact
 
 The pairs depend only on Unihan, never on the rest of the build, so they are derived **once**
 into `data/derived/lookalikes.tsv` and read back on every subsequent build. Computing them
@@ -53,6 +73,21 @@ RULE_VERSION = 1
 # the drawer into a list of curiosities. Applied at pack-build time, not derive time, so the
 # cached dataset stays independent of how any one build ranks characters.
 MAX_FREQ_RANK = 4000
+
+# --- layer 2 (shared component) gates. See the module docstring for what each one rules out.
+#
+# How many *shippable* characters (freq_rank <= MAX_FREQ_RANK) may use a component before it
+# stops being a resemblance and becomes a filing category. 20 keeps 其 (5), 寺 (8), 青 (12),
+# 斤 (14) and drops 月 (72), 亻 (123), 木 (135), 氵 (179), 口 (198). It also bounds the yield:
+# a family of n contributes n(n-1)/2 pairs, so nothing can explode.
+MAX_SHARED_FAMILY = 20
+
+# A component below this is a stroke, not a shape you mistake a whole character for.
+MIN_SHARED_STROKES = 4
+
+# ...and it has to be this much of each character, or a small part ties a simple character to
+# an elaborate one. Expressed as a reciprocal so the test is integer arithmetic.
+MIN_SHARED_FRACTION = 3   # component >= 1/3 of the character's strokes
 
 # Two glyphs more than this many strokes apart do not look alike, whatever their codes say.
 # This, with the radical/four-corner agreement below, is what makes one-key Cangjie edits
@@ -290,4 +325,68 @@ def confusable_rows(
         if a in selected and b in selected:
             if freq_rank.get(a, 10**9) <= max_freq_rank and freq_rank.get(b, 10**9) <= max_freq_rank:
                 out.append((a, b, "shape", basis))
+    return out
+
+
+def component_pairs(
+    component_use: list[tuple],
+    glyph_strokes: dict[str, int | None],
+    component_strokes: dict[str, int | None],
+    freq_rank: dict[str, int],
+    layout: dict[str, str],
+    max_freq_rank: int = MAX_FREQ_RANK,
+    exclude: frozenset[tuple[str, str]] = frozenset(),
+) -> list[tuple[str, str, str, str]]:
+    """Layer 2: pairs that share a component big and distinctive enough to be confusable.
+
+    [component_use] is the pack's own component_use rows — `(glyph_id, component_id, position,
+    ...)`, where component_id is the component's character (or an "ids:" pseudo-ID for an
+    unencoded shape, which is skipped: an unrenderable part can't be named as the thing two
+    characters have in common). Only top-level components count, which is deliberate — 情
+    shares 青 with 请 at the top level, and going deeper is how "contains 一" creeps back in.
+
+    [layout] maps a glyph to its top-level IDS operator (⿰, ⿱, …); with `position` it says
+    *where* the component sits, and two characters only look alike if it sits in the same
+    place in both.
+
+    [exclude] drops pairs already stated more precisely elsewhere; the build passes the
+    simplification edges, so the drawer never offers 請 as a look-alike for 请.
+
+    Rows are shaped for the `confusable` table, with the shared component in `diff` so the UI
+    can say *why* — "shares 其" is the whole lesson.
+    """
+    # Two groupings, because the two gates ask different questions. The family is every common
+    # character carrying the part, wherever it sits — that is what says whether the part is a
+    # resemblance or a filing category. The slot is (part, top-level operator, position), and
+    # only characters in the same slot are ever paired.
+    family: dict[str, set[str]] = defaultdict(set)
+    slots: dict[tuple[str, str, int], set[str]] = defaultdict(set)
+    for row in component_use:
+        gid, component, position = row[0], row[1], row[2]
+        if len(component) != 1:          # "ids:⿰…" pseudo-component
+            continue
+        if freq_rank.get(gid, 10**9) > max_freq_rank:
+            continue
+        family[component].add(gid)
+        operator = layout.get(gid)
+        if operator is not None:
+            slots[(component, operator, position)].add(gid)
+
+    out: list[tuple[str, str, str, str]] = []
+    for (component, _operator, _position), members in sorted(slots.items()):
+        cs = component_strokes.get(component)
+        if cs is None or cs < MIN_SHARED_STROKES:
+            continue
+        if len(family[component]) > MAX_SHARED_FAMILY:
+            continue
+        # The component has to be a third of each half, so the eligible members are decided
+        # once per slot rather than per pair.
+        eligible = sorted(
+            gid for gid in members
+            if (gs := glyph_strokes.get(gid)) is not None and cs * MIN_SHARED_FRACTION >= gs
+        )
+        for i, a in enumerate(eligible):
+            for b in eligible[i + 1:]:
+                if (a, b) not in exclude:
+                    out.append((a, b, "component", component))
     return out

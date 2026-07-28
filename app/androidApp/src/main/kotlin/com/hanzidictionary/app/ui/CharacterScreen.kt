@@ -473,14 +473,18 @@ private fun ScriptMapping(p: CharacterPage, onOpenCharacter: (String) -> Unit) {
 }
 
 /**
- * The characters this one actually gets mixed up with **by sight** — 己/已/巴, 未/木/末 — most
- * common first, each with the pinyin and gloss that make the difference stick. Same rows as
- * the word page's look-alike section and the photo feed, each opening its own character page.
+ * The characters this one actually gets mixed up with **by sight**, each with the pinyin and
+ * gloss that make the difference stick. Same rows as the word page's look-alike section and
+ * the photo feed, each opening its own character page.
  *
- * Visual only: the pack's `confusable` table, never the phonetic series. Two characters
- * sharing 青 sound alike, which is a different question from this one and was answering it
- * with characters that look nothing like each other. (The word page still shows both — with
- * several characters in play, every kind of trap is worth naming.)
+ * Two kinds arrive in one list, in the repository's order: the shape near-twins first
+ * (己/已/巴, 未/木/末 — nothing to name as a shared part), then the characters built around
+ * the same big component (斯/期 share 其, 斯/听 share 斤). The second kind is tagged with that
+ * component on the right — the shared part *is* the reason the pair is confusable, and naming
+ * it turns a list of similar shapes into something you can actually use to tell them apart.
+ *
+ * Not the phonetic series, though: 请/清 land here because 青 is most of both characters, not
+ * because they rhyme. Sound-alikes with nothing visual in common stay on the word page.
  *
  * Behind a button rather than always on the page — a dozen near-identical characters is the
  * single densest thing here, and it's a *comparison* you go looking for, not something to
@@ -495,7 +499,7 @@ private fun LookAlikes(items: List<LookAlike>?, char: String, onOpenCharacter: (
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         // Coverage honesty (spec §6), and a real answer to the question asked: plenty of
-        // characters — 我, 说, 请 — have no near-twin at all. That's a fact about the
+        // characters — 我, 好, 的 — have no near-twin at all. That's a fact about the
         // character, not a gap to paper over by hiding the button.
         items.isEmpty() -> Text(
             "No character in the pack is shaped confusably like $char.",
@@ -511,6 +515,15 @@ private fun LookAlikes(items: List<LookAlike>?, char: String, onOpenCharacter: (
                     gloss = la.gloss,
                     glossLines = 1,
                     onClick = { onOpenCharacter(la.glyphId) },
+                    trailing = la.sharedComponent?.let { part ->
+                        {
+                            Text(
+                                "shares $part",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
                 )
             }
         }

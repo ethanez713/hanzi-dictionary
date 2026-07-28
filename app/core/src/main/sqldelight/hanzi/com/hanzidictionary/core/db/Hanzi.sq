@@ -153,11 +153,15 @@ JOIN glyph g ON g.id = cu.glyph_id
 WHERE cu.component_id = :componentId
 ORDER BY (g.freq_rank IS NULL), g.freq_rank;
 
+-- diff carries the shared component for kind='component' rows, and the shape encoding that
+-- vouched for a kind='shape' pair; NULL for kSpoofingVariant.
 confusablesFor:
-SELECT glyph_a, glyph_b, kind FROM confusable WHERE glyph_a = :glyphId OR glyph_b = :glyphId;
+SELECT glyph_a, glyph_b, kind, diff FROM confusable WHERE glyph_a = :glyphId OR glyph_b = :glyphId;
 
+-- Shape-distance pairs only: the drill asks "which of these two is X?", which needs a pair
+-- that is genuinely hard to tell apart, not one that merely shares a part.
 allConfusables:
-SELECT glyph_a, glyph_b FROM confusable;
+SELECT glyph_a, glyph_b FROM confusable WHERE kind != 'component';
 
 -- Trad→simp edges where BOTH endpoints are in :ids — used to fold a traditional
 -- character's search row into its simplified counterpart's.

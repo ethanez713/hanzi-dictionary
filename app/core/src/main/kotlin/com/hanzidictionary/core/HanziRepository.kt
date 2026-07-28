@@ -376,22 +376,50 @@ class HanziRepository(
     }
 
     /**
-     * Characters that genuinely *look* like [glyphId] — the pack's `confusable` table, which
-     * is Unihan kSpoofingVariant plus the shape-code pairs the pipeline computes (己/已/巴,
-     * 未/木/末). Common ones first, since those are the ones you'll actually mix up.
+     * Characters that genuinely *look* like [glyphId] — the pack's `confusable` table, in the
+     * order the drawer shows them.
      *
-     * Deliberately narrower than [lookAlikesForGlyphs]: no phonetic-series siblings. Sharing
-     * 青 is a claim about how 请/清/晴 *sound*, and answering "what looks like this?" with a
-     * sound fact is how the drawer ended up listing characters that look nothing alike.
+     * Two kinds of evidence, strongest first (the pipeline's `lookalike.py` explains both):
+     *   1. **shape neighbours** — 己/已/巴, 未/木/末: same size, a stroke apart. Nothing to
+     *      name as "the shared part", so their [LookAlike.sharedComponent] is null.
+     *   2. **shared-component pairs** — 斯/期 (其), 斯/听 (斤), 请/清/晴 (青): several strokes
+     *      apart but most of their ink is the same. Grouped by that component, biggest
+     *      component first, because the more of the character it accounts for the harder the
+     *      pair is to tell apart at a glance.
+     *
+     * Within each group, common characters lead: those are the ones you'll actually mix up.
+     *
+     * Still narrower than [lookAlikesForGlyphs], which also serves phonetic-series siblings —
+     * a claim about how characters *sound*, which is a different question from this one.
      */
-    fun visualLookAlikes(glyphId: String, limit: Int = LOOKALIKE_LIMIT): List<LookAlike> {
-        val others = db.hanziQueries.confusablesFor(glyphId).executeAsList()
-            .map { if (it.glyph_a == glyphId) it.glyph_b else it.glyph_a }
-            .distinct()
-        return sortByFrequency(others).take(limit).mapNotNull { id ->
-            db.hanziQueries.glyphWithPinyin(id).executeAsOneOrNull()
-                ?.let { LookAlike(it.id, it.char, it.pinyin, it.definition?.let(::firstSense)) }
+    fun visualLookAlikes(glyphId: String, limit: Int = CHAR_LOOKALIKE_LIMIT): List<LookAlike> {
+        // Shared component -> the characters it pairs with; null key = the shape neighbours.
+        val byComponent = LinkedHashMap<String?, MutableList<String>>()
+        for (row in db.hanziQueries.confusablesFor(glyphId).executeAsList()) {
+            val other = if (row.glyph_a == glyphId) row.glyph_b else row.glyph_a
+            val component = row.diff.takeIf { row.kind == "component" }
+            byComponent.getOrPut(component) { mutableListOf() }.add(other)
         }
+        // A component's own stroke count is how much of the character it accounts for; the
+        // shape group (null) leads regardless, so it sorts as if it were the whole character.
+        val weight = byComponent.keys.associateWith { component ->
+            if (component == null) Int.MAX_VALUE
+            else db.hanziQueries.glyphByChar(component).executeAsList()
+                .firstOrNull()?.stroke_count?.toInt() ?: 0
+        }
+
+        val seen = mutableSetOf<String>()
+        val out = mutableListOf<LookAlike>()
+        for ((component, ids) in byComponent.entries.sortedByDescending { weight[it.key] }) {
+            for (id in sortByFrequency(ids.distinct())) {
+                if (out.size >= limit) return out
+                if (!seen.add(id)) continue
+                db.hanziQueries.glyphWithPinyin(id).executeAsOneOrNull()?.let {
+                    out.add(LookAlike(it.id, it.char, it.pinyin, it.definition?.let(::firstSense), component))
+                }
+            }
+        }
+        return out
     }
 
     /**
@@ -422,7 +450,8 @@ class HanziRepository(
         for (gid in glyphIds) {
             for (row in db.hanziQueries.confusablesFor(gid).executeAsList()) {
                 val other = if (row.glyph_a == gid) row.glyph_b else row.glyph_a
-                enrich(other)?.let { out[it.glyphId] = it }
+                val component = row.diff.takeIf { row.kind == "component" }
+                enrich(other)?.let { out[it.glyphId] = it.copy(sharedComponent = component) }
             }
         }
         // Then phonetic-series siblings, common ones first, until we hit the cap. Over-fetch
@@ -439,6 +468,10 @@ class HanziRepository(
     private companion object {
         /** A few examples is plenty on a word page; more would bury the definitions. */
         const val SENTENCE_LIMIT = 4L
+
+        /** The character page's own drawer, which you opened to compare things, so it can
+         * afford more rows than a word page's aside — 请 alone has a dozen 青-sharers. */
+        const val CHAR_LOOKALIKE_LIMIT = 20
 
         /** Word-page look-alikes: how many to show, the frequency ceiling for series
          * siblings (keep them to characters a learner actually meets), and how far to
@@ -570,7 +603,9 @@ class HanziRepository(
         return ids.filter { it in rank }.sortedBy { rank[it] }
     }
 
-    /** Every visually-confusable pair in the pack (kSpoofingVariant). Kept for the
+    /** Every shape-distance pair in the pack (kSpoofingVariant + the derived shape
+     * neighbours), which is what a two-way "which is which?" drill needs; the
+     * shared-component pairs are a weaker claim and stay out of it. Kept for the
      * character page's "Easily confused with"; too rare-skewed to feed the drill. */
     fun confusablePairs(): List<ConfusablePair> =
         db.hanziQueries.allConfusables().executeAsList().map {

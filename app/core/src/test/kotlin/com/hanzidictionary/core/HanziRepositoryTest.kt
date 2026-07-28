@@ -384,33 +384,61 @@ class HanziRepositoryTest {
         assertFalse(unencoded.navigable, "an unencoded shape has no page to open")
     }
 
-    @Test
-    fun visualLookAlikesAreShapeNeighboursNotSoundAlikes() {
-        // What the character page's drawer serves. These are the classic 形近字 confusions,
-        // and they exist only because the pipeline computes shape-code pairs — Unihan's own
-        // kSpoofingVariant carries 75 pairs in total, one of them between common characters.
-        fun chars(char: String) = repo.characterPageByChar(char)!!.let { p ->
-            repo.visualLookAlikes(p.glyphId).map { it.char }
-        }
-        assertTrue("已" in chars("己"), "己/已 is the canonical look-alike pair, got ${chars("己")}")
-        assertTrue(chars("未").any { it == "末" || it == "木" }, "未 should list 末/木, got ${chars("未")}")
-        assertTrue("天" in chars("大"), "大/天 differ by one stroke, got ${chars("大")}")
+    private fun lookAlikeChars(char: String): List<String> =
+        repo.characterPageByChar(char)!!.let { p -> repo.visualLookAlikes(p.glyphId).map { it.char } }
 
-        // And the line this drawer must not cross: 请/清/晴 share 青, which is a fact about
-        // how they SOUND. Answering "what looks like 请?" with them is what this replaced.
-        val qing = chars("请")
-        assertTrue(qing.none { it == "清" || it == "情" || it == "晴" }, "sound-alikes leaked in: $qing")
+    @Test
+    fun visualLookAlikesCoverShapeNeighbours() {
+        // Layer 1 of the drawer: the classic 形近字 confusions, which exist only because the
+        // pipeline computes shape-code pairs — Unihan's own kSpoofingVariant carries 75 pairs
+        // in total, one of them between common characters.
+        assertTrue("已" in lookAlikeChars("己"), "己/已 is the canonical pair, got ${lookAlikeChars("己")}")
+        assertTrue(
+            lookAlikeChars("未").any { it == "末" || it == "木" },
+            "未 should list 末/木, got ${lookAlikeChars("未")}",
+        )
+        assertTrue("天" in lookAlikeChars("大"), "大/天 differ by one stroke, got ${lookAlikeChars("大")}")
     }
 
     @Test
-    fun visualLookAlikesLeadWithTheCommonOnes() {
-        // A drawer is only worth opening if the characters in it are ones you'll meet: sorted
-        // by corpus frequency, so a rare near-twin never pushes a common one off the list.
+    fun visualLookAlikesCoverSharedComponents() {
+        // Layer 2: characters several strokes apart that share a big, distinctive component in
+        // the same place. Shape-code distance can't reach these — its stroke gate is ±1 — and
+        // they are exactly the confusions a learner hits: 斯 with 期 (其) and with 听 (斤).
+        assertTrue("期" in lookAlikeChars("斯"), "斯/期 both carry 其, got ${lookAlikeChars("斯")}")
+        assertTrue("听" in lookAlikeChars("斯"), "斯/听 both carry 斤, got ${lookAlikeChars("斯")}")
+        assertTrue("清" in lookAlikeChars("请"), "请/清 both carry 青, got ${lookAlikeChars("请")}")
+
+        // The shared part is named, because it's the whole reason the pair is confusable.
+        val qi = repo.visualLookAlikes(repo.characterPageByChar("斯")!!.glyphId).single { it.char == "期" }
+        assertEquals("其", qi.sharedComponent)
+
+        // And the line this layer must not cross: a component that files hundreds of
+        // characters together is a filing system, not a resemblance. Nobody mistakes 江 for 河
+        // because both are wet.
+        assertTrue("河" !in lookAlikeChars("江"), "shared-radical noise leaked in: ${lookAlikeChars("江")}")
+        // Same for a part that sits somewhere else in the other character: 的 and 怕 both
+        // contain 白, on opposite sides.
+        assertTrue("怕" !in lookAlikeChars("的"), "misplaced-part noise leaked in: ${lookAlikeChars("的")}")
+    }
+
+    @Test
+    fun visualLookAlikesLeadWithShapeNeighboursThenCommonOnes() {
+        // Order the drawer relies on: shape near-twins first (the stronger claim, and they
+        // have no shared part to name), then the shared-component groups. Within a group,
+        // common characters lead — a drawer is only worth opening if what's in it is what
+        // you'll meet.
         val page = repo.characterPageByChar("日")!!
-        val ranks = repo.visualLookAlikes(page.glyphId).map { la ->
+        val items = repo.visualLookAlikes(page.glyphId)
+        assertEquals(
+            items.sortedBy { it.sharedComponent != null }.map { it.char },
+            items.map { it.char },
+            "shape pairs should precede shared-component ones, got ${items.map { it.char to it.sharedComponent }}",
+        )
+        val shapeRanks = items.filter { it.sharedComponent == null }.map { la ->
             repo.characterPage(la.glyphId)?.freqRank ?: Long.MAX_VALUE
         }
-        assertEquals(ranks.sorted(), ranks, "look-alikes should be frequency-ordered, got $ranks")
+        assertEquals(shapeRanks.sorted(), shapeRanks, "look-alikes should be frequency-ordered, got $shapeRanks")
     }
 
     @Test
