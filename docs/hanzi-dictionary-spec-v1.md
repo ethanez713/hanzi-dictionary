@@ -259,8 +259,9 @@ SRS reviews with "component reunion" sessions, confusable quizzes seeded by `con
   duplicated is removed.
 - **Home-screen widget.** One card from the active list. Launchers give widgets taps and no
   gestures, so the swipe grammar becomes three tap zones: left = didn't know, right = knew
-  it, middle opens Practice on that card, revealed. Grading only — archiving needs the full
-  page. Feedback arrives one card late (the answer to the card just graded is echoed under
+  it, middle flips the card and then opens **that character's detail page** — the fullest
+  answer the app has, which is what the flip was asking for — and makes it the pinned card, so
+  the home card and Practice resume on it too. Grading only — archiving needs the full page. Feedback arrives one card late (the answer to the card just graded is echoed under
   the next one), because a widget cannot reveal-then-advance without a timer. Built on
   `RemoteViews` rather than Glance: no new dependency, and Glance compiles to RemoteViews
   anyway.

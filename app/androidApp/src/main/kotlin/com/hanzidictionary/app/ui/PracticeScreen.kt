@@ -99,8 +99,6 @@ fun PracticeScreen(
     hskLevels: Map<Int, List<String>>,
     tts: MandarinTts,
     source: DeckSource,
-    initialItem: StudyItem?,
-    startRevealed: Boolean,
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
     onOpenConfusables: () -> Unit,
@@ -117,7 +115,7 @@ fun PracticeScreen(
     // All the in-session deck state (which card, its position, whether it's flipped) lives in
     // one immutable PracticeState so its transitions are unit-tested in core; reassigning it
     // drives recomposition.
-    var state by remember { mutableStateOf(PracticeState(emptyList(), revealed = startRevealed)) }
+    var state by remember { mutableStateOf(PracticeState(emptyList())) }
     var summaries by remember { mutableStateOf<Map<String, ItemSummary>>(emptyMap()) }
     var loaded by remember { mutableStateOf(false) }
     var back by remember { mutableStateOf<CardBack?>(null) }
@@ -127,37 +125,18 @@ fun PracticeScreen(
         loaded = false
         val built = withContext(Dispatchers.IO) {
             val candidates = resolveCandidates(app, repository, hskLevels, source)
-            var entries = app.studyRepository.buildDeck(candidates)
-
-            // A card opened from the widget goes to the front rather than making the user
-            // hunt for the character they were just looking at — and it goes there even
-            // if the scheduler wouldn't have served it (already graded on the widget, or
-            // past the deck limit): the user tapped *that* card.
-            initialItem?.let { wanted ->
-                val at = entries.indexOfFirst { it.item == wanted }
-                entries = when {
-                    at == 0 -> entries
-                    at > 0 -> listOf(entries[at]) + entries.filterIndexed { i, _ -> i != at }
-                    else -> listOf(
-                        DeckEntry(wanted, app.studyRepository.cardState(wanted.itemId), DeckBucket.AHEAD),
-                    ) + entries
-                }
-            }
+            val entries = app.studyRepository.buildDeck(candidates)
 
             // Resolve display text for the whole deck in one pass, and drop anything the
             // pack no longer carries so a stale list entry can't render as a blank card.
             val found = repository.itemSummaries(entries.map { it.item }).associateBy { it.item.itemId }
             entries.filter { it.item.itemId in found } to found
         }
-        // The card the session was on outranks the deck order, including the widget's
-        // initialItem: by the time a pin exists that card has already been dealt, so on the
-        // first build the two agree, and after that the pin is simply further along. Opening
-        // a card's character page and coming back is the case this exists for.
-        state = deckOpenedAt(
-            deck = built.first,
-            pin = app.practiceCardPin,
-            fallbackRevealed = startRevealed && initialItem != null,
-        )
+        // The card the session was on outranks the deck order — that is what makes opening a
+        // card's character page and coming back a no-op instead of a reshuffle. It is also how
+        // a widget tap lands you on the tapped card: the widget pins it, and the pin is read
+        // here (and by the home card) with no route argument involved.
+        state = deckOpenedAt(deck = built.first, pin = app.practiceCardPin)
         summaries = built.second
         loaded = true
     }

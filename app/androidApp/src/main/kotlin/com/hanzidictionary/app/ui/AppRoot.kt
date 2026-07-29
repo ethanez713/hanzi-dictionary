@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -15,14 +16,18 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import android.net.Uri
+import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
+import com.hanzidictionary.core.CardPin
 import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.extractHanzi
 import com.hanzidictionary.core.glyphIdOfChar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /** Route arguments can be CJK chars or "ids:⿰..." pseudo-ids, neither URL-safe, so
  * every id crossing a route boundary is percent-encoded here and decoded in the screen.
@@ -73,6 +78,7 @@ fun AppRoot(
     widgetItem: StudyItem? = null,
     onWidgetItemConsumed: () -> Unit = {},
 ) {
+    val app = LocalContext.current.applicationContext as HanziApp
     val nav = rememberNavController()
     var query by rememberSaveable { mutableStateOf("") }
 
@@ -117,16 +123,28 @@ fun AppRoot(
         }
     }
 
-    // Tapping the middle of the home-screen widget opens Practice on that exact card,
-    // already revealed — the widget can't show an answer, so the app finishes the thought.
+    // Tapping the middle of the home-screen widget opens that character's **detail page** —
+    // the fullest answer the app has, which is the thought the widget's flipped card starts
+    // and can't finish in four lines of RemoteViews.
+    //
+    // It also makes that character the pinned card everywhere, because the widget, the home
+    // card and Practice are meant to agree about what's up next: the card you tapped is now
+    // the card all three are on, so Back (or the ↩ marker) lands on it rather than on whatever
+    // was showing before. Revealed, since you have just read its whole page.
     LaunchedEffect(widgetItem) {
-        if (widgetItem != null) {
-            nav.navigate(
-                "practice?source=everything&item=${enc(widgetItem.itemId)}" +
-                    "&kind=${widgetItem.kind}&reveal=true",
-            )
-            onWidgetItemConsumed()
-        }
+        val item = widgetItem ?: return@LaunchedEffect
+        val pin = CardPin(item.itemId, revealed = true)
+        app.homeCardPin = pin
+        app.practiceCardPin = pin
+        // Label the trail marker with the card's own text, resolved the way the widget and the
+        // cards resolve it so all three read alike — a word's itemId is not its text. Still on
+        // the home destination at this point, which is the screen the marker points back to.
+        withContext(Dispatchers.IO) { repository.itemSummaries(listOf(item)).firstOrNull()?.text }
+            ?.let { cardReturn.leaving(it) }
+        nav.navigate(
+            if (item.isWord) "word/${enc(item.itemId)}" else "character/${enc(item.itemId)}",
+        )
+        onWidgetItemConsumed()
     }
 
     CompositionLocalProvider(LocalCardReturn provides cardReturn) {
@@ -182,26 +200,20 @@ fun AppRoot(
                     onBack = { nav.popBackStack() },
                 )
             }
+            // Only a deck source travels in this route. The widget used to hand a specific card
+            // in here too ("&item=…&reveal=true"); it now opens that character's detail page
+            // instead, and the pinned card is how any surface resumes on a particular card.
             composable(
-                route = "practice?source={source}&item={item}&kind={kind}&reveal={reveal}",
+                route = "practice?source={source}",
                 arguments = listOf(
                     navArgument("source") { type = NavType.StringType; nullable = true; defaultValue = null },
-                    navArgument("item") { type = NavType.StringType; nullable = true; defaultValue = null },
-                    navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = null },
-                    navArgument("reveal") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) { entry ->
-                val args = entry.arguments
-                val itemId = args?.getString("item")?.let { dec(it) }
                 PracticeScreen(
                     repository = repository,
                     hskLevels = hskLevels,
                     tts = tts,
-                    source = decodeSource(args?.getString("source")),
-                    initialItem = itemId?.let {
-                        StudyItem(it, args.getString("kind") ?: StudyItem.KIND_CHARACTER)
-                    },
-                    startRevealed = args?.getString("reveal") == "true",
+                    source = decodeSource(entry.arguments?.getString("source")),
                     onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                     onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
                     onOpenConfusables = { nav.navigate("confusables") },

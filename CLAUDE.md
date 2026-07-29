@@ -106,6 +106,14 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
 - **The practice card uses structure, not headings.** Its revealed side is three bands split
   by hairlines (`CardRule`) — answer / components / words. Don't add section labels back;
   vertical space on that card is the scarce resource.
+- **Which flashcard is on screen is a *pin*, not composable state** (`CardPin` +
+  `deckOpenedAt` in `:core`, held on `HanziApp` for the life of the process). Decks get rebuilt
+  constantly — a photo find filed, a list switched, the screen disposed when you open a
+  character page — and re-dealing the top card each time made looking a card up lose it. Any
+  surface that resumes on a particular card does it by setting the pin; don't add route args
+  for it (the widget's `&item=&reveal=` deep link was removed in favour of the pin).
+  While a card is suspended, `CardReturn`/`ReturnToCardButton` puts a `↩ 好` marker in every
+  dictionary top bar, before `HomeButton`; it clears on arrival, after 10 min, or on restart.
 - **Comments justify _why_, not _what_.** The codebase is heavily commented in this style;
   match it. Keep it that way.
 - **Route args are percent-encoded with `android.net.Uri.encode`, not `URLEncoder`**
@@ -123,6 +131,10 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
 - **You cannot trigger the widget from the shell** (`APPWIDGET_UPDATE` is a protected
   broadcast → `SecurityException`). Verify by having the user place it, then read
   `shared_prefs/practice_widget.xml` and `review_log.origin='widget'` via `run-as`.
+  The one exception is its **middle-tap hand-off to the app**, which is an ordinary activity
+  intent and can be fired directly: `adb -s <dev> shell am start -a android.intent.action.VIEW
+  -n com.hanzidictionary.app/.MainActivity --es practice_item U+597D --es practice_kind
+  character`. Confirm with `dumpsys activity activities | grep ResumedActivity`.
 - All widget card/reveal logic is the pure `WidgetState` state machine in `:core`
   (unit-tested); `PracticeWidgetProvider` only does prefs + RemoteViews + the FSRS write.
 

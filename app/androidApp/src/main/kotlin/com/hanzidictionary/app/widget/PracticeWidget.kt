@@ -237,7 +237,8 @@ class PracticeWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        /** Item the user tapped on the widget, opened revealed in Practice. */
+        /** Item the user tapped on the widget. The app opens its detail page and makes it the
+         * pinned card, so the study surfaces resume on the card you tapped. */
         const val EXTRA_PRACTICE_ITEM = "practice_item"
         const val EXTRA_PRACTICE_KIND = "practice_kind"
     }
