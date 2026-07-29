@@ -62,6 +62,7 @@ fun HomeDueCard(
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
     val scope = rememberCoroutineScope()
+    val cardReturn = LocalCardReturn.current
 
     var state by remember { mutableStateOf(PracticeState(emptyList())) }
     var summaries by remember { mutableStateOf<Map<String, ItemSummary>>(emptyMap()) }
@@ -141,6 +142,9 @@ fun HomeDueCard(
                 tts = tts,
                 onReveal = { state = state.reveal() },
                 onOpenFull = {
+                    // Leave a trail marker before handing off: the dictionary is deep, and
+                    // this is the card you'll want back when you're four pages in.
+                    cardReturn?.leaving(summary?.text ?: entry.item.itemId)
                     if (entry.item.isWord) onOpenWord(entry.item.itemId)
                     else onOpenCharacter(entry.item.itemId)
                 },

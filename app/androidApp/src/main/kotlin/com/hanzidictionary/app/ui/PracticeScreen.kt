@@ -111,6 +111,7 @@ fun PracticeScreen(
     val app = context.applicationContext as HanziApp
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val cardReturn = LocalCardReturn.current
 
     var reverse by remember { mutableStateOf(false) }
     // All the in-session deck state (which card, its position, whether it's flipped) lives in
@@ -287,6 +288,9 @@ fun PracticeScreen(
                     )
                     val summary = summaries[entry.item.itemId]
                     val openFull = {
+                        // Leave a trail marker before handing off: the dictionary is deep, and
+                        // this is the card you'll want back when you're four pages in.
+                        cardReturn?.leaving(summary?.text ?: entry.item.itemId)
                         if (entry.item.isWord) onOpenWord(entry.item.itemId)
                         else onOpenCharacter(entry.item.itemId)
                     }

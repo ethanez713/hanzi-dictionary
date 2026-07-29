@@ -82,7 +82,11 @@ fun CharacterScreen(
             TopAppBar(
                 title = { Text(page?.char ?: "…") },
                 navigationIcon = { BackButton(onBack) },
-                actions = { HomeButton(onHome) },
+                actions = {
+                    // Before Home: the two escapes ordered by how far they take you.
+                    ReturnToCardButton()
+                    HomeButton(onHome)
+                },
             )
         },
     ) { padding ->
