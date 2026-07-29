@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
+import com.hanzidictionary.core.CardPin
 import com.hanzidictionary.core.CardState
 import com.hanzidictionary.core.DeckBucket
 import com.hanzidictionary.core.DeckEntry
@@ -61,6 +62,7 @@ import com.hanzidictionary.core.PracticeState
 import com.hanzidictionary.core.Rating
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.StudyRepository
+import com.hanzidictionary.core.deckOpenedAt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -146,9 +148,14 @@ fun PracticeScreen(
             val found = repository.itemSummaries(entries.map { it.item }).associateBy { it.item.itemId }
             entries.filter { it.item.itemId in found } to found
         }
-        state = PracticeState(
+        // The card the session was on outranks the deck order, including the widget's
+        // initialItem: by the time a pin exists that card has already been dealt, so on the
+        // first build the two agree, and after that the pin is simply further along. Opening
+        // a card's character page and coming back is the case this exists for.
+        state = deckOpenedAt(
             deck = built.first,
-            revealed = startRevealed && initialItem != null,
+            pin = app.practiceCardPin,
+            fallbackRevealed = startRevealed && initialItem != null,
         )
         summaries = built.second
         loaded = true
@@ -159,6 +166,13 @@ fun PracticeScreen(
         back = current?.let { entry ->
             withContext(Dispatchers.IO) { loadBack(repository, entry.item) }
         }
+    }
+    // Grade, skip, archive or reveal — whatever moved the session, the pin follows, so a
+    // rebuild resumes here. Never written from an empty state: the first composition passes
+    // through one before the deck arrives, and it must not clobber the pin being read above.
+    LaunchedEffect(current?.item?.itemId, state.revealed) {
+        val entry = current ?: return@LaunchedEffect
+        app.practiceCardPin = CardPin(entry.item.itemId, state.revealed)
     }
 
     fun grade(rating: Rating) {

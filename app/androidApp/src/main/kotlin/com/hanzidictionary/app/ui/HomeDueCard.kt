@@ -16,11 +16,13 @@ import androidx.compose.ui.unit.dp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
+import com.hanzidictionary.core.CardPin
 import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ItemSummary
 import com.hanzidictionary.core.PracticeState
 import com.hanzidictionary.core.Rating
+import com.hanzidictionary.core.deckOpenedAt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,8 +67,10 @@ fun HomeDueCard(
     var summaries by remember { mutableStateOf<Map<String, ItemSummary>>(emptyMap()) }
     var back by remember { mutableStateOf<CardBack?>(null) }
 
-    // Rebuilt whenever the feed reloads (a find filed away, a list switched) so the card can't
-    // go on offering something that was just archived.
+    // The *deck* is rebuilt whenever the feed reloads (a find filed away, a list switched, this
+    // screen recomposed on the way back from a character page) so it can't go on offering
+    // something that was just archived — but the card on screen survives that rebuild, because
+    // [deckOpenedAt] reopens the deck at the one the user was looking at.
     LaunchedEffect(refreshKey) {
         val built = withContext(Dispatchers.IO) {
             val activeId = app.studyRepository.activeListId()
@@ -77,13 +81,21 @@ fun HomeDueCard(
                 .associateBy { it.item.itemId }
             entries.filter { it.item.itemId in found } to found
         }
-        state = PracticeState(built.first)
+        state = deckOpenedAt(built.first, app.homeCardPin)
         summaries = built.second
     }
 
     val current = state.current
     LaunchedEffect(current?.item) {
         back = current?.let { withContext(Dispatchers.IO) { loadBack(repository, it.item) } }
+    }
+    // Everything that legitimately changes the card — grading it, archiving it, turning it
+    // face-up — lands here, so the next rebuild opens on exactly what's on screen now. Never
+    // cleared from an empty state: the first composition passes through one on its way to the
+    // built deck, and clearing it there would throw away the pin the build is about to read.
+    LaunchedEffect(current?.item?.itemId, state.revealed) {
+        val entry = current ?: return@LaunchedEffect
+        app.homeCardPin = CardPin(entry.item.itemId, state.revealed)
     }
 
     val entry = current ?: return

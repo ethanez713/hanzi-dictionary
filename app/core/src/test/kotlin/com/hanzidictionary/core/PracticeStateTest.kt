@@ -77,4 +77,34 @@ class PracticeStateTest {
         assertNull(next.current)
         assertFalse(next.revealed)
     }
+
+    @Test
+    fun aRebuiltDeckReopensOnThePinnedCard() {
+        // The rule that stops a card vanishing when you look its own page up: the deck comes
+        // back in a different order (new cards are shuffled per build) but the card you were
+        // on is still the card on screen, still face-up if you had turned it over.
+        val rebuilt = listOf(entry("c"), entry("a"), entry("b"))
+        val state = deckOpenedAt(rebuilt, CardPin("b", revealed = true))
+        assertEquals("b", state.current?.item?.itemId)
+        assertTrue(state.revealed, "a card that was face-up comes back face-up")
+        assertEquals(rebuilt.size, state.deck.size, "pinning reorders nothing")
+    }
+
+    @Test
+    fun aPinnedCardThatHasLeftTheDeckFallsBackToTheTop() {
+        // Graded, archived, or no longer due: there is nothing to preserve, so the deck opens
+        // where it normally would — and face-down, whatever the pinned card was showing.
+        val state = deckOpenedAt(listOf(entry("a"), entry("b")), CardPin("gone", revealed = true))
+        assertEquals("a", state.current?.item?.itemId)
+        assertFalse(state.revealed)
+    }
+
+    @Test
+    fun noPinOpensTheDeckWithTheCallersDefault() {
+        // The widget's "open this card already revealed" path, which has no pin on the first
+        // build of a session.
+        val state = deckOpenedAt(listOf(entry("a")), pin = null, fallbackRevealed = true)
+        assertEquals("a", state.current?.item?.itemId)
+        assertTrue(state.revealed)
+    }
 }

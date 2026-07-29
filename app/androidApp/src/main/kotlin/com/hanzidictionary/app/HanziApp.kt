@@ -5,6 +5,7 @@ import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.photo.MediaStorePhotoSource
 import com.hanzidictionary.app.photo.MlKitTextRecognizer
+import com.hanzidictionary.core.CardPin
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.PhotoScanner
 import com.hanzidictionary.core.StudyRepository
@@ -13,6 +14,20 @@ import org.json.JSONObject
 
 class HanziApp : Application() {
     val repository: HanziRepository by lazy { PackManager.openRepository(this) }
+
+    /**
+     * The flashcard each surface is currently showing, held for the life of the *process*.
+     *
+     * Both decks are rebuilt whenever their screen is recomposed — and opening a card's own
+     * character page disposes that screen — so without this, looking a card up was enough to
+     * lose it. These live on the Application rather than in the composables precisely because
+     * navigation must not clear them; see [com.hanzidictionary.core.deckOpenedAt].
+     *
+     * Deliberately *not* persisted: a full app restart deals a fresh card, which is the one
+     * moment where starting over is what you want.
+     */
+    var homeCardPin: CardPin? = null
+    var practiceCardPin: CardPin? = null
 
     val tts: MandarinTts by lazy { MandarinTts(this) }
 

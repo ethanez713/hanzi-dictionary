@@ -39,3 +39,32 @@ data class PracticeState(
         return copy(deck = newDeck, index = newIndex, revealed = false, dealt = dealt + 1)
     }
 }
+
+/**
+ * The card a surface is showing, and whether it is face-up — enough to put it back on screen
+ * after the deck behind it is rebuilt. See [deckOpenedAt].
+ */
+data class CardPin(val itemId: String, val revealed: Boolean)
+
+/**
+ * A deck opened at [pin]'s card rather than at the top.
+ *
+ * A deck is rebuilt far more often than a card is finished: the home feed reloads, a list
+ * changes, the screen is disposed and recomposed on the way back from a character page.
+ * Dealing the top card on every rebuild meant that looking up a card's *own* detail page —
+ * the obvious thing to do with a card you don't know — made it disappear, and you came back
+ * to a different word. Reopening at the pinned card makes the rebuild invisible: the card on
+ * screen then only ever changes when the user grades, skips or archives it.
+ *
+ * If that card has since left the deck (graded, archived, no longer due) there is nothing to
+ * preserve, and the deck opens at the top with [fallbackRevealed].
+ */
+fun deckOpenedAt(
+    deck: List<DeckEntry>,
+    pin: CardPin?,
+    fallbackRevealed: Boolean = false,
+): PracticeState {
+    val at = if (pin == null) -1 else deck.indexOfFirst { it.item.itemId == pin.itemId }
+    return if (at >= 0) PracticeState(deck, index = at, revealed = pin!!.revealed)
+    else PracticeState(deck, revealed = fallbackRevealed)
+}
