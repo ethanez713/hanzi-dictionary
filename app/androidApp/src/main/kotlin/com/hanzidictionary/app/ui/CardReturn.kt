@@ -49,22 +49,52 @@ class CardReturn(private val nav: NavHostController) {
      * the practice route is parameterised, and its filled route isn't reconstructable here. */
     private var destinationId: Int? = null
 
+    /** Filled route to *open* the card's screen, for a card that has no screen on the stack
+     * to unwind to (the widget hand-off). Null means the ordinary case: pop back to
+     * [destinationId]. */
+    private var openRoute: String? = null
+
     /** Called by a card surface as it hands off to a detail page, while it is still the
      * current destination — that is what makes [destinationId] the card's own screen. */
     fun leaving(label: String) {
         this.label = label
         destinationId = nav.currentBackStackEntry?.destination?.id
+        openRoute = null
     }
 
-    /** Unwinds to the card's screen. The card itself is still the one you left: the deck
+    /**
+     * Called when the card was handed to the app **from outside** — the widget's middle tap,
+     * which opens a detail page from whatever screen the app happened to be showing (home on
+     * a cold start, some character page four levels deep on a warm one). There is no screen
+     * you left, so popping is meaningless: the card's screen is Practice, which resumes on
+     * the pinned card, and [route] is how to open it.
+     *
+     * [destinationRoute] is the practice route's *pattern*, which is what the graph knows it
+     * by — resolving it to an id here lets arrival clear the marker exactly like the pop case.
+     */
+    fun leavingFor(label: String, route: String, destinationRoute: String) {
+        this.label = label
+        destinationId = runCatching { nav.graph.findNode(destinationRoute)?.id }.getOrNull()
+        openRoute = route
+    }
+
+    /** Returns to the card's screen. The card itself is still the one you left: the deck
      * rebuild that happens on arrival reopens on it (`deckOpenedAt`). */
     fun returnToCard() {
-        destinationId?.let { nav.popBackStack(it, false) }
+        val route = openRoute
+        if (route != null) {
+            // Not a second copy stacked on top of the browse path: unwind to home first, so
+            // Back from the card leaves the same one-entry history practice normally has.
+            nav.navigate(route) { popUpTo(nav.graph.startDestinationId) { inclusive = false } }
+        } else {
+            destinationId?.let { nav.popBackStack(it, false) }
+        }
     }
 
     fun clear() {
         label = null
         destinationId = null
+        openRoute = null
     }
 
     /** True once [entryDestinationId] is the card's own screen — the trail has been walked. */

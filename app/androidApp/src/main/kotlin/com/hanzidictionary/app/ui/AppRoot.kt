@@ -53,6 +53,14 @@ private fun encodeSource(source: DeckSource): String = when (source) {
  * unwinds to. */
 private const val HOME_ROUTE = "search"
 
+/** The practice destination's route *pattern* — how the graph knows it, as opposed to the
+ * filled route [practiceRoute] builds. Kept as a constant because [CardReturn] has to look
+ * the destination up by it. */
+private const val PRACTICE_ROUTE = "practice?source={source}"
+
+private fun practiceRoute(source: DeckSource): String =
+    "practice?source=${enc(encodeSource(source))}"
+
 private fun decodeSource(raw: String?): DeckSource {
     val value = raw?.let { dec(it) } ?: return DeckSource.Everything
     val parts = value.split(":")
@@ -137,10 +145,28 @@ fun AppRoot(
         app.homeCardPin = pin
         app.practiceCardPin = pin
         // Label the trail marker with the card's own text, resolved the way the widget and the
-        // cards resolve it so all three read alike — a word's itemId is not its text. Still on
-        // the home destination at this point, which is the screen the marker points back to.
-        withContext(Dispatchers.IO) { repository.itemSummaries(listOf(item)).firstOrNull()?.text }
-            ?.let { cardReturn.leaving(it) }
+        // cards resolve it so all three read alike — a word's itemId is not its text.
+        //
+        // Unlike the in-app cards, the marker can't point back at "the screen you left": the
+        // widget can arrive on top of anything (home on a cold start, some character page on a
+        // warm one), and that screen isn't showing this card. It points at Practice instead,
+        // over the same active-list deck the widget itself deals from, so the card is in it.
+        val loaded = withContext(Dispatchers.IO) {
+            val text = repository.itemSummaries(listOf(item)).firstOrNull()?.text
+            val activeId = app.studyRepository.activeListId()
+            val name = activeId?.let { id ->
+                app.studyRepository.lists().firstOrNull { it.id == id }?.name
+            }
+            val source =
+                if (activeId != null) DeckSource.UserList(activeId, name.orEmpty())
+                else DeckSource.Everything
+            text to source
+        }
+        cardReturn.leavingFor(
+            label = loaded.first ?: item.itemId,
+            route = practiceRoute(loaded.second),
+            destinationRoute = PRACTICE_ROUTE,
+        )
         nav.navigate(
             if (item.isWord) "word/${enc(item.itemId)}" else "character/${enc(item.itemId)}",
         )
@@ -157,7 +183,7 @@ fun AppRoot(
                     onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                     onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
                     onOpenStudy = { nav.navigate("lists") },
-                    onPractice = { source -> nav.navigate("practice?source=${enc(encodeSource(source))}") },
+                    onPractice = { source -> nav.navigate(practiceRoute(source)) },
                     tts = tts,
                 )
             }
@@ -178,7 +204,7 @@ fun AppRoot(
                 ListsScreen(
                     hskLevels = hskLevels,
                     onOpenList = { listId -> nav.navigate("list/$listId") },
-                    onPractice = { source -> nav.navigate("practice?source=${enc(encodeSource(source))}") },
+                    onPractice = { source -> nav.navigate(practiceRoute(source)) },
                     onOpenArchive = { nav.navigate("known") },
                     onOpenConfusables = { nav.navigate("confusables") },
                     onHome = goHome,
@@ -195,7 +221,7 @@ fun AppRoot(
                         if (item.isWord) nav.navigate("word/${enc(item.itemId)}")
                         else nav.navigate("character/${enc(item.itemId)}")
                     },
-                    onPractice = { source -> nav.navigate("practice?source=${enc(encodeSource(source))}") },
+                    onPractice = { source -> nav.navigate(practiceRoute(source)) },
                     onHome = goHome,
                     onBack = { nav.popBackStack() },
                 )
@@ -204,7 +230,7 @@ fun AppRoot(
             // in here too ("&item=…&reveal=true"); it now opens that character's detail page
             // instead, and the pinned card is how any surface resumes on a particular card.
             composable(
-                route = "practice?source={source}",
+                route = PRACTICE_ROUTE,
                 arguments = listOf(
                     navArgument("source") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
@@ -259,7 +285,7 @@ fun AppRoot(
                     onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                     onOpenComponent = { cid -> nav.navigate("component/${enc(cid)}") },
                     onPracticeSeries = {
-                        nav.navigate("practice?source=${enc(encodeSource(DeckSource.Series(componentId)))}")
+                        nav.navigate(practiceRoute(DeckSource.Series(componentId)))
                     },
                     onHome = goHome,
                     onBack = { nav.popBackStack() },
