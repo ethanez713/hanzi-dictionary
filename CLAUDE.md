@@ -2,8 +2,9 @@
 
 Offline-first Android Chinese-character dictionary + an open data pipeline that builds its
 content pack. Personal, single-user project (apply the small-project review lens: simple
-code wins; scale/availability/multi-user concerns don't apply). There is **no git remote** —
-commits stay local until the dataset-publication decision is made.
+code wins; scale/availability/multi-user concerns don't apply). Remote is
+`ethanez713/hanzi-dictionary` on GitHub and it is **private** — publishing the *dataset*
+publicly is still a separate, undecided call, so don't make this repo public unprompted.
 
 Authoritative spec: `docs/hanzi-dictionary-spec-v1.md`. Data provenance/licensing:
 `docs/ATTRIBUTIONS.md` + `LICENSES/`.
