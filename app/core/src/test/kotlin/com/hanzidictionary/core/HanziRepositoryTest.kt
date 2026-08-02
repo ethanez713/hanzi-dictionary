@@ -360,6 +360,65 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun myWordsDrillAnchorsEveryRoundOnACharacterIUseAndPairsItPlausibly() {
+        // A tiny "saved list": one character with well-known look-alikes, and one without.
+        val qing = repo.characterPageByChar("请")!!.glyphId
+        val mine = setOf(qing)
+
+        val groups = repo.drillSeriesFor(mine)
+        assertTrue(groups.isNotEmpty(), "请 has look-alikes, so it should yield a group")
+        for (g in groups) {
+            assertTrue(g.size >= 2, "a round needs a target and at least one distractor")
+            // Target-first is the contract the drill screen deals rounds on.
+            assertTrue(g.first().glyphId in mine, "the target must be one of my characters")
+            assertTrue(g.all { it.pinyin.isNotBlank() && it.gloss.isNotBlank() })
+            assertTrue(
+                g.drop(1).none { it.gloss.equals(g.first().gloss, ignoreCase = true) },
+                "a distractor that means the same thing makes the cue unanswerable",
+            )
+        }
+        val qingGroup = groups.single()
+        assertTrue(
+            qingGroup.drop(1).any { it.char == "清" || it.char == "情" || it.char == "晴" },
+            "请's distractors should be its 青 siblings, got ${qingGroup.map { it.char }}",
+        )
+    }
+
+    @Test
+    fun myWordsDrillOnlyOffersDistractorsAUserCouldPlausiblyMeet() {
+        val qing = repo.characterPageByChar("请")!!.glyphId
+        // Every distractor is either one of mine or common enough to actually run into.
+        val distractors = repo.drillSeriesFor(setOf(qing)).flatMap { it.drop(1) }
+        assertTrue(distractors.isNotEmpty())
+        for (d in distractors) {
+            val rank = repo.characterPage(d.glyphId)!!.freqRank
+            assertTrue(
+                rank != null && rank <= 3000L,
+                "${d.char} (rank $rank) is too rare to be a useful confusion",
+            )
+        }
+    }
+
+    @Test
+    fun myWordsDrillIsEmptyWithNothingSavedRatherThanFallingBackSilently() {
+        // The screen decides what to do about an empty result (it drops to the pooled drill
+        // and says so); the repository must not paper over it here.
+        assertTrue(repo.drillSeriesFor(emptySet()).isEmpty())
+        // Word ids aren't glyphs — the drill compares single characters.
+        assertTrue(repo.drillSeriesFor(setOf("w000123")).isEmpty())
+    }
+
+    @Test
+    fun aComponentThatIsItselfACharacterCarriesItsGlyphIdForDirectNavigation() {
+        // Tapping 请's 青 goes to 青's character page, which needs the glyph id on the
+        // breakdown row. 讠 is a combining form with no character page of its own.
+        val qing = repo.characterPageByChar("请")!!
+        val qingPart = qing.breakdown.single { it.displayChar == "青" }
+        assertEquals(repo.characterPageByChar("青")!!.glyphId, qingPart.glyphId)
+        assertTrue(qingPart.navigable)
+    }
+
+    @Test
     fun breakdownPrefersADecompositionWhosePartsAreAllRealCharacters() {
         // 举: cjkvi-ids says ⿱兴⿻二丨, whose bottom half is an unencoded shape the app could
         // only render as "not in the component index" and could not link to. makemeahanzi

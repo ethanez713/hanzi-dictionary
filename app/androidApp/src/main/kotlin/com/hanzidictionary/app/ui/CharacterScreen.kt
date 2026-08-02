@@ -12,8 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -77,18 +83,43 @@ fun CharacterScreen(
         value = withContext(Dispatchers.IO) { repository.visualLookAlikes(glyphId) }
     }
 
+    // The component pages live behind this menu now, not behind the breakdown cards: tapping a
+    // part almost always means "what is 青", which is its character page, so that is what the
+    // card does. "Which other characters are built from this part" is the rarer, more
+    // deliberate question — a real destination, but one you go looking for.
+    var menuOpen by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(page?.char ?: "…") },
                 navigationIcon = { BackButton(onBack) },
                 actions = {
-                    // Before Home: the two escapes ordered by how far they take you.
-                    ReturnToCardButton()
                     HomeButton(onHome)
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        // This character as a *part*: everything the pack builds out of it.
+                        page?.char?.let { ch ->
+                            DropdownMenuItem(
+                                text = { Text("Characters using $ch") },
+                                onClick = { menuOpen = false; onOpenComponent(ch) },
+                            )
+                        }
+                        // …and the same question about each of its own parts.
+                        for (c in page?.breakdown.orEmpty().filter { it.navigable }) {
+                            val part = c.displayChar ?: c.componentId
+                            DropdownMenuItem(
+                                text = { Text("Characters using $part") },
+                                onClick = { menuOpen = false; onOpenComponent(c.componentId) },
+                            )
+                        }
+                    }
                 },
             )
         },
+        floatingActionButton = { ReturnToCardFab() },
     ) { padding ->
         val p = page
         if (p == null) {
@@ -148,7 +179,7 @@ fun CharacterScreen(
                 }
             }
             if (p.words.isNotEmpty()) Words(p.words, onOpenWord)
-            BreakdownStrip(p, tts, onOpenComponent)
+            BreakdownStrip(p, tts, onOpenCharacter, onOpenComponent)
             SoundLine(p)
             Formation(p)
             if (p.variants.isNotEmpty()) ScriptMapping(p, onOpenCharacter)
@@ -262,7 +293,12 @@ private fun Definition(text: String?) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: (String) -> Unit) {
+private fun BreakdownStrip(
+    p: CharacterPage,
+    tts: MandarinTts,
+    onOpenCharacter: (String) -> Unit,
+    onOpenComponent: (String) -> Unit,
+) {
     if (p.breakdown.isEmpty()) return
     SectionTitle("Components")
     // One card per component: the glyph, its role, and what it actually contributes —
@@ -273,9 +309,15 @@ private fun BreakdownStrip(p: CharacterPage, tts: MandarinTts, onOpenComponent: 
             val color = functionColor(c.function)
             val showsSound = isSoundBearing(c.function)
             val showsMeaning = isMeaningBearing(c.function)
+            // A part that is itself a character opens its **character page** — asking what
+            // 青 is is what tapping it nearly always means, and its series is a menu away
+            // (see the ⋮ above). Only a part with no character of its own — a combining form
+            // like 氵 — still lands on the component page, which is the only page it has.
+            val open = c.glyphId?.let { { onOpenCharacter(it) } }
+                ?: c.componentId.takeIf { c.navigable }?.let { { onOpenComponent(it) } }
             Card(
                 modifier = Modifier.fillMaxWidth().then(
-                    if (c.navigable) Modifier.clickable { onOpenComponent(c.componentId) } else Modifier,
+                    if (open != null) Modifier.clickable(onClick = open) else Modifier,
                 ),
             ) {
                 Row(

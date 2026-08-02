@@ -26,6 +26,8 @@ data class ComponentBreakdown(
     val matchClass: String?,   // exact|tone|initial|rime|oc_only|opaque
     val confidence: Double?,
     val navigable: Boolean,    // true if it has its own component page (not an ids: pseudo)
+    val glyphId: String?,      // set when the component is itself a pack character, so a tap
+                               // can open its character page rather than its component page
     val resolution: String,    // computed|agreement|single_source|conflict (spec §7 honesty)
     val definition: String?,   // the component's own gloss — what a meaning-component contributes
     val pinyin: String?,       // the component's primary reading — what a sound-component contributes

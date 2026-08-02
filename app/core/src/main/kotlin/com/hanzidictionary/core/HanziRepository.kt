@@ -159,6 +159,7 @@ class HanziRepository(
                 matchClass = cu.match_class,
                 confidence = cu.confidence,
                 navigable = !isPseudo,
+                glyphId = compGlyph?.id,
                 resolution = cu.resolution,
                 definition = compGlyph?.definition,
                 pinyin = compPinyin,
@@ -479,6 +480,15 @@ class HanziRepository(
         const val LOOKALIKE_LIMIT = 12
         const val LOOKALIKE_MAX_RANK = 4000L
         const val LOOKALIKE_POOL_FACTOR = 4
+
+        /** How common a character has to be to stand as a distractor against one of the
+         * user's own (roughly HSK-band vocabulary): a rare character you'll never meet
+         * teaches nothing when you rule it out. */
+        const val DRILL_POOL_MAX_RANK = 3000L
+
+        /** Neighbours fetched per target before eligibility filtering — a handful is
+         * plenty, and each target's pair set is capped well below it. */
+        const val DRILL_NEIGHBOUR_POOL = 12
     }
 
     private fun rawStringList(target: SqlDriver, sql: String, arg: String, limit: Long): List<String> {
@@ -656,6 +666,84 @@ class HanziRepository(
                 .toList()
                 .takeIf { it.size >= 2 }
         }
+    }
+
+    /**
+     * Drill groups anchored on characters **the user is actually studying** — their saved
+     * lists plus their archive.
+     *
+     * The pooled [drillSeries] asks "which of these two is qīng?" about any two common
+     * characters in the pack, which is a fine visual-discrimination exercise and a poor
+     * study one: you can't be confused between two characters you've never met. Here the
+     * *target* is always one of yours, and each distractor is something you could plausibly
+     * mistake it for — another of your own characters first, and otherwise one common enough
+     * ([maxRank]) that you will meet it.
+     *
+     * Groups are returned **target-first**, which is the contract the caller deals rounds on:
+     * `group[0]` is the character being asked about, the rest are its confusable neighbours.
+     *
+     * Word items in [mine] are ignored: the drill compares single glyphs.
+     */
+    fun drillSeriesFor(
+        mine: Collection<String>,
+        maxRank: Long = DRILL_POOL_MAX_RANK,
+        distractorsPerTarget: Int = 4,
+    ): List<List<DrillChoice>> {
+        val mineSet = mine.filter { it.startsWith("U+") }.toSet()
+        if (mineSet.isEmpty()) return emptyList()
+
+        val out = mutableListOf<List<DrillChoice>>()
+        for (gid in mineSet) {
+            val target = drillChoice(gid) ?: continue
+            // Both kinds of neighbour: shape twins and big-shared-component pairs from the
+            // confusable table, then phonetic-series siblings, which are the other way a
+            // learner mixes two characters up.
+            val neighbours = (
+                visualLookAlikes(gid, limit = DRILL_NEIGHBOUR_POOL) +
+                    lookAlikesForGlyphs(listOf(gid), maxRank, DRILL_NEIGHBOUR_POOL)
+                ).distinctBy { it.glyphId }
+            if (neighbours.isEmpty()) continue
+
+            val ranks = freqRanks(neighbours.map { it.glyphId })
+            val distractors = neighbours
+                // Your own characters lead: a pair you have both halves of is the confusion
+                // you are actually at risk of. The rest have to be common enough to meet.
+                .sortedBy { if (it.glyphId in mineSet) 0 else 1 }
+                .filter { it.glyphId in mineSet || (ranks[it.glyphId] ?: Long.MAX_VALUE) <= maxRank }
+                .mapNotNull { la ->
+                    val py = la.pinyin ?: return@mapNotNull null
+                    val gloss = la.gloss ?: return@mapNotNull null
+                    DrillChoice(la.glyphId, la.char, py, gloss)
+                }
+                // The cue is pinyin + gloss, so a distractor that means the same thing makes
+                // the question unanswerable rather than hard.
+                .filter { !it.gloss.equals(target.gloss, ignoreCase = true) }
+                .distinctBy { it.gloss.lowercase() }
+                .take(distractorsPerTarget)
+
+            if (distractors.isNotEmpty()) out += listOf(target) + distractors
+        }
+        return out
+    }
+
+    /** A glyph as a drill option, or null when it lacks the reading or gloss the cue needs. */
+    private fun drillChoice(glyphId: String): DrillChoice? {
+        val g = db.hanziQueries.glyphWithPinyin(glyphId).executeAsOneOrNull() ?: return null
+        val definition = g.definition ?: return null
+        // The reading is a correlated subselect, which SQLDelight types non-null from the
+        // column it selects — but a character with no pinyin row really does come back null,
+        // and "null — clear, pure" is not a cue. Hence the check the compiler thinks is dead.
+        @Suppress("SENSELESS_COMPARISON")
+        if (g.pinyin == null) return null
+        return DrillChoice(g.id, g.char, g.pinyin, firstSense(definition))
+    }
+
+    private fun freqRanks(ids: Collection<String>): Map<String, Long> {
+        if (ids.isEmpty()) return emptyMap()
+        return ids.chunked(500)
+            .flatMap { db.hanziQueries.glyphsByIds(it).executeAsList() }
+            .mapNotNull { g -> g.freq_rank?.let { g.id to it } }
+            .toMap()
     }
 
     /**

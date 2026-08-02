@@ -112,12 +112,30 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   character page — and re-dealing the top card each time made looking a card up lose it. Any
   surface that resumes on a particular card does it by setting the pin; don't add route args
   for it (the widget's `&item=&reveal=` deep link was removed in favour of the pin).
-  While a card is suspended, `CardReturn`/`ReturnToCardButton` puts a `↩ 好` marker in every
-  dictionary top bar, before `HomeButton`; it clears on arrival, after 10 min, or on restart.
+  While a card is suspended, `CardReturn`/`ReturnToCardFab` puts a `↩ 好` **floating button in
+  the bottom-right** of every dictionary screen (character/word/component, and home above the
+  Practice FAB); it clears on arrival, after 10 min, on restart, or on a stale-session reset.
+  It was a top-bar text action first and went unseen — don't move it back up there.
+- **Entering from outside rebuilds the back stack; a stale return resets it.** A widget tap
+  pushes Practice (over the widget's own deck) *under* the character page it opens, so Back
+  lands on that card instead of on some earlier browse trail; a share does the same via
+  `popBackStack(HOME_ROUTE)`. And `isStaleSession` in `:core` (30 min, checked in
+  `MainActivity.onStart`) sends a return-after-a-long-gap back to home with the pins, the
+  marker and the query cleared. Intent handlers are declared *after* the reset effect in
+  `AppRoot` so an arriving intent always has the last word about where you land.
+- **A component card opens the component's *character* page, not its component page.** That's
+  what tapping 青 nearly always means. The component page (what else shares this part) lives
+  in the character screen's top-bar overflow `⋮` — one entry per navigable part, plus the page's
+  own character as a part. Only a combining form with no character of its own (氵) still opens
+  the component page directly. `ComponentBreakdown.glyphId` is what makes the distinction.
 - **Comments justify _why_, not _what_.** The codebase is heavily commented in this style;
   match it. Keep it that way.
 - **Route args are percent-encoded with `android.net.Uri.encode`, not `URLEncoder`**
   (URLEncoder corrupts `+` in glyph ids like `U+597D`). See `enc`/`dec` in `AppRoot.kt`.
+- **The home feed keeps its scroll position in its own anchor**, not in `LazyListState`'s
+  saved state: returning re-runs the photo scan, so the list is empty when the state restores
+  and the index clamps to 0. `SearchScreen` re-applies a saved index/offset once `photoFinds`
+  is non-null, and only records the position after that — don't "simplify" it back.
 - **After any user-state mutation that changes what's due, poke the widget**
   (`PracticeWidgetUpdater.refresh(context)`) — otherwise a placed widget goes stale.
 

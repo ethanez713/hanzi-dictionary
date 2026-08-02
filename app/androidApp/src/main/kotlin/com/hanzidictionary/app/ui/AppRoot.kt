@@ -85,6 +85,9 @@ fun AppRoot(
     onSharedTextConsumed: () -> Unit = {},
     widgetItem: StudyItem? = null,
     onWidgetItemConsumed: () -> Unit = {},
+    /** Bumped by [com.hanzidictionary.app.MainActivity] each time the app comes back from a
+     * long enough absence to count as a new errand (see `isStaleSession`). */
+    staleSessionKey: Int = 0,
 ) {
     val app = LocalContext.current.applicationContext as HanziApp
     val nav = rememberNavController()
@@ -107,6 +110,23 @@ fun AppRoot(
         }
     }
 
+    // A browse trail has a shelf life. Come back to the app half an hour later and the four
+    // pages you were deep in belong to an errand you have finished — Back through them is a
+    // maze, and the card the app is holding open is one you no longer remember leaving. So a
+    // stale return starts over: home, no pinned cards, no marker, no leftover query.
+    //
+    // Declared before the intent handlers below on purpose: if a stale return and an incoming
+    // widget/share intent land in the same composition, effects run in declaration order and
+    // the arriving intent must have the last word about where you end up.
+    LaunchedEffect(staleSessionKey) {
+        if (staleSessionKey == 0) return@LaunchedEffect
+        app.homeCardPin = null
+        app.practiceCardPin = null
+        cardReturn.clear()
+        query = ""
+        nav.popBackStack(HOME_ROUTE, inclusive = false)
+    }
+
     // "Home" unwinds the stack rather than pushing another copy of the start destination:
     // search is always the bottom of the stack, so popping back to it leaves a clean
     // one-entry history and Back from home still exits the app.
@@ -114,11 +134,18 @@ fun AppRoot(
 
     // Shared text (SEND target, spec §9 capture): one hanzi jumps straight to its page;
     // several prefill search (word search picks up multi-char words from there).
+    //
+    // Like the widget below, a share is a *new way in* — text from another app about
+    // something you were doing there — so it lands on home's clean stack rather than on top
+    // of whatever the app was left showing.
     LaunchedEffect(sharedText) {
         if (sharedText != null) {
             val hanzi = extractHanzi(sharedText)
             when {
-                hanzi.size == 1 -> nav.navigate("character/${enc(glyphIdOfChar(hanzi[0]))}")
+                hanzi.size == 1 -> {
+                    nav.popBackStack(HOME_ROUTE, inclusive = false)
+                    nav.navigate("character/${enc(glyphIdOfChar(hanzi[0]))}")
+                }
                 hanzi.isNotEmpty() -> {
                     query = hanzi.joinToString("")
                     nav.navigate("search") {
@@ -146,11 +173,6 @@ fun AppRoot(
         app.practiceCardPin = pin
         // Label the trail marker with the card's own text, resolved the way the widget and the
         // cards resolve it so all three read alike — a word's itemId is not its text.
-        //
-        // Unlike the in-app cards, the marker can't point back at "the screen you left": the
-        // widget can arrive on top of anything (home on a cold start, some character page on a
-        // warm one), and that screen isn't showing this card. It points at Practice instead,
-        // over the same active-list deck the widget itself deals from, so the card is in it.
         val loaded = withContext(Dispatchers.IO) {
             val text = repository.itemSummaries(listOf(item)).firstOrNull()?.text
             val activeId = app.studyRepository.activeListId()
@@ -162,11 +184,20 @@ fun AppRoot(
                 else DeckSource.Everything
             text to source
         }
-        cardReturn.leavingFor(
-            label = loaded.first ?: item.itemId,
-            route = practiceRoute(loaded.second),
-            destinationRoute = PRACTICE_ROUTE,
-        )
+        // Arriving from the widget REBUILDS the stack rather than landing on top of it. The
+        // widget can fire onto anything — home on a cold start, some character page four
+        // levels deep on a warm one — and none of that has anything to do with the card you
+        // just tapped, so Back through it is somebody else's history. What is behind the
+        // card's page instead is Practice, over the same active-list deck the widget itself
+        // deals from: Back from the page lands on this card, which is what tapping a
+        // flashcard and then backing out of it should mean.
+        nav.navigate(practiceRoute(loaded.second)) {
+            popUpTo(HOME_ROUTE) { inclusive = false }
+            launchSingleTop = true
+        }
+        // Marked while Practice is the current destination, so the ↩ button unwinds to the
+        // entry we just pushed — the same one Back uses. One way back, two ways to ask for it.
+        cardReturn.leaving(loaded.first ?: item.itemId)
         nav.navigate(
             if (item.isWord) "word/${enc(item.itemId)}" else "character/${enc(item.itemId)}",
         )
@@ -202,8 +233,13 @@ fun AppRoot(
             }
             composable("lists") {
                 ListsScreen(
+                    repository = repository,
                     hskLevels = hskLevels,
                     onOpenList = { listId -> nav.navigate("list/$listId") },
+                    onOpenItem = { item ->
+                        if (item.isWord) nav.navigate("word/${enc(item.itemId)}")
+                        else nav.navigate("character/${enc(item.itemId)}")
+                    },
                     onPractice = { source -> nav.navigate(practiceRoute(source)) },
                     onOpenArchive = { nav.navigate("known") },
                     onOpenConfusables = { nav.navigate("confusables") },

@@ -29,6 +29,21 @@ data class ListStats(
     val learning: Int get() = total - archived
 }
 
+/**
+ * Answers over some window, split the way the two swipes are: right (knew) against left
+ * (missed). Counts *answers*, not items — a card you miss three times in a session is three
+ * missed answers, which is the honest shape of a session.
+ */
+data class ReviewStats(val knew: Int, val missed: Int) {
+    val total: Int get() = knew + missed
+
+    /** Null when nothing was answered in the window — "0%" would be a claim, not a gap. */
+    val accuracy: Double? get() = if (total == 0) null else knew.toDouble() / total
+}
+
+/** An item you keep forgetting, for the Study screen's "most missed" row. */
+data class LapseCount(val item: StudyItem, val lapses: Int, val reviews: Int)
+
 /** Why a card made it into the deck — drives the "12 due · 3 ahead" header. */
 enum class DeckBucket { DUE, NEW, AHEAD }
 
@@ -270,6 +285,36 @@ class StudyRepository(
 
     fun reviewsToday(now: Long = System.currentTimeMillis()): Long =
         q.reviewCountSince(startOfDay(now)).executeAsOne()
+
+    /**
+     * Knew/missed over the answers logged since [since] (0 = all time).
+     *
+     * Only AGAIN counts as missed, which matches both the UI (the left gutter is the only
+     * way to say "didn't know") and FSRS's own definition of a lapse. HARD and EASY can only
+     * reach the log from a future UI or an import, and they group with the rating they're
+     * nearest to rather than being silently dropped.
+     */
+    fun reviewStats(since: Long = 0L): ReviewStats {
+        var knew = 0
+        var missed = 0
+        for (row in q.reviewGradeCountsSince(since).executeAsList()) {
+            val n = row.n.toInt()
+            if (row.rating <= Rating.HARD.value) missed += n else knew += n
+        }
+        return ReviewStats(knew, missed)
+    }
+
+    fun reviewStatsToday(now: Long = System.currentTimeMillis()): ReviewStats =
+        reviewStats(startOfDay(now))
+
+    /** Since [days] local midnights ago, so "last 7 days" includes all of today. */
+    fun reviewStatsOverDays(days: Int, now: Long = System.currentTimeMillis()): ReviewStats =
+        reviewStats(startOfDay(now) - (days - 1) * DAY_MS)
+
+    /** The items with the most lapses, worst first — what to actually go and look at. */
+    fun mostMissed(limit: Long = 8): List<LapseCount> =
+        q.mostLapsedCards(limit).executeAsList()
+            .map { LapseCount(StudyItem(it.item_id, it.kind), it.lapses.toInt(), it.reviews.toInt()) }
 
     /** Distinct list items whose card is due now and not archived — the "M due" pulse on
      * the Study screen. Counts each item once even if it's filed in several lists. */

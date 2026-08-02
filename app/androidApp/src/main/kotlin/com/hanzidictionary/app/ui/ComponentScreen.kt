@@ -60,13 +60,10 @@ fun ComponentScreen(
             TopAppBar(
                 title = { Text(page?.char ?: "component") },
                 navigationIcon = { BackButton(onBack) },
-                actions = {
-                    // Before Home: the two escapes ordered by how far they take you.
-                    ReturnToCardButton()
-                    HomeButton(onHome)
-                },
+                actions = { HomeButton(onHome) },
             )
         },
+        floatingActionButton = { ReturnToCardFab() },
     ) { padding ->
         val p = page
         if (p == null) {

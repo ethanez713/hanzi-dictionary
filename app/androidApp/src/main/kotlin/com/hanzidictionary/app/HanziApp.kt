@@ -29,6 +29,11 @@ class HanziApp : Application() {
     var homeCardPin: CardPin? = null
     var practiceCardPin: CardPin? = null
 
+    /** When the app last went to the background, so a return can tell "I'm still doing this"
+     * from "I'm doing something else now" (see `isStaleSession`). Process-scoped like the
+     * pins, and for the same reason: a cold start already has nothing to restore. */
+    var lastActiveAt: Long? = null
+
     val tts: MandarinTts by lazy { MandarinTts(this) }
 
     /** One driver for the whole user database; both repositories are query facades over

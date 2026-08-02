@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
@@ -56,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.LaunchedEffect
@@ -233,6 +235,30 @@ fun SearchScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // Where the feed was scrolled to, kept across a trip into a character page and back.
+    //
+    // The LazyColumn's own saved state can't do this on its own: coming back re-runs the photo
+    // scan, so the feed is empty at the moment the state is restored, the index clamps to 0,
+    // and by the time the rows arrive the position is gone. Tapping a character out of
+    // "recently viewed" therefore always dumped you at the top of the screen, several
+    // scrolls above the section you were working through. So the anchor is held separately
+    // and re-applied once the feed has actually been rebuilt.
+    val feedState = rememberLazyListState()
+    var anchorIndex by rememberSaveable { mutableIntStateOf(0) }
+    var anchorOffset by rememberSaveable { mutableIntStateOf(0) }
+    val feedReady = photoFinds != null
+    LaunchedEffect(feedReady) {
+        if (!feedReady) return@LaunchedEffect
+        if (anchorIndex > 0 || anchorOffset > 0) feedState.scrollToItem(anchorIndex, anchorOffset)
+        // Track from here on, never while the feed is still building — a "position" measured
+        // against a placeholder is what overwrote the real one.
+        snapshotFlow { feedState.firstVisibleItemIndex to feedState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                anchorIndex = index
+                anchorOffset = offset
+            }
+    }
+
     // Characters the user recently opened, so the home screen is a quick way back to what
     // they were studying. Re-queried on each entry (navigating back re-enters composition).
     val recentlyViewed by produceState(emptyList<SearchResult>(), rescans) {
@@ -347,12 +373,21 @@ fun SearchScreen(
         // down the screen is a nag, and the home screen shouldn't be keeping score. The
         // Study screen states the backlog for anyone who wants it.
         floatingActionButton = {
-            if (query.isBlank()) {
-                ExtendedFloatingActionButton(
-                    onClick = { onPractice(activeSource) },
-                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                    text = { Text("Practice") },
-                )
+            // Two escapes can be live at once here — back to a suspended card, and into a
+            // practice session — so they stack, the card on top because it's the more
+            // specific of the two and it's the one that expires.
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                ReturnToCardFab()
+                if (query.isBlank()) {
+                    ExtendedFloatingActionButton(
+                        onClick = { onPractice(activeSource) },
+                        icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                        text = { Text("Practice") },
+                    )
+                }
             }
         },
         topBar = {
@@ -400,6 +435,7 @@ fun SearchScreen(
 
             if (query.isBlank()) {
                 PhotoFeed(
+                    listState = feedState,
                     granted = photosGranted,
                     finds = photoFinds,
                     pending = pending,
@@ -538,6 +574,7 @@ private data class PendingTriage(val action: SwipeAction, val undo: suspend () -
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PhotoFeed(
+    listState: LazyListState,
     granted: Boolean,
     finds: List<SearchResult>?,
     pending: Map<String, PendingTriage>,
@@ -579,6 +616,7 @@ private fun PhotoFeed(
     // button instead of sitting permanently underneath it.
     LazyColumn(
         Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(start = gestureGap, end = gestureGap, bottom = 76.dp),
     ) {
         clipSuggestion?.let { s ->
