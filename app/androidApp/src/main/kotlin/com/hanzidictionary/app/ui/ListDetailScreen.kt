@@ -1,5 +1,6 @@
 package com.hanzidictionary.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -85,6 +86,8 @@ fun ListDetailScreen(
     var learning by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var archived by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var cardStates by remember { mutableStateOf<Map<String, CardState>>(emptyMap()) }
+    // true = most missed first, the more actionable default (what needs work, up top).
+    var missedDescending by remember { mutableStateOf(true) }
     var showArchived by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
@@ -143,6 +146,12 @@ fun ListDetailScreen(
         }
     }
 
+    val sortedLearning = if (missedDescending) {
+        learning.sortedByDescending { cardStates[it.item.itemId]?.lapses ?: 0 }
+    } else {
+        learning.sortedBy { cardStates[it.item.itemId]?.lapses ?: 0 }
+    }
+
     Scaffold(
         snackbarHost = { AppSnackbarHost(snackbar) },
         topBar = {
@@ -190,10 +199,21 @@ fun ListDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         SectionTitle("Studying (${learning.size})")
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            if (missedDescending) "▼" else "▲",
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .clickable(onClickLabel = "Sort by missed count") {
+                                    missedDescending = !missedDescending
+                                }
+                                .padding(6.dp),
+                        )
                     }
                 }
             }
-            items(learning, key = { it.item.itemId }) { summary ->
+            items(sortedLearning, key = { it.item.itemId }) { summary ->
                 SwipeRow(
                     rightAction = ArchiveAction,
                     leftAction = RemoveAction,
