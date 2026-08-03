@@ -43,7 +43,6 @@ import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ItemSummary
 import com.hanzidictionary.core.ListStats
-import com.hanzidictionary.core.ReviewStats
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.StudyList
 import kotlinx.coroutines.Dispatchers
@@ -57,10 +56,6 @@ private data class ListsState(
     val activeId: Long? = null,
     val encounteredCount: Int = 0,
     val dueNow: Int = 0,
-    val today: ReviewStats = ReviewStats(0, 0),
-    val week: ReviewStats = ReviewStats(0, 0),
-    val allTime: ReviewStats = ReviewStats(0, 0),
-    val archived: Long = 0,
     /** The items with the most lapses, already resolved to display text. */
     val mostMissed: List<Pair<ItemSummary, Int>> = emptyList(),
 )
@@ -106,10 +101,6 @@ fun ListsScreen(
                 activeId = app.studyRepository.activeListId(),
                 encounteredCount = app.userRepository.practiceQueue().size,
                 dueNow = app.studyRepository.dueNow(),
-                today = app.studyRepository.reviewStatsToday(),
-                week = app.studyRepository.reviewStatsOverDays(ACCURACY_WINDOW_DAYS),
-                allTime = app.studyRepository.reviewStats(),
-                archived = app.userRepository.knownCount(),
                 mostMissed = missed.mapNotNull { lapse ->
                     summaries[lapse.item.itemId]?.let { it to lapse.lapses }
                 },
@@ -135,8 +126,6 @@ fun ListsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // What's waiting, in one line — the score card below answers the other half
-            // ("how did the ones I did go"), so this doesn't restate today's count.
             Text(
                 if (state.dueNow > 0) "${state.dueNow} due now" else "Nothing due right now",
                 fontSize = 13.sp,
@@ -144,7 +133,7 @@ fun ListsScreen(
                 color = MaterialTheme.colorScheme.onSurface,
             )
 
-            ScoreCard(state, onOpenItem)
+            if (state.mostMissed.isNotEmpty()) MostMissedCard(state.mostMissed, onOpenItem)
 
             // Saving destination, stated where you can change it — swipes elsewhere in
             // the app land here, so it must never be a mystery.
@@ -256,69 +245,38 @@ fun ListsScreen(
     }
 }
 
-/** How far back the headline accuracy figure looks. A week is long enough to survive one bad
- * evening and short enough to still be about how you're doing *now*. */
-private const val ACCURACY_WINDOW_DAYS = 7
-
-/**
- * Knew against missed — the one number the study loop was keeping to itself.
- *
- * Everything else on this screen counts what's *waiting*: due cards, new cards, list sizes.
- * None of it says whether the reviews you did went well, which is the question you open a
- * study screen asking. Three horizons, because one alone misleads in a different direction
- * each: today can be three answers, the week is the real signal, and all-time is the one that
- * shows the archive growing.
- *
- * "Most missed" is the actionable end of the same data: the characters whose lapse count keeps
- * climbing, each a tap away from its page.
- */
+/** The characters whose lapse count keeps climbing — the actionable end of the knew/missed
+ * data; the tally itself now lives inline on each list's detail screen. Each chip is a tap
+ * away from the character's page. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ScoreCard(state: ListsState, onOpenItem: (StudyItem) -> Unit) {
+private fun MostMissedCard(mostMissed: List<Pair<ItemSummary, Int>>, onOpenItem: (StudyItem) -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Card(Modifier.fillMaxWidth()) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text("Knew / missed", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(scoreLine("Today", state.today), fontSize = 13.sp)
-            Text(scoreLine("Last $ACCURACY_WINDOW_DAYS days", state.week), fontSize = 13.sp, color = muted)
-            Text(
-                scoreLine("All time", state.allTime) + "  ·  ${state.archived} archived",
-                fontSize = 13.sp,
-                color = muted,
-            )
-            if (state.mostMissed.isNotEmpty()) {
-                Text("Most missed", fontSize = 12.sp, color = muted, modifier = Modifier.padding(top = 6.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    for ((summary, lapses) in state.mostMissed) {
-                        Card(Modifier.clickable { onOpenItem(summary.item) }) {
-                            Row(
-                                Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(summary.text, fontSize = 20.sp)
-                                Text("×$lapses", fontSize = 12.sp, color = muted)
-                            }
+            Text("Most missed", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                for ((summary, lapses) in mostMissed) {
+                    Card(Modifier.clickable { onOpenItem(summary.item) }) {
+                        Row(
+                            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(summary.text, fontSize = 20.sp)
+                            Text("×$lapses", fontSize = 12.sp, color = muted)
                         }
                     }
                 }
             }
         }
     }
-}
-
-/** "Today: 9 knew · 3 missed (75%)", or a plain zero state — an accuracy of 0% out of no
- * answers is a claim about nothing. */
-private fun scoreLine(label: String, stats: ReviewStats): String {
-    if (stats.total == 0) return "$label: nothing answered"
-    val pct = stats.accuracy?.let { " (${"%.0f".format(it * 100)}%)" }.orEmpty()
-    return "$label: ${stats.knew} knew · ${stats.missed} missed$pct"
 }
 
 @Composable

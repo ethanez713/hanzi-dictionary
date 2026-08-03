@@ -42,10 +42,19 @@ import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.ItemSummary
+import com.hanzidictionary.core.ReviewStats
 import com.hanzidictionary.core.StudyItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** Everything one [LaunchedEffect] pass loads, so a refresh swaps it atomically. */
+private data class Loaded(
+    val name: String,
+    val learning: List<ItemSummary>,
+    val archived: List<ItemSummary>,
+    val reviewStats: ReviewStats,
+)
 
 /**
  * One list's contents (spec §17). Swipe follows the app-wide grammar: **right archives**
@@ -73,6 +82,7 @@ fun ListDetailScreen(
     var name by remember { mutableStateOf("") }
     var learning by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var archived by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
+    var reviewStats by remember { mutableStateOf(ReviewStats(0, 0)) }
     var showArchived by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
@@ -84,15 +94,17 @@ fun ListDetailScreen(
             val items = app.studyRepository.itemsInList(listId)
             val known = app.userRepository.knownIds()
             val summaries = app.repository.itemSummaries(items)
-            Triple(
-                list?.name.orEmpty(),
-                summaries.filter { it.item.itemId !in known },
-                summaries.filter { it.item.itemId in known },
+            Loaded(
+                name = list?.name.orEmpty(),
+                learning = summaries.filter { it.item.itemId !in known },
+                archived = summaries.filter { it.item.itemId in known },
+                reviewStats = app.studyRepository.reviewStatsForList(listId),
             )
         }
-        name = loaded.first
-        learning = loaded.second
-        archived = loaded.third
+        name = loaded.name
+        learning = loaded.learning
+        archived = loaded.archived
+        reviewStats = loaded.reviewStats
     }
 
     fun archive(summary: ItemSummary) {
@@ -176,6 +188,13 @@ fun ListDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         SectionTitle("Studying (${learning.size})")
+                        if (reviewStats.total > 0) {
+                            Text(
+                                "  ·  ${reviewStatsLine(reviewStats)}",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -292,4 +311,10 @@ fun ListDetailScreen(
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
     }
+}
+
+/** "9 knew · 3 missed (75%)" — all-time for this list's current members, next to "Studying". */
+private fun reviewStatsLine(stats: ReviewStats): String {
+    val pct = stats.accuracy?.let { " (${"%.0f".format(it * 100)}%)" }.orEmpty()
+    return "${stats.knew} knew · ${stats.missed} missed$pct"
 }

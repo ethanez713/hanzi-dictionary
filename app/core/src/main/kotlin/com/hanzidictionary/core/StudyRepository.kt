@@ -311,6 +311,20 @@ class StudyRepository(
     fun reviewStatsOverDays(days: Int, now: Long = System.currentTimeMillis()): ReviewStats =
         reviewStats(startOfDay(now) - (days - 1) * DAY_MS)
 
+    /** All-time knew/missed for one list's current members — the tally the list detail
+     * screen shows inline next to "Studying (N)". */
+    fun reviewStatsForList(listId: Long): ReviewStats {
+        val itemIds = itemsInList(listId).map { it.itemId }
+        if (itemIds.isEmpty()) return ReviewStats(0, 0)
+        var knew = 0
+        var missed = 0
+        for (row in q.reviewGradeCountsForItems(itemIds).executeAsList()) {
+            val n = row.n.toInt()
+            if (row.rating <= Rating.HARD.value) missed += n else knew += n
+        }
+        return ReviewStats(knew, missed)
+    }
+
     /** The items with the most lapses, worst first — what to actually go and look at. */
     fun mostMissed(limit: Long = 8): List<LapseCount> =
         q.mostLapsedCards(limit).executeAsList()
