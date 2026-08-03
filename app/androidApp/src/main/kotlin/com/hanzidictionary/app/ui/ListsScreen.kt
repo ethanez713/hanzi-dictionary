@@ -40,10 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.DeckSource
-import com.hanzidictionary.core.HanziRepository
-import com.hanzidictionary.core.ItemSummary
 import com.hanzidictionary.core.ListStats
-import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.StudyList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,8 +53,6 @@ private data class ListsState(
     val activeId: Long? = null,
     val encounteredCount: Int = 0,
     val dueNow: Int = 0,
-    /** The items with the most lapses, already resolved to display text. */
-    val mostMissed: List<Pair<ItemSummary, Int>> = emptyList(),
 )
 
 /**
@@ -71,10 +66,8 @@ private data class ListsState(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ListsScreen(
-    repository: HanziRepository,
     hskLevels: Map<Int, List<String>>,
     onOpenList: (Long) -> Unit,
-    onOpenItem: (StudyItem) -> Unit,
     onPractice: (DeckSource) -> Unit,
     onOpenArchive: () -> Unit,
     onOpenConfusables: () -> Unit,
@@ -92,18 +85,12 @@ fun ListsScreen(
 
     LaunchedEffect(refresh) {
         state = withContext(Dispatchers.IO) {
-            val missed = app.studyRepository.mostMissed()
-            val summaries = repository.itemSummaries(missed.map { it.item })
-                .associateBy { it.item.itemId }
             ListsState(
                 lists = app.studyRepository.lists(),
                 stats = app.studyRepository.statsByList(),
                 activeId = app.studyRepository.activeListId(),
                 encounteredCount = app.userRepository.practiceQueue().size,
                 dueNow = app.studyRepository.dueNow(),
-                mostMissed = missed.mapNotNull { lapse ->
-                    summaries[lapse.item.itemId]?.let { it to lapse.lapses }
-                },
             )
         }
     }
@@ -132,8 +119,6 @@ fun ListsScreen(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-
-            if (state.mostMissed.isNotEmpty()) MostMissedCard(state.mostMissed, onOpenItem)
 
             // Saving destination, stated where you can change it — swipes elsewhere in
             // the app land here, so it must never be a mystery.
@@ -240,40 +225,6 @@ fun ListsScreen(
                     }
                 }
                 DeckChip("Look-alikes", onOpenConfusables)
-            }
-        }
-    }
-}
-
-/** The characters whose lapse count keeps climbing — the actionable end of the knew/missed
- * data; the tally itself now lives inline on each list's detail screen. Each chip is a tap
- * away from the character's page. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun MostMissedCard(mostMissed: List<Pair<ItemSummary, Int>>, onOpenItem: (StudyItem) -> Unit) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Card(Modifier.fillMaxWidth()) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text("Most missed", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                for ((summary, lapses) in mostMissed) {
-                    Card(Modifier.clickable { onOpenItem(summary.item) }) {
-                        Row(
-                            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(summary.text, fontSize = 20.sp)
-                            Text("×$lapses", fontSize = 12.sp, color = muted)
-                        }
-                    }
-                }
             }
         }
     }

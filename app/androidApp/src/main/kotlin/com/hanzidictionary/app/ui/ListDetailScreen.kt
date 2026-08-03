@@ -1,5 +1,6 @@
 package com.hanzidictionary.app.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,9 +41,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
+import com.hanzidictionary.core.CardState
 import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.ItemSummary
-import com.hanzidictionary.core.ReviewStats
 import com.hanzidictionary.core.StudyItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,7 +54,8 @@ private data class Loaded(
     val name: String,
     val learning: List<ItemSummary>,
     val archived: List<ItemSummary>,
-    val reviewStats: ReviewStats,
+    /** Keyed by item id — the per-word knew/missed trailing each row in "Studying". */
+    val cardStates: Map<String, CardState>,
 )
 
 /**
@@ -82,7 +84,7 @@ fun ListDetailScreen(
     var name by remember { mutableStateOf("") }
     var learning by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var archived by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
-    var reviewStats by remember { mutableStateOf(ReviewStats(0, 0)) }
+    var cardStates by remember { mutableStateOf<Map<String, CardState>>(emptyMap()) }
     var showArchived by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
@@ -98,13 +100,13 @@ fun ListDetailScreen(
                 name = list?.name.orEmpty(),
                 learning = summaries.filter { it.item.itemId !in known },
                 archived = summaries.filter { it.item.itemId in known },
-                reviewStats = app.studyRepository.reviewStatsForList(listId),
+                cardStates = app.studyRepository.cardStates(items.map { it.itemId }),
             )
         }
         name = loaded.name
         learning = loaded.learning
         archived = loaded.archived
-        reviewStats = loaded.reviewStats
+        cardStates = loaded.cardStates
     }
 
     fun archive(summary: ItemSummary) {
@@ -188,13 +190,6 @@ fun ListDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         SectionTitle("Studying (${learning.size})")
-                        if (reviewStats.total > 0) {
-                            Text(
-                                "  ·  ${reviewStatsLine(reviewStats)}",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                     }
                 }
             }
@@ -212,6 +207,7 @@ fun ListDetailScreen(
                         gloss = summary.gloss,
                         glossLines = 1,
                         onClick = { onOpenItem(summary.item) },
+                        trailing = { KnewMissedTrailing(cardStates[summary.item.itemId]) },
                     )
                 }
                 HorizontalDivider()
@@ -313,8 +309,16 @@ fun ListDetailScreen(
     }
 }
 
-/** "9 knew · 3 missed (75%)" — all-time for this list's current members, next to "Studying". */
-private fun reviewStatsLine(stats: ReviewStats): String {
-    val pct = stats.accuracy?.let { " (${"%.0f".format(it * 100)}%)" }.orEmpty()
-    return "${stats.knew} knew · ${stats.missed} missed$pct"
+/**
+ * Right-justified per-word knew/missed, at a glance next to every card in "Studying" — the
+ * signal for which words are safe to archive versus still shaky. Blank until the card has
+ * been graded at least once; a word you haven't reviewed yet has no knew/missed to report.
+ */
+@Composable
+private fun KnewMissedTrailing(card: CardState?) {
+    if (card == null || card.reviews == 0) return
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("✓${card.recalled}", fontSize = 13.sp, color = KnewAction.color)
+        Text("✗${card.lapses}", fontSize = 13.sp, color = MissedAction.color)
+    }
 }

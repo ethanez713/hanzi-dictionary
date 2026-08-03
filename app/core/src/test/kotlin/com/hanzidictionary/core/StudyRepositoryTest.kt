@@ -201,49 +201,23 @@ class StudyRepositoryTest {
     }
 
     @Test
-    fun reviewStatsSplitKnewFromMissedOverEachWindow() {
-        val list = study.createList("A", now)
-        study.addToList(list, hao, now)
-        study.addToList(list, ni, now)
-
-        // Two days ago: one of each. Today: two knew, one missed.
-        study.grade(hao, Rating.GOOD, now = now - 2 * DAY_MS)
-        study.grade(ni, Rating.AGAIN, now = now - 2 * DAY_MS)
+    fun reviewStatsWrapsRecalledAndLapsesFromCardState() {
         study.grade(hao, Rating.GOOD, now = now)
-        study.grade(ni, Rating.GOOD, now = now)
-        study.grade(ni, Rating.AGAIN, now = now)
+        study.grade(hao, Rating.AGAIN, now = now + 60_000)
+        study.grade(hao, Rating.GOOD, now = now + 120_000)
 
-        assertEquals(ReviewStats(knew = 2, missed = 1), study.reviewStatsToday(now))
-        assertEquals(ReviewStats(knew = 3, missed = 2), study.reviewStatsOverDays(7, now))
-        assertEquals(ReviewStats(knew = 3, missed = 2), study.reviewStats())
-        // The window is midnight-aligned, so "1 day" is today and nothing before it.
-        assertEquals(ReviewStats(knew = 2, missed = 1), study.reviewStatsOverDays(1, now))
-        assertEquals(2.0 / 3.0, study.reviewStatsToday(now).accuracy)
+        val card = study.cardState(hao.itemId)!!
+        val stats = ReviewStats(knew = card.recalled, missed = card.lapses)
+
+        assertEquals(ReviewStats(knew = 2, missed = 1), stats)
+        assertEquals(2.0 / 3.0, stats.accuracy)
     }
 
     @Test
     fun reviewStatsAreEmptyRatherThanZeroPercentWhenNothingWasAnswered() {
-        val stats = study.reviewStatsToday(now)
+        val stats = ReviewStats(knew = 0, missed = 0)
         assertEquals(0, stats.total)
         assertNull(stats.accuracy, "no answers is a gap, not a 0% score")
-    }
-
-    @Test
-    fun mostMissedRanksByLapsesAndDropsUnlapsedCards() {
-        val list = study.createList("A", now)
-        study.addToList(list, hao, now)
-        study.addToList(list, ni, now)
-        study.addToList(list, nihao, now)
-
-        // 好 lapses twice, 你 once, 你好 never.
-        study.grade(hao, Rating.AGAIN, now = now)
-        study.grade(hao, Rating.AGAIN, now = now + 60_000)
-        study.grade(ni, Rating.AGAIN, now = now)
-        study.grade(nihao, Rating.GOOD, now = now)
-
-        val missed = study.mostMissed()
-        assertEquals(listOf(hao, ni), missed.map { it.item })
-        assertEquals(2, missed.first().lapses)
     }
 
     @Test

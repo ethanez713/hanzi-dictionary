@@ -233,13 +233,8 @@ fun AppRoot(
             }
             composable("lists") {
                 ListsScreen(
-                    repository = repository,
                     hskLevels = hskLevels,
                     onOpenList = { listId -> nav.navigate("list/$listId") },
-                    onOpenItem = { item ->
-                        if (item.isWord) nav.navigate("word/${enc(item.itemId)}")
-                        else nav.navigate("character/${enc(item.itemId)}")
-                    },
                     onPractice = { source -> nav.navigate(practiceRoute(source)) },
                     onOpenArchive = { nav.navigate("known") },
                     onOpenConfusables = { nav.navigate("confusables") },

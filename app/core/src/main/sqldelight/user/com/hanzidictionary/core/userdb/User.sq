@@ -253,24 +253,6 @@ WHERE ts >= :since
 reviewCountSince:
 SELECT COUNT(*) FROM review_log WHERE ts >= :since;
 
--- Answers since :since, split by grade — the knew/missed tally on the Study screen. Grouped
--- in SQL because a long history is a lot of rows to drag into Kotlin just to count them.
-reviewGradeCountsSince:
-SELECT rating, COUNT(*) AS n FROM review_log WHERE ts >= :since GROUP BY rating;
-
--- Same tally, scoped to one list's current members — the knew/missed line on a list's
--- detail screen. Answers logged while an item sat in a *different* list still count here,
--- since membership isn't tracked historically (only card_state and review_log are).
-reviewGradeCountsForItems:
-SELECT rating, COUNT(*) AS n FROM review_log WHERE item_id IN :itemIds GROUP BY rating;
-
--- The items you keep getting wrong, worst first. Read from card_state rather than counted
--- out of review_log: `lapses` is already the running tally FSRS keeps, and it resets with
--- the card when an item is archived and un-archived, which is the behaviour you want here.
-mostLapsedCards:
-SELECT item_id, kind, lapses, reviews FROM card_state
-WHERE lapses > 0 ORDER BY lapses DESC, reviews DESC LIMIT :limit;
-
 -- ---- preferences ----
 
 getPref:
