@@ -74,7 +74,7 @@ RULE_VERSION = 1
 # cached dataset stays independent of how any one build ranks characters.
 MAX_FREQ_RANK = 4000
 
-# --- layer 2 (shared component) gates. See the module docstring for what each one rules out.
+# Layer 2 (shared component) gates. See the module docstring for what each one rules out.
 #
 # How many *shippable* characters (freq_rank <= MAX_FREQ_RANK) may use a component before it
 # stops being a resemblance and becomes a filing category. 20 keeps 其 (5), 寺 (8), 青 (12),
@@ -212,8 +212,6 @@ def compute_pairs(shapes: dict[int, Shape]) -> list[tuple[int, int, str]]:
 
     return sorted((lo, hi, basis) for (lo, hi), basis in pairs.items())
 
-
-# ---- the cached dataset ----------------------------------------------------------------
 
 def write_dataset(pairs: list[tuple[int, int, str]], unihan_version: str, path: Path = DATASET_PATH) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)

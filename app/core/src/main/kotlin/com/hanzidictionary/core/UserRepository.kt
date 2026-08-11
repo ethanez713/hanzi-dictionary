@@ -52,8 +52,6 @@ class UserRepository(driver: SqlDriver) {
 
     fun confusionCount(): Long = q.confusionCount().executeAsOne()
 
-    // ---- photo scan state ----
-
     fun lastScanTimestamp(): Long = q.getLastScanTimestamp().executeAsOneOrNull() ?: 0L
 
     fun setLastScanTimestamp(ts: Long) = q.setLastScanTimestamp(ts)

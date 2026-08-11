@@ -27,7 +27,6 @@ LICENSE = "CC BY 2.0 FR"
 
 
 def _download_bz2(url: str, dest: Path) -> None:
-    """Download a .bz2 and stream-decompress it to dest."""
     tmp = dest.with_name(dest.name + ".bz2")
     download(url, tmp)
     with bz2.open(tmp, "rb") as src, dest.open("wb") as out:

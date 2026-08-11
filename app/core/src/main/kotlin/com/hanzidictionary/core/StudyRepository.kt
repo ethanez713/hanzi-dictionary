@@ -77,8 +77,6 @@ class StudyRepository(
     private val db = UserDatabase(driver)
     private val q = db.userQueries
 
-    // ---- lists ----
-
     fun lists(): List<StudyList> =
         q.allLists().executeAsList().map { StudyList(it.id, it.name, it.created_at) }
 
@@ -96,8 +94,6 @@ class StudyRepository(
         }
         if (activeListId() == listId) setActiveListId(null)
     }
-
-    // ---- membership ----
 
     fun addToList(listId: Long, item: StudyItem, now: Long = System.currentTimeMillis()) =
         q.addListItem(listId, item.itemId, item.kind, now)
@@ -160,8 +156,6 @@ class StudyRepository(
         setActiveListId(id)
         return StudyList(id, DEFAULT_LIST_NAME, now)
     }
-
-    // ---- scheduling ----
 
     fun cardState(itemId: String): CardState? =
         q.cardState(itemId).executeAsOneOrNull()?.toCardState()

@@ -25,8 +25,6 @@ class HanziRepository(
 ) {
     private val db = HanziDatabase(driver)
 
-    // ---- search ----
-
     fun search(query: String, limit: Int = 50): List<SearchResult> {
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
@@ -129,8 +127,6 @@ class HanziRepository(
         }.value
         return ids
     }
-
-    // ---- character page ----
 
     fun characterPage(glyphId: String): CharacterPage? {
         val g = db.hanziQueries.glyphById(glyphId).executeAsOneOrNull() ?: return null
@@ -240,8 +236,6 @@ class HanziRepository(
         }
         return senses
     }
-
-    // ---- word search / word page ----
 
     /** Words matching [query] — CJK matches simp/trad by prefix, latin matches pinyin
      * syllables or definition words (all tokens ANDed within a field). Run-together
@@ -545,8 +539,6 @@ class HanziRepository(
         return db.hanziQueries.decompositionsForGlyph(glyphId).executeAsList().firstOrNull()?.ids
     }
 
-    // ---- component page ----
-
     /** [knownIds] reorders each series known-first (spec §1, §9): characters the user
      * already knows float to the front, then by frequency. */
     fun componentPage(componentId: String, knownIds: Set<String> = emptySet()): ComponentPage {
@@ -817,13 +809,9 @@ class HanziRepository(
         }
     }
 
-    // ---- sources / provenance ----
-
     fun sources(): List<SourceInfo> =
         db.hanziQueries.allSources().executeAsList()
             .map { SourceInfo(it.id, it.name, it.license, it.url, it.version) }
-
-    // ---- helpers ----
 
     private fun rawSingleString(target: SqlDriver, sql: String, arg: String): String? {
         var result: String? = null
@@ -846,8 +834,6 @@ class HanziRepository(
         return SearchResult(id, char, py, definition, freq_rank)
     }
 }
-
-// ---- pure helpers (no driver / no Android) ----
 
 /** First sense only — drill cards and component hints want "clear, pure", not the
  * full semicolon-chained gloss. */
