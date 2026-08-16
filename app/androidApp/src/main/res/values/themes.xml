@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Compose supplies the real theming (Material 3 dynamic color in AppTheme); this
+    <!-- Compose supplies the real theming (the fixed M3 scheme in AppTheme); this
          is just the launch/base theme the manifest points at. The overrides below match
          it to Compose's background so the window drawn before Compose starts doesn't
          flash a different color, and leave both bars transparent for enableEdgeToEdge. -->

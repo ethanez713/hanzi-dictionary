@@ -39,7 +39,6 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.commitDistance
 import kotlin.math.abs
 import kotlinx.coroutines.launch
@@ -56,17 +55,29 @@ import kotlinx.coroutines.launch
  * archive it), **left = negative** (didn't know it, take it off the list).
  */
 
-/** The two ends of a swipe. Colours are tuned to read on both M3 surfaces. */
-data class SwipeAction(val label: String, val icon: String, val color: Color)
+/** Which of the app-wide swipe verbs an action represents — the color that verb resolves to
+ * differs between light and dark theme (see SemanticColors.kt), so the action itself carries
+ * only the tone and resolves the actual [Color] via [color] once a theme is available. */
+enum class SwipeTone { AFFIRM, NEGATIVE, NEUTRAL }
 
-val AddAction = SwipeAction("Add to list", "＋", Color(0xFF2E7D32))
-val KnewAction = SwipeAction("Knew it", "✓", Color(0xFF2E7D32))
-val ArchiveAction = SwipeAction("I know this", "✓", Color(0xFF2E7D32))
-val MissedAction = SwipeAction("Didn't know", "✗", Color(0xFFC62828))
-val RemoveAction = SwipeAction("Remove", "✕", Color(0xFFC62828))
+/** The two ends of a swipe. */
+data class SwipeAction(val label: String, val icon: String, val tone: SwipeTone)
+
+@Composable
+fun SwipeAction.color(): Color = when (tone) {
+    SwipeTone.AFFIRM -> LocalSemanticColors.current.affirm
+    SwipeTone.NEGATIVE -> LocalSemanticColors.current.negative
+    SwipeTone.NEUTRAL -> LocalSemanticColors.current.skip
+}
+
+val AddAction = SwipeAction("Add to list", "＋", SwipeTone.AFFIRM)
+val KnewAction = SwipeAction("Knew it", "✓", SwipeTone.AFFIRM)
+val ArchiveAction = SwipeAction("I know this", "✓", SwipeTone.AFFIRM)
+val MissedAction = SwipeAction("Didn't know", "✗", SwipeTone.NEGATIVE)
+val RemoveAction = SwipeAction("Remove", "✕", SwipeTone.NEGATIVE)
 // Skip is neither affirm nor negative — it just moves on, so it reads grey, off the
 // red/green axis, and rides the vertical direction the left/right grammar leaves free.
-val SkipAction = SwipeAction("Skip", "↑", Color(0xFF9E9E9E))
+val SkipAction = SwipeAction("Skip", "↑", SwipeTone.NEUTRAL)
 
 // The commit-distance rule itself lives in :core (com.hanzidictionary.core.commitDistance)
 // so it can be unit-tested; see its KDoc for why a flat threshold was unreachable.
@@ -120,10 +131,11 @@ fun SwipeRow(
         if (revealed != null && offset.value != 0f) {
             val goal = if (offset.value > 0) rightThreshold else leftThreshold
             val progress = (abs(offset.value) / goal).coerceIn(0f, 1f)
+            val revealedColor = revealed.color()
             Row(
                 Modifier.matchParentSize()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(revealed.color.copy(alpha = 0.12f + 0.18f * progress))
+                    .background(revealedColor.copy(alpha = 0.12f + 0.18f * progress))
                     .padding(horizontal = 16.dp),
                 horizontalArrangement =
                     if (offset.value > 0) Arrangement.Start else Arrangement.End,
@@ -131,8 +143,8 @@ fun SwipeRow(
             ) {
                 Text(
                     "${revealed.icon}  ${revealed.label}",
-                    color = revealed.color,
-                    fontSize = 13.sp,
+                    color = revealedColor,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
@@ -232,10 +244,11 @@ fun SwipeCard(
         val travel = if (vertical) -o.y else abs(o.x)
         val progress = (travel / threshold).coerceIn(0f, 1f)
         if (hint != null && (o.x != 0f || o.y != 0f)) {
+            val hintColor = hint.color()
             Box(
                 Modifier.matchParentSize()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(hint.color.copy(alpha = 0.10f * progress)),
+                    .background(hintColor.copy(alpha = 0.10f * progress)),
                 contentAlignment = when {
                     vertical -> Alignment.TopCenter
                     o.x > 0 -> Alignment.CenterEnd
@@ -244,8 +257,8 @@ fun SwipeCard(
             ) {
                 Text(
                     hint.icon,
-                    color = hint.color.copy(alpha = progress),
-                    fontSize = 44.sp,
+                    style = LocalGlyphType.current.swipeHint,
+                    color = hintColor.copy(alpha = progress),
                     modifier = Modifier.padding(24.dp),
                 )
             }
@@ -423,15 +436,18 @@ fun SwipeTile(
             content()
             if (hint != null && travelled > 0f) {
                 val progress = (travelled / threshold).coerceIn(0f, 1f)
+                val hintColor = hint.color()
                 Box(
                     Modifier.matchParentSize()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(hint.color.copy(alpha = 0.12f + 0.55f * progress)),
+                        .background(hintColor.copy(alpha = 0.12f + 0.55f * progress)),
                     contentAlignment = Alignment.Center,
                 ) {
                     // The icon appearing *is* the "you've gone far enough" signal, so it
                     // shows only once armed rather than fading in the whole way.
-                    if (armed) Text(hint.icon, color = Color.White, fontSize = 26.sp)
+                    if (armed) {
+                        Text(hint.icon, style = LocalGlyphType.current.tile, color = Color.White)
+                    }
                 }
             }
         }
@@ -447,10 +463,10 @@ fun SwipeLegend(left: SwipeAction, right: SwipeAction, up: SwipeAction? = null) 
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("←  ${left.label}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("←  ${left.label}", style = MaterialTheme.typography.bodySmall, color = left.color())
         if (up != null) {
-            Text("↑ ${up.label}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("↑ ${up.label}", style = MaterialTheme.typography.bodySmall, color = up.color())
         }
-        Text("${right.label}  →", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${right.label}  →", style = MaterialTheme.typography.bodySmall, color = right.color())
     }
 }

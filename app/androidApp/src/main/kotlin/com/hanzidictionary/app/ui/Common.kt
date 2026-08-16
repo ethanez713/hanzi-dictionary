@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.radicalNameOf
 
 /** The runtime permission the photo-library features need on this OS version (shared by
@@ -68,7 +67,7 @@ fun HomeButton(onHome: () -> Unit) {
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 }
 
 /**
@@ -136,22 +135,30 @@ fun ItemRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(text, fontSize = 27.sp, color = LocalContentColor.current.copy(alpha = alpha))
+        Text(
+            text,
+            style = LocalGlyphType.current.small,
+            color = LocalContentColor.current.copy(alpha = alpha),
+        )
         secondaryText?.let {
             Text(
                 it,
-                fontSize = 16.sp,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
             )
         }
         Column(Modifier.weight(1f)) {
             pinyin?.let {
-                Text(it, fontSize = 15.sp, color = LocalContentColor.current.copy(alpha = alpha))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LocalContentColor.current.copy(alpha = alpha),
+                )
             }
             gloss?.let {
                 Text(
                     it,
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
                     maxLines = glossLines,
                     overflow = TextOverflow.Ellipsis,
@@ -167,15 +174,17 @@ fun ItemRow(
 fun shortGloss(definition: String): String = definition.split(";").first().trim()
 
 /** Component function color-coding used across breakdown strips and component pages
- * (spec §9): semantic red-ish, phonetic blue-ish, both purple, else muted. Tuned to
- * stay legible on both light and dark Material 3 surfaces. */
+ * (spec §9): semantic red-ish, phonetic blue-ish, both purple, else muted. */
 @Composable
-fun functionColor(function: String): Color = when (function) {
-    "semantic" -> Color(0xFFC62828)
-    "phonetic" -> Color(0xFF1565C0)
-    "both" -> Color(0xFF6A1B9A)
-    "empty" -> MaterialTheme.colorScheme.outline
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+fun functionColor(function: String): Color {
+    val semantic = LocalSemanticColors.current
+    return when (function) {
+        "semantic" -> semantic.meaning
+        "phonetic" -> semantic.sound
+        "both" -> semantic.soundAndMeaning
+        "empty" -> MaterialTheme.colorScheme.outline
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 }
 
 /** True when this component is the one lending its character the sound.

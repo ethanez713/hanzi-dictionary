@@ -367,8 +367,8 @@ fun ListDetailScreen(
 private fun KnewMissedTrailing(card: CardState?) {
     if (card == null || card.reviews == 0) return
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("✓${card.recalled}", fontSize = 13.sp, color = KnewAction.color)
-        Text("✗${card.lapses}", fontSize = 13.sp, color = MissedAction.color)
+        Text("✓${card.recalled}", fontSize = 13.sp, color = KnewAction.color())
+        Text("✗${card.lapses}", fontSize = 13.sp, color = MissedAction.color())
         Text(
             "(${missedPercent(card)}%)",
             fontSize = 12.sp,

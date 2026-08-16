@@ -715,7 +715,7 @@ private fun PhotoFeed(
                                 onClick = { onUndo(f.glyphId) },
                                 trailing = {
                                     TextButton(onClick = { onUndo(f.glyphId) }) {
-                                        Text("$UNDO_MARK Undo", color = triaged.action.color)
+                                        Text("$UNDO_MARK Undo", color = triaged.action.color())
                                     }
                                 },
                             )
@@ -850,16 +850,17 @@ private fun CharacterTile(char: String, onClick: () -> Unit) {
  */
 @Composable
 private fun TriagedTile(char: String, action: SwipeAction, onUndo: () -> Unit) {
+    val actionColor = action.color()
     Card(
         Modifier.fillMaxWidth().aspectRatio(1f)
             .clickable(onClickLabel = "Undo") { onUndo() },
     ) {
         Box(
-            Modifier.fillMaxSize().background(action.color.copy(alpha = 0.14f)),
+            Modifier.fillMaxSize().background(actionColor.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
         ) {
             Text(char, fontSize = 30.sp, color = LocalContentColor.current.copy(alpha = 0.28f))
-            Text(UNDO_MARK, fontSize = 30.sp, color = action.color.copy(alpha = 0.85f))
+            Text(UNDO_MARK, fontSize = 30.sp, color = actionColor.copy(alpha = 0.85f))
         }
     }
 }
