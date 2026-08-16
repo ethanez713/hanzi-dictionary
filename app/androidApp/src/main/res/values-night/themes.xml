@@ -3,5 +3,10 @@
     <!-- Dark-mode counterpart of the base theme: without it the window background
          behind Compose is white (the values/ theme is Light), which flashes through
          on every launch and navigation transition when the app renders dark. -->
-    <style name="Theme.HanziDictionary" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.HanziDictionary" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
 </resources>
