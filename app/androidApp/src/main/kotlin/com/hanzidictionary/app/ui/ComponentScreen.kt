@@ -9,24 +9,28 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.ComponentPage
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SeriesMember
@@ -86,9 +90,10 @@ fun ComponentScreen(
                 val gid = p.glyphId
                 Text(
                     p.char ?: p.componentId,
-                    fontSize = 56.sp,
-                    lineHeight = 62.sp,
-                    modifier = if (gid != null) Modifier.clickable { onOpenCharacter(gid) } else Modifier,
+                    style = LocalGlyphType.current.large,
+                    modifier = if (gid != null) {
+                        Modifier.minimumInteractiveComponentSize().clickable { onOpenCharacter(gid) }
+                    } else Modifier,
                 )
                 Column(
                     Modifier.weight(1f).padding(top = 2.dp),
@@ -100,19 +105,21 @@ fun ComponentScreen(
                     val name = p.char?.let { radicalNameOf(it) }
                     val pinyin = p.ownReadings.filter { it.system == "pinyin" }.joinToString("  ") { it.value }
                     when {
-                        name != null -> Text(name, fontSize = 17.sp)
-                        pinyin.isNotEmpty() -> Text(pinyin, fontSize = 17.sp)
+                        name != null -> Text(name, style = MaterialTheme.typography.titleMedium)
+                        pinyin.isNotEmpty() -> Text(pinyin, style = MaterialTheme.typography.titleMedium)
                     }
                     p.definition?.let {
-                        Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     if (gid != null) {
-                        Text(
-                            "Open character page →",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { onOpenCharacter(gid) }.padding(vertical = 2.dp),
-                        )
+                        TextButton(onClick = { onOpenCharacter(gid) }) {
+                            Text("Open character page", style = MaterialTheme.typography.bodyMedium)
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                        }
                     }
                 }
             }
@@ -129,14 +136,15 @@ fun ComponentScreen(
                     ) {
                         Text(
                             "Related forms:",
-                            fontSize = 13.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         for (form in related) {
                             Text(
                                 form,
-                                fontSize = 24.sp,
-                                modifier = Modifier.clickable { onOpenComponent(form) },
+                                style = LocalGlyphType.current.small,
+                                modifier = Modifier.minimumInteractiveComponentSize()
+                                    .clickable { onOpenComponent(form) },
                             )
                         }
                     }
@@ -154,7 +162,7 @@ fun ComponentScreen(
                         append(parts.joinToString(" · "))
                         append(" characters")
                     },
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -164,7 +172,10 @@ fun ComponentScreen(
             if (p.phoneticMembers.isNotEmpty() || p.semanticMembers.isNotEmpty()) {
                 // Component reunion (spec §14/§16): drill the whole series at once —
                 // knowing the component makes its siblings predictable.
-                TextButton(onClick = onPracticeSeries) { Text("Practice this series →") }
+                TextButton(onClick = onPracticeSeries) {
+                    Text("Practice this series")
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                }
             }
 
             if (p.phoneticMembers.isNotEmpty()) {
@@ -203,7 +214,7 @@ private fun ReliabilityMeter(p: ComponentPage) {
             append("${"%.0f".format((p.reliability ?: 0.0) * 100)}% across ${p.memberCount} characters")
             if (stratum != null) append(" · $stratum")
         },
-        fontSize = 12.sp,
+        style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
@@ -213,14 +224,24 @@ private fun ReliabilityMeter(p: ComponentPage) {
 private fun MemberGrid(members: List<SeriesMember>, onOpenCharacter: (String) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (m in members) {
-            Card(Modifier.clickable { onOpenCharacter(m.glyphId) }) {
+            // A step up the tonal scale, not down: these cards sit on the same background
+            // as the rest of the page, and dropping to `surface` reads as a hole punched
+            // through it in dark mode.
+            Card(
+                modifier = Modifier.clickable { onOpenCharacter(m.glyphId) },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            ) {
                 Column(
                     Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(m.char, fontSize = 28.sp)
+                    Text(m.char, style = LocalGlyphType.current.medium)
                     m.matchClass?.let {
-                        Text(it, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

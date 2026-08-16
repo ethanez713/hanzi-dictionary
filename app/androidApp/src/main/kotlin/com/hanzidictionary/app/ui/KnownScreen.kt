@@ -14,6 +14,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -30,7 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.charOfGlyphId
 import com.hanzidictionary.core.extractHanzi
@@ -85,8 +85,8 @@ fun KnownScreen(
                 "Archived characters stay in your lists as a record, but drop out of every " +
                     "list's practice and float to the front of component series. Import " +
                     "what you already know:",
-                fontSize = 13.sp,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             SectionTitle("HSK progress")
@@ -96,7 +96,7 @@ fun KnownScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
                         "${if (level == 7) "HSK 7-9" else "HSK $level"}: $knownInLevel / ${levelIds.size}",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     LinearProgressIndicator(
                         progress = {
@@ -145,7 +145,11 @@ fun KnownScreen(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for ((glyphId, ch) in knownChars) {
                         Card(Modifier.clickable { onOpenCharacter(glyphId) }) {
-                            Text(ch, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 24.sp)
+                            Text(
+                                ch,
+                                Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                style = LocalGlyphType.current.small,
+                            )
                         }
                     }
                 }

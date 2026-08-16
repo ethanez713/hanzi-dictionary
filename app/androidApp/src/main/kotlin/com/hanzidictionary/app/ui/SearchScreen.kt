@@ -20,11 +20,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
@@ -60,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -76,7 +80,6 @@ import com.hanzidictionary.app.R
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
@@ -412,6 +415,7 @@ fun SearchScreen(
                 value = query,
                 onValueChange = onQueryChange,
                 label = { Text("Character, pinyin, or English") },
+                placeholder = { Text("请  ·  qing  ·  feeling") },
                 singleLine = true,
                 trailingIcon = {
                     if (query.isNotEmpty()) {
@@ -492,12 +496,9 @@ fun SearchScreen(
                     }
                     if (wordHits.isNotEmpty()) {
                         item(key = "words-header") {
-                            Text(
-                                "Words",
-                                Modifier.padding(top = 10.dp, bottom = 2.dp),
-                                fontSize = 12.sp,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Box(Modifier.padding(top = 10.dp, bottom = 2.dp)) {
+                                SectionTitle("Words")
+                            }
                         }
                         items(wordHits, key = { it.id }) { w ->
                             SwipeRow(
@@ -540,9 +541,8 @@ private const val FEED_COLUMNS = 4
  * sooner, because by then you are no longer looking at the cards. */
 private const val TRIAGE_SETTLE_MS = 10_000L
 
-/** The undo affordance on a triaged card. A glyph rather than a Material icon: the swipe
- * verbs are already drawn as text marks (＋, ✕), and material-icons-extended isn't a
- * dependency. */
+/** The character referring to "undo" in the instructional copy below — the undo controls
+ * themselves draw [Icons.Filled.Refresh], but a sentence can't embed a Composable icon. */
 private const val UNDO_MARK = "↺"
 
 /**
@@ -617,7 +617,7 @@ private fun PhotoFeed(
     LazyColumn(
         Modifier.fillMaxSize(),
         state = listState,
-        contentPadding = PaddingValues(start = gestureGap, end = gestureGap, bottom = 76.dp),
+        contentPadding = PaddingValues(start = gestureGap, end = gestureGap, bottom = 100.dp),
     ) {
         clipSuggestion?.let { s ->
             item(key = "clipboard") {
@@ -647,7 +647,7 @@ private fun PhotoFeed(
                 FilterChip(
                     selected = showDefinitions,
                     onClick = onToggleDefinitions,
-                    label = { Text("Definitions", fontSize = 12.sp) },
+                    label = { Text("Definitions") },
                 )
                 IconButton(onClick = onRescan, enabled = granted && finds != null) {
                     Icon(Icons.Filled.Refresh, contentDescription = "Scan photos again")
@@ -660,7 +660,11 @@ private fun PhotoFeed(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("Scan recent photos for characters.", fontSize = 13.sp, color = muted)
+                    Text(
+                        "Scan recent photos for characters.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        color = muted,
+                    )
                     TextButton(onClick = onAllow) { Text("Allow") }
                 }
             }
@@ -672,10 +676,18 @@ private fun PhotoFeed(
                             progress = p.first.toFloat() / p.second,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Text("Scanning photo ${p.first} of ${p.second}…", fontSize = 12.sp, color = muted)
+                        Text(
+                            "Scanning photo ${p.first} of ${p.second}…",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = muted,
+                        )
                     } else {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
-                        Text("Scanning recent photos…", fontSize = 12.sp, color = muted)
+                        Text(
+                            "Scanning recent photos…",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = muted,
+                        )
                     }
                 }
             }
@@ -683,7 +695,7 @@ private fun PhotoFeed(
                 Text(
                     "No characters in recent photos yet. Photograph something with Chinese " +
                         "text on it, then tap ↻.",
-                    fontSize = 13.sp,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                     color = muted,
                 )
             }
@@ -697,7 +709,7 @@ private fun PhotoFeed(
                             "Drag a character to the edge of the screen — right adds it to " +
                                 "$destination, left removes it. Tap $UNDO_MARK to undo."
                         },
-                        fontSize = 12.sp,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                         color = muted,
                         modifier = Modifier.padding(bottom = 4.dp),
                     )
@@ -715,7 +727,13 @@ private fun PhotoFeed(
                                 onClick = { onUndo(f.glyphId) },
                                 trailing = {
                                     TextButton(onClick = { onUndo(f.glyphId) }) {
-                                        Text("$UNDO_MARK Undo", color = triaged.action.color())
+                                        Icon(
+                                            Icons.Filled.Refresh,
+                                            contentDescription = null,
+                                            tint = triaged.action.color(),
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Undo", color = triaged.action.color())
                                     }
                                 },
                             )
@@ -754,7 +772,10 @@ private fun PhotoFeed(
                                     onSwipeRight = { onAdd(f) },
                                     onSwipeLeft = { onDismiss(f) },
                                 ) {
-                                    CharacterTile(f.char) { onOpenCharacter(f.glyphId) }
+                                    CharacterTile(
+                                        f.char,
+                                        container = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant,
+                                    ) { onOpenCharacter(f.glyphId) }
                                 }
                             }
                         }
@@ -782,19 +803,13 @@ private fun PhotoFeed(
                     recentlyViewed.chunked(FEED_COLUMNS),
                     key = { "recent-${it.first().glyphId}" },
                 ) { row ->
-                    TileRow(row) { r -> CharacterTile(r.char) { onOpenCharacter(r.glyphId) } }
+                    TileRow(row) { r ->
+                        CharacterTile(
+                            r.char,
+                            container = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow,
+                        ) { onOpenCharacter(r.glyphId) }
+                    }
                 }
-            }
-        }
-        item(key = "hint") {
-            Column {
-                Text(
-                    "Type a character (请), pinyin (qing), or English (feeling).",
-                    modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-                    textAlign = TextAlign.Center,
-                    color = muted,
-                )
-                Spacer(Modifier.height(24.dp))
             }
         }
     }
@@ -806,7 +821,7 @@ private fun PhotoFeed(
 private fun FeedHeader(title: String, actions: @Composable RowScope.() -> Unit = {}) {
     Row(
         Modifier.fillMaxWidth()
-            .background(androidx.compose.material3.MaterialTheme.colorScheme.background)
+            .background(androidx.compose.material3.MaterialTheme.colorScheme.surface)
             .padding(top = 6.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -832,10 +847,13 @@ private fun <T> TileRow(items: List<T>, tile: @Composable (T) -> Unit) {
 
 /** A character on its own — the whole tile. Square so the grid reads as a grid. */
 @Composable
-private fun CharacterTile(char: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().aspectRatio(1f).clickable(onClick = onClick)) {
+private fun CharacterTile(char: String, container: Color, onClick: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth().aspectRatio(1f).clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = container),
+    ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(char, fontSize = 30.sp)
+            Text(char, style = LocalGlyphType.current.tile)
         }
     }
 }
@@ -859,8 +877,17 @@ private fun TriagedTile(char: String, action: SwipeAction, onUndo: () -> Unit) {
             Modifier.fillMaxSize().background(actionColor.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(char, fontSize = 30.sp, color = LocalContentColor.current.copy(alpha = 0.28f))
-            Text(UNDO_MARK, fontSize = 30.sp, color = actionColor.copy(alpha = 0.85f))
+            Text(
+                char,
+                style = LocalGlyphType.current.tile,
+                color = LocalContentColor.current.copy(alpha = 0.28f),
+            )
+            Icon(
+                Icons.Filled.Refresh,
+                contentDescription = null,
+                tint = actionColor.copy(alpha = 0.85f),
+                modifier = Modifier.size(32.dp),
+            )
         }
     }
 }
@@ -880,10 +907,10 @@ private fun AttributionsDialog(repository: HanziRepository, onDismiss: () -> Uni
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (s in sources) {
                     Column {
-                        Text(s.name, fontSize = 14.sp)
+                        Text(s.name, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
                         Text(
                             "${s.license} · ${s.version}",
-                            fontSize = 12.sp,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -894,7 +921,7 @@ private fun AttributionsDialog(repository: HanziRepository, onDismiss: () -> Uni
                         "hanzi-writer-data, from Arphic KaiTi fonts (Arphic Public " +
                         "License). Full license texts ship in the project's LICENSES/ " +
                         "directory.",
-                    fontSize = 12.sp,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

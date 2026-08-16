@@ -1,6 +1,9 @@
 package com.hanzidictionary.app.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -9,7 +12,6 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 
 /** How long a suspended card is still worth offering a way back to. Past this you have long
@@ -101,12 +103,11 @@ fun ReturnToCardFab() {
     val label = cardReturn.label ?: return
     ExtendedFloatingActionButton(
         onClick = { cardReturn.returnToCard() },
+        icon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) },
+        text = { Text(label) },
         // Not the default primary container: on the home screen this sits directly above the
         // Practice button, and two identically-coloured pills would read as one control.
         containerColor = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    ) {
-        // The glyph carries the meaning; the arrow only says which direction it is.
-        Text("↩ $label", fontSize = 17.sp)
-    }
+    )
 }

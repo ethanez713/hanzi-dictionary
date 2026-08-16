@@ -19,6 +19,9 @@ import androidx.compose.ui.unit.sp
 data class GlyphType(
     val hero: TextStyle,
     val large: TextStyle,
+    /** A word page's headword. Smaller than a character's [large] header because a word is
+     * several glyphs wide — 中华人民共和国 at 64sp needs more width than any phone has. */
+    val word: TextStyle,
     val medium: TextStyle,
     val small: TextStyle,
     val tile: TextStyle,
@@ -39,6 +42,7 @@ private fun glyphStyle(family: FontFamily, size: Int, lineHeight: Int) = TextSty
 internal fun glyphType(family: FontFamily) = GlyphType(
     hero = glyphStyle(family, 80, 92),
     large = glyphStyle(family, 64, 74),
+    word = glyphStyle(family, 44, 51),
     medium = glyphStyle(family, 32, 37),
     small = glyphStyle(family, 27, 31),
     tile = glyphStyle(family, 30, 35),

@@ -25,8 +25,12 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,7 +44,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.CardState
@@ -179,7 +182,9 @@ fun ListDetailScreen(
                 navigationIcon = { BackButton(onBack) },
                 actions = {
                     TextButton(onClick = { onPractice(DeckSource.UserList(listId, name)) }) {
-                        Text("▶ Practice")
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.padding(horizontal = 2.dp))
+                        Text("Practice")
                     }
                     HomeButton(onHome)
                     IconButton(onClick = { menuOpen = true }) {
@@ -206,7 +211,7 @@ fun ListDetailScreen(
                         "Nothing in this list yet. Swipe right on a character or word " +
                             "anywhere in the app to file it here.",
                         Modifier.padding(top = 32.dp),
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -264,9 +269,10 @@ fun ListDetailScreen(
             if (archived.isNotEmpty()) {
                 item {
                     TextButton(onClick = { showArchived = !showArchived }) {
-                        Text(
-                            if (showArchived) "Archived (${archived.size}) ▴"
-                            else "Archived (${archived.size}) ▾",
+                        Text("Archived (${archived.size})")
+                        Icon(
+                            if (showArchived) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
                         )
                     }
                 }
@@ -287,7 +293,7 @@ fun ListDetailScreen(
                                 trailing = {
                                     Text(
                                         "✓",
-                                        fontSize = 15.sp,
+                                        style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 },
@@ -367,11 +373,11 @@ fun ListDetailScreen(
 private fun KnewMissedTrailing(card: CardState?) {
     if (card == null || card.reviews == 0) return
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("✓${card.recalled}", fontSize = 13.sp, color = KnewAction.color())
-        Text("✗${card.lapses}", fontSize = 13.sp, color = MissedAction.color())
+        Text("✓${card.recalled}", style = MaterialTheme.typography.bodyMedium, color = KnewAction.color())
+        Text("✗${card.lapses}", style = MaterialTheme.typography.bodyMedium, color = MissedAction.color())
         Text(
             "(${missedPercent(card)}%)",
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -389,13 +395,26 @@ private fun MissedSortToggle(
     onClick: () -> Unit,
 ) {
     val isActive = field == active
-    Text(
-        if (isActive) "$label ${if (descending) "▼" else "▲"}" else label,
-        fontSize = 13.sp,
-        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
+    val color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier
+            .minimumInteractiveComponentSize()
             .clickable(onClickLabel = "Sort by missed $label") { onClick() }
             .padding(6.dp),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+            color = color,
+        )
+        if (isActive) {
+            Icon(
+                if (descending) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                contentDescription = null,
+                tint = color,
+            )
+        }
+    }
 }

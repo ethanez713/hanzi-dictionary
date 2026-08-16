@@ -13,10 +13,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -36,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.DeckSource
@@ -115,7 +119,7 @@ fun ListsScreen(
         ) {
             Text(
                 if (state.dueNow > 0) "${state.dueNow} due now" else "Nothing due right now",
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -125,7 +129,7 @@ fun ListsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     "Swipes and the widget use:",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(
@@ -166,7 +170,7 @@ fun ListsScreen(
                 Text(
                     "No lists yet. Swipe right on anything — a character in your photos, a " +
                         "search result — and it lands in a list you can practice.",
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -206,7 +210,11 @@ fun ListsScreen(
                     ) { Text("Create") }
                 }
             } else {
-                TextButton(onClick = { creating = true }) { Text("＋  New list") }
+                TextButton(onClick = { creating = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Spacer(Modifier.padding(horizontal = 2.dp))
+                    Text("New list")
+                }
             }
 
             SectionTitle("Other decks")
@@ -243,15 +251,19 @@ private fun ListCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(list.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(list.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                 Text(
                     summarise(stats),
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.padding(horizontal = 4.dp))
-            TextButton(onClick = onPractice) { Text("▶ Practice") }
+            TextButton(onClick = onPractice) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                Spacer(Modifier.padding(horizontal = 2.dp))
+                Text("Practice")
+            }
         }
     }
 }
@@ -268,9 +280,9 @@ private fun summarise(stats: ListStats?): String {
     return parts.joinToString(" · ")
 }
 
+/** A one-shot action that launches a practice session — an [AssistChip], not a [FilterChip],
+ * because unlike the active-list chips above it carries no selected state of its own. */
 @Composable
 private fun DeckChip(label: String, onClick: () -> Unit) {
-    Card(Modifier.clickable(onClick = onClick)) {
-        Text(label, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 13.sp)
-    }
+    AssistChip(onClick = onClick, label = { Text(label) })
 }
