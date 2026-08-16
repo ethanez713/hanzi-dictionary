@@ -119,7 +119,6 @@ fun CharacterScreen(
                 },
             )
         },
-        floatingActionButton = { ReturnToCardFab() },
     ) { padding ->
         val p = page
         if (p == null) {

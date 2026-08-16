@@ -66,7 +66,6 @@ fun WordScreen(
                 actions = { HomeButton(onHome) },
             )
         },
-        floatingActionButton = { ReturnToCardFab() },
     ) { padding ->
         val p = page
         if (p == null) {

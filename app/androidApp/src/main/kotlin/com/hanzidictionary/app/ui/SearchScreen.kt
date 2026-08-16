@@ -30,12 +30,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -78,7 +76,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.audio.MandarinTts
-import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SearchResult
 import com.hanzidictionary.core.SourceInfo
@@ -102,7 +99,6 @@ fun SearchScreen(
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
     onOpenStudy: () -> Unit,
-    onPractice: (DeckSource) -> Unit,
     tts: MandarinTts,
 ) {
     val context = LocalContext.current
@@ -147,21 +143,13 @@ fun SearchScreen(
     // Swipe-right anywhere on this screen files the item into the active list, creating
     // the default one the first time so the gesture always has a destination (spec §17).
     var activeListName by remember { mutableStateOf<String?>(null) }
-    var activeSource by remember { mutableStateOf<DeckSource>(DeckSource.Everything) }
     var listRefresh by remember { mutableIntStateOf(0) }
     LaunchedEffect(listRefresh) {
-        val loaded = withContext(Dispatchers.IO) {
-            val activeId = app.studyRepository.activeListId()
-            val name = activeId?.let { id ->
+        activeListName = withContext(Dispatchers.IO) {
+            app.studyRepository.activeListId()?.let { id ->
                 app.studyRepository.lists().firstOrNull { it.id == id }?.name
             }
-            name to (
-                if (activeId != null) DeckSource.UserList(activeId, name.orEmpty())
-                else DeckSource.Everything
-                )
         }
-        activeListName = loaded.first
-        activeSource = loaded.second
     }
     // "From your photos": kick the (watermark-deduped) scan off immediately so the search
     // box is usable while OCR runs; null = still scanning. Re-entering with no new photos
@@ -368,28 +356,6 @@ fun SearchScreen(
 
     Scaffold(
         snackbarHost = { AppSnackbarHost(snackbar) },
-        // Practice is always one tap away, even once the due card has scrolled off the top.
-        // It reads "Practice" rather than a due count on purpose: a number that follows you
-        // down the screen is a nag, and the home screen shouldn't be keeping score. The
-        // Study screen states the backlog for anyone who wants it.
-        floatingActionButton = {
-            // Two escapes can be live at once here — back to a suspended card, and into a
-            // practice session — so they stack, the card on top because it's the more
-            // specific of the two and it's the one that expires.
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                ReturnToCardFab()
-                if (query.isBlank()) {
-                    ExtendedFloatingActionButton(
-                        onClick = { onPractice(activeSource) },
-                        icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                        text = { Text("Practice") },
-                    )
-                }
-            }
-        },
         topBar = {
             TopAppBar(
                 title = { Text("Hanzi Dictionary") },

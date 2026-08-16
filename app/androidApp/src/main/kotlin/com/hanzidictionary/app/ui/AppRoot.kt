@@ -1,13 +1,24 @@
 package com.hanzidictionary.app.ui
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -27,6 +38,7 @@ import com.hanzidictionary.core.extractHanzi
 import com.hanzidictionary.core.glyphIdOfChar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Route arguments can be CJK chars or "ids:⿰..." pseudo-ids, neither URL-safe, so
@@ -61,6 +73,15 @@ private const val PRACTICE_ROUTE = "practice?source={source}"
 private fun practiceRoute(source: DeckSource): String =
     "practice?source=${enc(encodeSource(source))}"
 
+/** The deck the Practice tab deals from: the active list, or everything pooled if none is
+ * set. Resolved when the tab is tapped rather than held in state, so the tab, the home
+ * screen's due card and the widget can't drift apart about what is up next. */
+private suspend fun activeDeckSource(app: HanziApp): DeckSource = withContext(Dispatchers.IO) {
+    val activeId = app.studyRepository.activeListId() ?: return@withContext DeckSource.Everything
+    val name = app.studyRepository.lists().firstOrNull { it.id == activeId }?.name
+    DeckSource.UserList(activeId, name.orEmpty())
+}
+
 private fun decodeSource(raw: String?): DeckSource {
     val value = raw?.let { dec(it) } ?: return DeckSource.Everything
     val parts = value.split(":")
@@ -91,6 +112,7 @@ fun AppRoot(
 ) {
     val app = LocalContext.current.applicationContext as HanziApp
     val nav = rememberNavController()
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
 
     // The trail marker back to a flashcard you followed into the dictionary (see [CardReturn]).
@@ -204,8 +226,48 @@ fun AppRoot(
         onWidgetItemConsumed()
     }
 
+    // The app is two things: look something up, or review what you've saved. Everything else
+    // — a character page, a list, the archive — is somewhere you got to from one of those, so
+    // the bar splits only those two and a detail page keeps Home lit rather than showing no
+    // selection at all.
+    //
+    // Wrapped *inside* the CompositionLocalProvider because ReturnToCardFab reads
+    // LocalCardReturn: hosted outside it the FAB would silently never appear.
     CompositionLocalProvider(LocalCardReturn provides cardReturn) {
-        NavHost(navController = nav, startDestination = HOME_ROUTE) {
+        val onPractice = currentEntry?.destination?.route == PRACTICE_ROUTE
+        Scaffold(
+            bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = !onPractice,
+                        onClick = goHome,
+                        icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                        label = { Text("Home") },
+                    )
+                    NavigationBarItem(
+                        selected = onPractice,
+                        onClick = {
+                            scope.launch {
+                                nav.navigate(practiceRoute(activeDeckSource(app))) {
+                                    popUpTo(HOME_ROUTE) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                        label = { Text("Practice") },
+                    )
+                }
+            },
+            // Hoisted off the individual screens: a FAB in an inner Scaffold would float over
+            // the bar rather than above it.
+            floatingActionButton = { ReturnToCardFab() },
+        ) { padding ->
+        NavHost(
+            navController = nav,
+            startDestination = HOME_ROUTE,
+            modifier = Modifier.padding(padding),
+        ) {
             composable(HOME_ROUTE) {
                 SearchScreen(
                     repository = repository,
@@ -214,7 +276,6 @@ fun AppRoot(
                     onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
                     onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
                     onOpenStudy = { nav.navigate("lists") },
-                    onPractice = { source -> nav.navigate(practiceRoute(source)) },
                     tts = tts,
                 )
             }
@@ -331,6 +392,7 @@ fun AppRoot(
                     onBack = { nav.popBackStack() },
                 )
             }
+        }
         }
     }
 }
