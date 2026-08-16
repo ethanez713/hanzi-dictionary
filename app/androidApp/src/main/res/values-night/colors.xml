@@ -2,5 +2,5 @@
 <resources>
     <!-- Mirrors the Compose color scheme's background role, so the launch window
          (drawn before Compose has anything on screen) doesn't flash a mismatched color. -->
-    <color name="launch_background">#201A17</color>
+    <color name="launch_background">#19120D</color>
 </resources>

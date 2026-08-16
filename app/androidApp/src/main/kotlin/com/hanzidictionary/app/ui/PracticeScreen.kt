@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -30,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,7 +51,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
@@ -102,7 +105,6 @@ fun PracticeScreen(
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
     onOpenConfusables: () -> Unit,
-    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -197,6 +199,7 @@ fun PracticeScreen(
 
     Scaffold(
         snackbarHost = { AppSnackbarHost(snackbar) },
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             TopAppBar(
                 // The deck's source (list name / HSK band / "Recently encountered") lives up
@@ -204,10 +207,10 @@ fun PracticeScreen(
                 // a control, so it belongs where the screen names itself.
                 title = {
                     Column {
-                        Text("Practice", fontSize = 20.sp)
+                        Text("Practice", style = MaterialTheme.typography.titleLarge)
                         Text(
                             sourceLabel(source),
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -216,14 +219,12 @@ fun PracticeScreen(
                 },
                 navigationIcon = { BackButton(onBack) },
                 // ⓘ is a screen-level explainer, not a per-card action — it says the same
-                // thing whatever card is up — so it belongs in the bar beside Home rather
-                // than in the card's corner competing with the one action that *is*
-                // per-card.
+                // thing whatever card is up — so it belongs in the bar rather than in the
+                // card's corner competing with the one action that *is* per-card.
                 actions = {
                     IconButton(onClick = { showInfo = true }) {
                         Icon(Icons.Filled.Info, contentDescription = "How grading works")
                     }
-                    HomeButton(onHome)
                 },
             )
         },

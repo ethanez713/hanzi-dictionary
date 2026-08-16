@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,12 +35,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -46,10 +45,12 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -65,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -81,7 +83,6 @@ import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.hanzidictionary.app.audio.MandarinTts
-import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SearchResult
 import com.hanzidictionary.core.SourceInfo
@@ -104,8 +105,6 @@ fun SearchScreen(
     onQueryChange: (String) -> Unit,
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
-    onOpenStudy: () -> Unit,
-    onPractice: (DeckSource) -> Unit,
     tts: MandarinTts,
 ) {
     val context = LocalContext.current
@@ -150,21 +149,12 @@ fun SearchScreen(
     // Swipe-right anywhere on this screen files the item into the active list, creating
     // the default one the first time so the gesture always has a destination (spec §17).
     var activeListName by remember { mutableStateOf<String?>(null) }
-    var activeSource by remember { mutableStateOf<DeckSource>(DeckSource.Everything) }
     var listRefresh by remember { mutableIntStateOf(0) }
     LaunchedEffect(listRefresh) {
-        val loaded = withContext(Dispatchers.IO) {
+        activeListName = withContext(Dispatchers.IO) {
             val activeId = app.studyRepository.activeListId()
-            val name = activeId?.let { id ->
-                app.studyRepository.lists().firstOrNull { it.id == id }?.name
-            }
-            name to (
-                if (activeId != null) DeckSource.UserList(activeId, name.orEmpty())
-                else DeckSource.Everything
-                )
+            activeId?.let { id -> app.studyRepository.lists().firstOrNull { it.id == id }?.name }
         }
-        activeListName = loaded.first
-        activeSource = loaded.second
     }
     // "From your photos": kick the (watermark-deduped) scan off immediately so the search
     // box is usable while OCR runs; null = still scanning. Re-entering with no new photos
@@ -369,44 +359,20 @@ fun SearchScreen(
         }
     }.value
 
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         snackbarHost = { AppSnackbarHost(snackbar) },
-        // Practice is always one tap away, even once the due card has scrolled off the top.
-        // It reads "Practice" rather than a due count on purpose: a number that follows you
-        // down the screen is a nag, and the home screen shouldn't be keeping score. The
-        // Study screen states the backlog for anyone who wants it.
-        floatingActionButton = {
-            // Two escapes can be live at once here — back to a suspended card, and into a
-            // practice session — so they stack, the card on top because it's the more
-            // specific of the two and it's the one that expires.
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                ReturnToCardFab()
-                if (query.isBlank()) {
-                    ExtendedFloatingActionButton(
-                        onClick = { onPractice(activeSource) },
-                        icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                        text = { Text("Practice") },
-                    )
-                }
-            }
-        },
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             TopAppBar(
                 title = { Text("Hanzi Dictionary") },
                 actions = {
-                    // A filled button, not a text link: this is the way into the study loop,
-                    // which is what the app is *for* — the dictionary is how you feed it.
-                    Button(
-                        onClick = onOpenStudy,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    ) { Text("Study") }
                     IconButton(onClick = { showAttributions = true }) {
                         Icon(Icons.Filled.Info, contentDescription = "Data sources")
                     }
                 },
+                scrollBehavior = scrollBehavior,
             )
         },
     ) { padding ->

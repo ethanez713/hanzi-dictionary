@@ -1,13 +1,26 @@
 package com.hanzidictionary.app.ui
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -27,6 +40,7 @@ import com.hanzidictionary.core.extractHanzi
 import com.hanzidictionary.core.glyphIdOfChar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Route arguments can be CJK chars or "ids:⿰..." pseudo-ids, neither URL-safe, so
@@ -49,9 +63,23 @@ private fun encodeSource(source: DeckSource): String = when (source) {
     is DeckSource.Series -> "series:${enc(source.componentId)}"
 }
 
-/** The dictionary home — the start destination, and what the top bars' Home button
+/** The dictionary home — the start destination, and what the bottom bar's Home tab
  * unwinds to. */
 private const val HOME_ROUTE = "search"
+
+/** The bottom navigation bar's three permanent destinations. Detail pages (a character, a
+ * component, a word) select none of them — see [selectedTab]. */
+private enum class Tab { HOME, STUDY, PRACTICE }
+
+/** Which tab a back-stack entry's route pattern belongs to, matched by pattern rather than
+ * the filled route so a parameterised destination (a specific list, a practice deck) still
+ * lights up its tab. */
+private fun selectedTab(route: String?): Tab? = when (route) {
+    HOME_ROUTE -> Tab.HOME
+    "lists", "list/{listId}", "known" -> Tab.STUDY
+    PRACTICE_ROUTE, "confusables" -> Tab.PRACTICE
+    else -> null
+}
 
 /** The practice destination's route *pattern* — how the graph knows it, as opposed to the
  * filled route [practiceRoute] builds. Kept as a constant because [CardReturn] has to look
@@ -75,6 +103,7 @@ private fun decodeSource(raw: String?): DeckSource {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(
     repository: HanziRepository,
@@ -91,6 +120,7 @@ fun AppRoot(
 ) {
     val app = LocalContext.current.applicationContext as HanziApp
     val nav = rememberNavController()
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
 
     // The trail marker back to a flashcard you followed into the dictionary (see [CardReturn]).
@@ -204,132 +234,183 @@ fun AppRoot(
         onWidgetItemConsumed()
     }
 
-    CompositionLocalProvider(LocalCardReturn provides cardReturn) {
-        NavHost(navController = nav, startDestination = HOME_ROUTE) {
-            composable(HOME_ROUTE) {
-                SearchScreen(
-                    repository = repository,
-                    query = query,
-                    onQueryChange = { query = it },
-                    onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
-                    onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
-                    onOpenStudy = { nav.navigate("lists") },
-                    onPractice = { source -> nav.navigate(practiceRoute(source)) },
-                    tts = tts,
+    // The one persistent piece of chrome: three destinations deep enough that Back alone used
+    // to cost four or five taps to escape (character -> component -> character -> ...). It
+    // shows on every screen, including the detail pages, which select none of its tabs.
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                val tab = selectedTab(currentEntry?.destination?.route)
+                NavigationBarItem(
+                    selected = tab == Tab.HOME,
+                    onClick = goHome,
+                    icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                    label = { Text("Home") },
                 )
-            }
-            composable(
-                route = "word/{wordId}",
-                arguments = listOf(navArgument("wordId") { type = NavType.StringType }),
-            ) { entry ->
-                WordScreen(
-                    repository = repository,
-                    tts = tts,
-                    wordId = dec(entry.arguments?.getString("wordId").orEmpty()),
-                    onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
-                    onHome = goHome,
-                    onBack = { nav.popBackStack() },
-                )
-            }
-            composable("lists") {
-                ListsScreen(
-                    hskLevels = hskLevels,
-                    onOpenList = { listId -> nav.navigate("list/$listId") },
-                    onPractice = { source -> nav.navigate(practiceRoute(source)) },
-                    onOpenArchive = { nav.navigate("known") },
-                    onOpenConfusables = { nav.navigate("confusables") },
-                    onHome = goHome,
-                    onBack = { nav.popBackStack() },
-                )
-            }
-            composable(
-                route = "list/{listId}",
-                arguments = listOf(navArgument("listId") { type = NavType.LongType }),
-            ) { entry ->
-                ListDetailScreen(
-                    listId = entry.arguments?.getLong("listId") ?: 0L,
-                    onOpenItem = { item ->
-                        if (item.isWord) nav.navigate("word/${enc(item.itemId)}")
-                        else nav.navigate("character/${enc(item.itemId)}")
+                NavigationBarItem(
+                    selected = tab == Tab.STUDY,
+                    onClick = {
+                        nav.navigate("lists") {
+                            popUpTo(HOME_ROUTE) { inclusive = false }
+                            launchSingleTop = true
+                        }
                     },
-                    onPractice = { source -> nav.navigate(practiceRoute(source)) },
-                    onHome = goHome,
-                    onBack = { nav.popBackStack() },
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    label = { Text("Study") },
                 )
-            }
-            // Only a deck source travels in this route. The widget used to hand a specific card
-            // in here too ("&item=…&reveal=true"); it now opens that character's detail page
-            // instead, and the pinned card is how any surface resumes on a particular card.
-            composable(
-                route = PRACTICE_ROUTE,
-                arguments = listOf(
-                    navArgument("source") { type = NavType.StringType; nullable = true; defaultValue = null },
-                ),
-            ) { entry ->
-                PracticeScreen(
-                    repository = repository,
-                    hskLevels = hskLevels,
-                    tts = tts,
-                    source = decodeSource(entry.arguments?.getString("source")),
-                    onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
-                    onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
-                    onOpenConfusables = { nav.navigate("confusables") },
-                    onHome = goHome,
-                    onBack = { nav.popBackStack() },
-                )
-            }
-            composable("confusables") {
-                ConfusableDrillScreen(
-                    repository = repository,
-                    userRepository = userRepository,
-                    onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
-                    onHome = goHome,
-                    onBack = { nav.popBackStack() },
-                )
-            }
-            composable(
-                route = "character/{glyphId}",
-                arguments = listOf(navArgument("glyphId") { type = NavType.StringType }),
-            ) { entry ->
-                val glyphId = dec(entry.arguments?.getString("glyphId").orEmpty())
-                CharacterScreen(
-                    repository = repository,
-                    userRepository = userRepository,
-                    tts = tts,
-                    glyphId = glyphId,
-                    onOpenComponent = { componentId -> nav.navigate("component/${enc(componentId)}") },
-                    onOpenCharacter = { gid -> nav.navigate("character/${enc(gid)}") },
-                    onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
-                    onHome = goHome,
-                    onBack = { nav.popBackStack() },
-                )
-            }
-            composable(
-                route = "component/{componentId}",
-                arguments = listOf(navArgument("componentId") { type = NavType.StringType }),
-            ) { entry ->
-                val componentId = dec(entry.arguments?.getString("componentId").orEmpty())
-                ComponentScreen(
-                    repository = repository,
-                    userRepository = userRepository,
-                    componentId = componentId,
-                    onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
-                    onOpenComponent = { cid -> nav.navigate("component/${enc(cid)}") },
-                    onPracticeSeries = {
-                        nav.navigate(practiceRoute(DeckSource.Series(componentId)))
+                NavigationBarItem(
+                    selected = tab == Tab.PRACTICE,
+                    onClick = {
+                        // The active list, resolved fresh rather than held in state, so the
+                        // widget, the home screen's Practice button and this tab always agree
+                        // on what's up next.
+                        scope.launch {
+                            val source = withContext(Dispatchers.IO) {
+                                val activeId = app.studyRepository.activeListId()
+                                val name = activeId?.let { id ->
+                                    app.studyRepository.lists().firstOrNull { it.id == id }?.name
+                                }
+                                if (activeId != null) DeckSource.UserList(activeId, name.orEmpty())
+                                else DeckSource.Everything
+                            }
+                            nav.navigate(practiceRoute(source)) {
+                                popUpTo(HOME_ROUTE) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        }
                     },
-                    onHome = goHome,
-                    onBack = { nav.popBackStack() },
+                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                    label = { Text("Practice") },
                 )
             }
-            composable("known") {
-                KnownScreen(
-                    userRepository = userRepository,
-                    hskLevels = hskLevels,
-                    onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
-                    onHome = goHome,
-                    onBack = { nav.popBackStack() },
-                )
+        },
+        // The way back to a suspended flashcard, hoisted here rather than left in each
+        // screen's own Scaffold: an inner FAB would now float over this bar instead of above
+        // it. ReturnToCardFab renders nothing when no card is suspended, so one instance is
+        // correct on every destination.
+        floatingActionButton = { ReturnToCardFab() },
+    ) { outerPadding ->
+        CompositionLocalProvider(LocalCardReturn provides cardReturn) {
+            NavHost(
+                navController = nav,
+                startDestination = HOME_ROUTE,
+                modifier = Modifier.padding(outerPadding),
+            ) {
+                composable(HOME_ROUTE) {
+                    SearchScreen(
+                        repository = repository,
+                        query = query,
+                        onQueryChange = { query = it },
+                        onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                        onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
+                        tts = tts,
+                    )
+                }
+                composable(
+                    route = "word/{wordId}",
+                    arguments = listOf(navArgument("wordId") { type = NavType.StringType }),
+                ) { entry ->
+                    WordScreen(
+                        repository = repository,
+                        tts = tts,
+                        wordId = dec(entry.arguments?.getString("wordId").orEmpty()),
+                        onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
+                composable("lists") {
+                    ListsScreen(
+                        hskLevels = hskLevels,
+                        onOpenList = { listId -> nav.navigate("list/$listId") },
+                        onPractice = { source -> nav.navigate(practiceRoute(source)) },
+                        onOpenArchive = { nav.navigate("known") },
+                        onOpenConfusables = { nav.navigate("confusables") },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
+                composable(
+                    route = "list/{listId}",
+                    arguments = listOf(navArgument("listId") { type = NavType.LongType }),
+                ) { entry ->
+                    ListDetailScreen(
+                        listId = entry.arguments?.getLong("listId") ?: 0L,
+                        onOpenItem = { item ->
+                            if (item.isWord) nav.navigate("word/${enc(item.itemId)}")
+                            else nav.navigate("character/${enc(item.itemId)}")
+                        },
+                        onPractice = { source -> nav.navigate(practiceRoute(source)) },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
+                // Only a deck source travels in this route. The widget used to hand a specific card
+                // in here too ("&item=…&reveal=true"); it now opens that character's detail page
+                // instead, and the pinned card is how any surface resumes on a particular card.
+                composable(
+                    route = PRACTICE_ROUTE,
+                    arguments = listOf(
+                        navArgument("source") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    ),
+                ) { entry ->
+                    PracticeScreen(
+                        repository = repository,
+                        hskLevels = hskLevels,
+                        tts = tts,
+                        source = decodeSource(entry.arguments?.getString("source")),
+                        onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                        onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
+                        onOpenConfusables = { nav.navigate("confusables") },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
+                composable("confusables") {
+                    ConfusableDrillScreen(
+                        repository = repository,
+                        userRepository = userRepository,
+                        onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
+                composable(
+                    route = "character/{glyphId}",
+                    arguments = listOf(navArgument("glyphId") { type = NavType.StringType }),
+                ) { entry ->
+                    val glyphId = dec(entry.arguments?.getString("glyphId").orEmpty())
+                    CharacterScreen(
+                        repository = repository,
+                        userRepository = userRepository,
+                        tts = tts,
+                        glyphId = glyphId,
+                        onOpenComponent = { componentId -> nav.navigate("component/${enc(componentId)}") },
+                        onOpenCharacter = { gid -> nav.navigate("character/${enc(gid)}") },
+                        onOpenWord = { wordId -> nav.navigate("word/${enc(wordId)}") },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
+                composable(
+                    route = "component/{componentId}",
+                    arguments = listOf(navArgument("componentId") { type = NavType.StringType }),
+                ) { entry ->
+                    val componentId = dec(entry.arguments?.getString("componentId").orEmpty())
+                    ComponentScreen(
+                        repository = repository,
+                        userRepository = userRepository,
+                        componentId = componentId,
+                        onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                        onOpenComponent = { cid -> nav.navigate("component/${enc(cid)}") },
+                        onPracticeSeries = {
+                            nav.navigate(practiceRoute(DeckSource.Series(componentId)))
+                        },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
+                composable("known") {
+                    KnownScreen(
+                        userRepository = userRepository,
+                        hskLevels = hskLevels,
+                        onOpenCharacter = { glyphId -> nav.navigate("character/${enc(glyphId)}") },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
             }
         }
     }

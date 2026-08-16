@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -31,16 +34,19 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
@@ -70,7 +76,6 @@ fun CharacterScreen(
     onOpenComponent: (String) -> Unit,
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
-    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     // null page is ambiguous (still loading vs. not in the pack), so track load completion
@@ -98,13 +103,15 @@ fun CharacterScreen(
     // deliberate question — a real destination, but one you go looking for.
     var menuOpen by remember { mutableStateOf(false) }
 
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             TopAppBar(
                 title = { Text(page?.char ?: "…") },
                 navigationIcon = { BackButton(onBack) },
                 actions = {
-                    HomeButton(onHome)
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "More")
                     }
@@ -126,9 +133,9 @@ fun CharacterScreen(
                         }
                     }
                 },
+                scrollBehavior = scrollBehavior,
             )
         },
-        floatingActionButton = { ReturnToCardFab() },
     ) { padding ->
         val p = page
         if (p == null) {
