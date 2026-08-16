@@ -69,6 +69,16 @@ private val LightColors = lightColorScheme(
     inverseSurface = Color(0xFF362F2B),
     inverseOnSurface = Color(0xFFF8EFEA),
     inversePrimary = Color(0xFFFFB68A),
+    // The surfaceContainer roles are spelled out because their defaults are the M3
+    // BASELINE neutrals, not anything derived from the scheme around them -- left
+    // unset they drop a purple-grey slab into an otherwise ochre app.
+    surfaceDim = Color(0xFFE1D8D4),
+    surfaceBright = Color(0xFFFFF8F4),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFFBF2ED),
+    surfaceContainer = Color(0xFFF5ECE7),
+    surfaceContainerHigh = Color(0xFFEFE6E2),
+    surfaceContainerHighest = Color(0xFFEAE1DC),
     scrim = Color(0xFF040000),
 )
 
@@ -100,6 +110,16 @@ private val DarkColors = darkColorScheme(
     inverseSurface = Color(0xFFEAE1DC),
     inverseOnSurface = Color(0xFF362F2B),
     inversePrimary = Color(0xFF914C1D),
+    // The surfaceContainer roles are spelled out because their defaults are the M3
+    // BASELINE neutrals, not anything derived from the scheme around them -- left
+    // unset they drop a purple-grey slab into an otherwise ochre app.
+    surfaceDim = Color(0xFF19120D),
+    surfaceBright = Color(0xFF3E3834),
+    surfaceContainerLowest = Color(0xFF150C06),
+    surfaceContainerLow = Color(0xFF201A17),
+    surfaceContainer = Color(0xFF241E1B),
+    surfaceContainerHigh = Color(0xFF2F2925),
+    surfaceContainerHighest = Color(0xFF3A3330),
     scrim = Color(0xFF040000),
 )
 
