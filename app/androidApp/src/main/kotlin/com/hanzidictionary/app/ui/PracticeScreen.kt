@@ -7,20 +7,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.exclude
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -33,7 +30,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
@@ -105,6 +102,7 @@ fun PracticeScreen(
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
     onOpenConfusables: () -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -199,7 +197,6 @@ fun PracticeScreen(
 
     Scaffold(
         snackbarHost = { AppSnackbarHost(snackbar) },
-        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             TopAppBar(
                 // The deck's source (list name / HSK band / "Recently encountered") lives up
@@ -207,10 +204,10 @@ fun PracticeScreen(
                 // a control, so it belongs where the screen names itself.
                 title = {
                     Column {
-                        Text("Practice", style = MaterialTheme.typography.titleLarge)
+                        Text("Practice", fontSize = 20.sp)
                         Text(
                             sourceLabel(source),
-                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -219,22 +216,21 @@ fun PracticeScreen(
                 },
                 navigationIcon = { BackButton(onBack) },
                 // ⓘ is a screen-level explainer, not a per-card action — it says the same
-                // thing whatever card is up — so it belongs in the bar rather than in the
-                // card's corner competing with the one action that *is* per-card.
+                // thing whatever card is up — so it belongs in the bar beside Home rather
+                // than in the card's corner competing with the one action that *is*
+                // per-card.
                 actions = {
                     IconButton(onClick = { showInfo = true }) {
                         Icon(Icons.Filled.Info, contentDescription = "How grading works")
                     }
+                    HomeButton(onHome)
                 },
             )
         },
     ) { padding ->
-        // No outer scroll: the screen is budgeted to fit without one, and the card below is
-        // the one element that flexes to soak up whatever space is left (see PracticeCard's
-        // fillHeight) — that's what keeps the swipe legend from jumping down the screen when
-        // a card is revealed.
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -243,15 +239,17 @@ fun PracticeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // "Meaning → character" reflects a real on/off state, so it's a FilterChip;
-                // "Look-alikes" is a one-shot jump to another screen, which a FilterChip would
-                // read as a toggle switched off, so it's an AssistChip instead.
+                // Both are chips so they read as one row of toggles/actions rather than a
+                // chip next to a differently-shaped button. "Meaning → character" reflects a
+                // real on/off state; "Look-alikes" is a one-shot jump, so it never looks
+                // selected.
                 FilterChip(
                     selected = reverse,
                     onClick = { reverse = !reverse; state = state.collapse() },
                     label = { Text("Meaning → character") },
                 )
-                AssistChip(
+                FilterChip(
+                    selected = false,
                     onClick = onOpenConfusables,
                     label = { Text("Look-alikes") },
                 )
@@ -259,18 +257,12 @@ fun PracticeScreen(
 
             val entry = state.current
             when {
-                !loaded ->
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text("Loading…")
-                    }
-                entry == null ->
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        EmptyDeck(source)
-                    }
+                !loaded -> Text("Loading…")
+                entry == null -> EmptyDeck(source)
                 else -> {
                     Text(
                         deckSummary(state.deck, state.index),
-                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     val summary = summaries[entry.item.itemId]
@@ -281,31 +273,25 @@ fun PracticeScreen(
                         if (entry.item.isWord) onOpenWord(entry.item.itemId)
                         else onOpenCharacter(entry.item.itemId)
                     }
-                    // The card is the only flexible element on the screen — everything above
-                    // and below it is fixed height — so it absorbs whatever space revealing
-                    // the answer would otherwise have cost the layout below it.
-                    Box(Modifier.weight(1f)) {
-                        SwipeCard(
-                            key = entry.item.itemId to state.dealt,
-                            rightAction = KnewAction,
-                            leftAction = MissedAction,
-                            onSwipeRight = { grade(Rating.GOOD) },
-                            onSwipeLeft = { grade(Rating.AGAIN) },
-                            upAction = SkipAction,
-                            onSwipeUp = { skip() },
-                        ) {
-                            PracticeCard(
-                                summary = summary,
-                                back = back,
-                                reverse = reverse,
-                                showAnswer = state.revealed,
-                                tts = tts,
-                                onReveal = { state = state.reveal() },
-                                onOpenFull = openFull,
-                                onArchive = { archive() },
-                                fillHeight = true,
-                            )
-                        }
+                    SwipeCard(
+                        key = entry.item.itemId to state.dealt,
+                        rightAction = KnewAction,
+                        leftAction = MissedAction,
+                        onSwipeRight = { grade(Rating.GOOD) },
+                        onSwipeLeft = { grade(Rating.AGAIN) },
+                        upAction = SkipAction,
+                        onSwipeUp = { skip() },
+                    ) {
+                        PracticeCard(
+                            summary = summary,
+                            back = back,
+                            reverse = reverse,
+                            showAnswer = state.revealed,
+                            tts = tts,
+                            onReveal = { state = state.reveal() },
+                            onOpenFull = openFull,
+                            onArchive = { archive() },
+                        )
                     }
                     SwipeLegend(MissedAction, KnewAction, up = SkipAction)
                     if (state.revealed) entry.card?.let { CardHistory(it) }
@@ -328,25 +314,16 @@ private fun GradingInfoDialog(onDismiss: () -> Unit) {
                 Text(
                     "Each answer tells the scheduler how well you knew the card, and it sets " +
                         "when you'll see it again — the better you knew it, the longer the gap.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 14.sp,
                 )
-                Text(
-                    "←  Didn't know — comes back within the minute, then often.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    "→  Knew it — the gap grows every time you get it again.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    "↑  Skip — move on without changing the card's schedule.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Text("←  Didn't know — comes back within the minute, then often.", fontSize = 13.sp)
+                Text("→  Knew it — the gap grows every time you get it again.", fontSize = 13.sp)
+                Text("↑  Skip — move on without changing the card's schedule.", fontSize = 13.sp)
                 Text(
                     "Swipes are the only way to grade, here and on the home-screen widget, " +
                         "so the same three motions work in both places. Tap the card to turn " +
                         "it over, and tap it again to open its full page.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -360,7 +337,7 @@ private fun CardHistory(card: CardState) {
     if (card.reviews == 0) return
     Text(
         "recalled ${card.recalled} · missed ${card.lapses}",
-        style = MaterialTheme.typography.labelSmall,
+        fontSize = 11.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }

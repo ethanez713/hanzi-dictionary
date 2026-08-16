@@ -4,15 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
@@ -25,8 +22,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ItemSummary
@@ -132,7 +130,7 @@ private const val CARD_COMPONENTS = 4
 
 /** Height of the card's floating ⓘ/⋮ corner — also the top inset the reverse-mode prompt
  * needs to clear it. Kept next to [CardCorner]'s button size so the two can't drift. */
-private val CARD_CORNER_HEIGHT = 48.dp
+private val CARD_CORNER_HEIGHT = 38.dp
 
 /**
  * The card itself. The revealed side is three bands separated by hairlines rather than by
@@ -150,50 +148,26 @@ internal fun PracticeCard(
     onReveal: () -> Unit,
     onOpenFull: () -> Unit,
     onArchive: () -> Unit,
-    // Off by default: HomeDueCard renders this same composable inside a LazyColumn, where a
-    // card that filled its parent's height would break the feed. The practice screen turns
-    // it on so the card's outer geometry — not its content — is what absorbs the space a
-    // revealed answer needs, which is what keeps the card from growing on flip.
-    fillHeight: Boolean = false,
 ) {
-    val cardSize = if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
-    val contentScroll = rememberScrollState()
-    // A card scrolled to its last word must not hand that offset to the next one.
-    LaunchedEffect(summary?.text, showAnswer) { contentScroll.scrollTo(0) }
     // One tap reveals the answer; once it's showing, the next tap opens the full page —
     // the card itself is the link, so there's no separate button to hunt for.
     Card(
-        cardSize.clickable {
+        Modifier.fillMaxWidth().clickable {
             if (!showAnswer) onReveal() else onOpenFull()
         },
     ) {
-        Box(cardSize) {
+        Box(Modifier.fillMaxWidth()) {
             Column(
-                Modifier.fillMaxWidth()
-                    .then(
-                        when {
-                            // Face-down the glyph is centred, which needs a column that
-                            // actually fills the card: verticalScroll measures its content
-                            // with unbounded height, leaving CenterVertically nothing to
-                            // centre within, so the scroll is only hung on the revealed side.
-                            !fillHeight -> Modifier.heightIn(min = 210.dp)
-                            !showAnswer -> Modifier.fillMaxHeight()
-                            // Revealed, a long word list scrolls *inside* the fixed-size card
-                            // rather than resizing it — which is what stops the grade legend
-                            // moving out from under your thumb on flip.
-                            else -> Modifier.fillMaxHeight().verticalScroll(contentScroll)
-                        },
-                    )
-                    .padding(
-                        start = 14.dp,
-                        end = 14.dp,
-                        bottom = 14.dp,
-                        // Reverse mode leads with prose, and prose is the one thing wide enough
-                        // to reach the corner controls — so in that mode the stack starts below
-                        // them. Character-first cards lead with a centred glyph that never gets
-                        // near the corner, and they keep the tighter inset.
-                        top = if (reverse) CARD_CORNER_HEIGHT else 14.dp,
-                    ),
+                Modifier.fillMaxWidth().heightIn(min = 210.dp).padding(
+                    start = 14.dp,
+                    end = 14.dp,
+                    bottom = 14.dp,
+                    // Reverse mode leads with prose, and prose is the one thing wide enough
+                    // to reach the corner controls — so in that mode the stack starts below
+                    // them. Character-first cards lead with a centred glyph that never gets
+                    // near the corner, and they keep the tighter inset.
+                    top = if (reverse) CARD_CORNER_HEIGHT else 14.dp,
+                ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 // Face-down the glyph sits in the middle of the card, where the eye lands
                 // and where a card you're about to throw belongs; revealed, the stack flows
@@ -204,54 +178,44 @@ internal fun PracticeCard(
                 ),
             ) {
                 if (summary == null) {
-                    Text("…", style = LocalGlyphType.current.hero)
+                    Text("…", fontSize = 80.sp)
                     return@Column
                 }
                 val gloss = back?.gloss ?: summary.gloss ?: "No English gloss for this."
                 // Words are longer than characters, so they get a smaller face — a five-
-                // character phrase at hero size wraps into a wall.
-                val faceStyle =
-                    if (summary.text.length > 2) LocalGlyphType.current.large
-                    else LocalGlyphType.current.hero
+                // character phrase at 80sp wraps into a wall.
+                val faceSize = if (summary.text.length > 2) 52.sp else 80.sp
 
                 if (!reverse) {
-                    Text(summary.text, style = faceStyle)
+                    Text(summary.text, fontSize = faceSize, lineHeight = faceSize * 1.1f)
                 } else {
-                    Text(gloss, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+                    Text(gloss, fontSize = 19.sp, textAlign = TextAlign.Center, lineHeight = 26.sp)
                 }
 
                 if (!showAnswer) {
                     Text(
                         "Tap to reveal",
-                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     return@Column
                 }
 
-                if (reverse) Text(summary.text, style = faceStyle)
+                if (reverse) Text(summary.text, fontSize = faceSize, lineHeight = faceSize * 1.1f)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    (back?.pinyin ?: summary.pinyin)?.let {
-                        Text(it, style = MaterialTheme.typography.titleLarge)
-                    }
+                    (back?.pinyin ?: summary.pinyin)?.let { Text(it, fontSize = 22.sp) }
                     if (tts.available) {
-                        IconButton(
+                        TextButton(
                             onClick = { tts.speak(back?.speakText ?: summary.text) },
-                            modifier = Modifier.size(48.dp),
-                        ) {
-                            Icon(
-                                AppIcons.Speaker,
-                                contentDescription = "Play pronunciation",
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) { Text("🔊", fontSize = 16.sp) }
                     }
                 }
                 if (!reverse) {
-                    Text(gloss, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+                    Text(gloss, fontSize = 15.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
                 }
 
                 val components = back?.components.orEmpty()
@@ -350,7 +314,7 @@ private fun ComponentStrip(components: List<CardComponent>) {
             Card(
                 Modifier.weight(1f),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    containerColor = MaterialTheme.colorScheme.surface,
                 ),
             ) {
                 Row(
@@ -358,7 +322,7 @@ private fun ComponentStrip(components: List<CardComponent>) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(c.char, style = LocalGlyphType.current.medium, color = color)
+                    Text(c.char, fontSize = 24.sp, color = color)
                     Column {
                         // The sound line rides the top of the chip whatever the part's role,
                         // but only a real reading on a sound-bearing part gets full size:
@@ -372,8 +336,8 @@ private fun ComponentStrip(components: List<CardComponent>) {
                             c.label?.let {
                                 Text(
                                     it.text,
-                                    style = if (loud) MaterialTheme.typography.bodyMedium
-                                    else MaterialTheme.typography.labelSmall,
+                                    fontSize = if (loud) 13.sp else 10.sp,
+                                    lineHeight = 14.sp,
                                     color = if (loud) LocalContentColor.current
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -385,7 +349,8 @@ private fun ComponentStrip(components: List<CardComponent>) {
                             if (label.isNotEmpty()) {
                                 Text(
                                     label,
-                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
                                     color = color,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -395,7 +360,8 @@ private fun ComponentStrip(components: List<CardComponent>) {
                         c.gloss?.let {
                             Text(
                                 it,
-                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -417,15 +383,15 @@ private fun BackWordRow(w: BackWord) {
         horizontalArrangement = Arrangement.spacedBy(7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(w.text, style = MaterialTheme.typography.titleMedium)
+        Text(w.text, fontSize = 17.sp)
         w.pinyin?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         w.gloss?.let {
             Text(
                 it,
                 Modifier.weight(1f),
-                style = MaterialTheme.typography.bodySmall,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

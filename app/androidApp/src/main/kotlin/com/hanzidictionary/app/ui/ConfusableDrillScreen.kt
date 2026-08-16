@@ -4,9 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.exclude
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,11 +16,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,10 +29,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.core.DrillChoice
 import com.hanzidictionary.core.HanziRepository
@@ -73,6 +67,7 @@ fun ConfusableDrillScreen(
     repository: HanziRepository,
     userRepository: UserRepository,
     onOpenCharacter: (String) -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val app = LocalContext.current.applicationContext as HanziApp
@@ -126,15 +121,12 @@ fun ConfusableDrillScreen(
         answeredCorrectly = null
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             TopAppBar(
                 title = { Text("Look-alikes") },
                 navigationIcon = { BackButton(onBack) },
-                scrollBehavior = scrollBehavior,
+                actions = { HomeButton(onHome) },
             )
         },
     ) { padding ->
@@ -160,7 +152,7 @@ fun ConfusableDrillScreen(
                 Text(
                     "Nothing you've saved or archived has a look-alike yet — drilling the " +
                         "common pool instead. Swipe right on characters to build it up.",
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
@@ -178,18 +170,14 @@ fun ConfusableDrillScreen(
                     if (roundNumber > 0) {
                         Text(
                             "$score of $roundNumber correct",
-                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(
-                        "Which one is…",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text("Which one is…", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
                         "${r.target.pinyin} — ${r.target.gloss}",
-                        style = MaterialTheme.typography.titleLarge,
+                        fontSize = 20.sp,
                         textAlign = TextAlign.Center,
                     )
 
@@ -223,15 +211,14 @@ fun ConfusableDrillScreen(
                     }
 
                     if (answeredCorrectly != null) {
-                        TextButton(onClick = { onOpenCharacter(r.target.glyphId) }) {
-                            Text(
-                                if (answeredCorrectly == true) "Correct — ${r.target.char}"
-                                else "It's the other one: ${r.target.char}",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (answeredCorrectly == true) LocalSemanticColors.current.affirm
-                                else LocalSemanticColors.current.negative,
-                            )
-                        }
+                        Text(
+                            if (answeredCorrectly == true) "Correct — ${r.target.char}"
+                            else "It's the other one: ${r.target.char}",
+                            fontSize = 16.sp,
+                            color = if (answeredCorrectly == true) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.clickable { onOpenCharacter(r.target.glyphId) },
+                        )
                         Button(onClick = { seed += 1 }) { Text("Next") }
                     }
                 }
@@ -249,14 +236,8 @@ private fun ChoiceCard(
     modifier: Modifier = Modifier,
 ) {
     val revealed = answered != null
-    val semantic = LocalSemanticColors.current
-    // Wrong is always the non-target card: with only two choices, picking the one that
-    // isn't the target is what "wrong" means, so no separate "which one did they tap"
-    // state is needed to mark the card they actually chose.
     val colors = when {
-        revealed && isTargetSide -> CardDefaults.cardColors(containerColor = semantic.affirm.copy(alpha = 0.18f))
-        revealed && !isTargetSide && answered == false ->
-            CardDefaults.cardColors(containerColor = semantic.negative.copy(alpha = 0.18f))
+        revealed && isTargetSide -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         else -> CardDefaults.cardColors()
     }
     Card(
@@ -268,13 +249,13 @@ private fun ChoiceCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(choice.char, style = LocalGlyphType.current.large)
+            Text(choice.char, fontSize = 64.sp)
             // After the reveal, both cards teach: this is what each one was.
             if (revealed) {
-                Text(choice.pinyin, style = MaterialTheme.typography.bodyMedium)
+                Text(choice.pinyin, fontSize = 14.sp)
                 Text(
                     choice.gloss,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     maxLines = 2,

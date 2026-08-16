@@ -6,37 +6,27 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.exclude
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hanzidictionary.core.ComponentPage
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SeriesMember
@@ -56,6 +46,7 @@ fun ComponentScreen(
     onOpenCharacter: (String) -> Unit,
     onOpenComponent: (String) -> Unit,
     onPracticeSeries: () -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val page by produceState<ComponentPage?>(initialValue = null, componentId) {
@@ -64,17 +55,15 @@ fun ComponentScreen(
         }
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             TopAppBar(
                 title = { Text(page?.char ?: "component") },
                 navigationIcon = { BackButton(onBack) },
-                scrollBehavior = scrollBehavior,
+                actions = { HomeButton(onHome) },
             )
         },
+        floatingActionButton = { ReturnToCardFab() },
     ) { padding ->
         val p = page
         if (p == null) {
@@ -97,10 +86,9 @@ fun ComponentScreen(
                 val gid = p.glyphId
                 Text(
                     p.char ?: p.componentId,
-                    style = LocalGlyphType.current.large,
-                    modifier = if (gid != null) {
-                        Modifier.minimumInteractiveComponentSize().clickable { onOpenCharacter(gid) }
-                    } else Modifier,
+                    fontSize = 56.sp,
+                    lineHeight = 62.sp,
+                    modifier = if (gid != null) Modifier.clickable { onOpenCharacter(gid) } else Modifier,
                 )
                 Column(
                     Modifier.weight(1f).padding(top = 2.dp),
@@ -112,21 +100,19 @@ fun ComponentScreen(
                     val name = p.char?.let { radicalNameOf(it) }
                     val pinyin = p.ownReadings.filter { it.system == "pinyin" }.joinToString("  ") { it.value }
                     when {
-                        name != null -> Text(name, style = MaterialTheme.typography.titleMedium)
-                        pinyin.isNotEmpty() -> Text(pinyin, style = MaterialTheme.typography.titleMedium)
+                        name != null -> Text(name, fontSize = 17.sp)
+                        pinyin.isNotEmpty() -> Text(pinyin, fontSize = 17.sp)
                     }
                     p.definition?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (gid != null) {
-                        TextButton(onClick = { onOpenCharacter(gid) }) {
-                            Text("Open character page", style = MaterialTheme.typography.bodyMedium)
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
-                        }
+                        Text(
+                            "Open character page →",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onOpenCharacter(gid) }.padding(vertical = 2.dp),
+                        )
                     }
                 }
             }
@@ -143,15 +129,14 @@ fun ComponentScreen(
                     ) {
                         Text(
                             "Related forms:",
-                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         for (form in related) {
                             Text(
                                 form,
-                                style = LocalGlyphType.current.small,
-                                modifier = Modifier.minimumInteractiveComponentSize()
-                                    .clickable { onOpenComponent(form) },
+                                fontSize = 24.sp,
+                                modifier = Modifier.clickable { onOpenComponent(form) },
                             )
                         }
                     }
@@ -169,7 +154,7 @@ fun ComponentScreen(
                         append(parts.joinToString(" · "))
                         append(" characters")
                     },
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -179,10 +164,7 @@ fun ComponentScreen(
             if (p.phoneticMembers.isNotEmpty() || p.semanticMembers.isNotEmpty()) {
                 // Component reunion (spec §14/§16): drill the whole series at once —
                 // knowing the component makes its siblings predictable.
-                TextButton(onClick = onPracticeSeries) {
-                    Text("Practice this series")
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
-                }
+                TextButton(onClick = onPracticeSeries) { Text("Practice this series →") }
             }
 
             if (p.phoneticMembers.isNotEmpty()) {
@@ -221,7 +203,7 @@ private fun ReliabilityMeter(p: ComponentPage) {
             append("${"%.0f".format((p.reliability ?: 0.0) * 100)}% across ${p.memberCount} characters")
             if (stratum != null) append(" · $stratum")
         },
-        style = MaterialTheme.typography.bodySmall,
+        fontSize = 12.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
@@ -231,24 +213,14 @@ private fun ReliabilityMeter(p: ComponentPage) {
 private fun MemberGrid(members: List<SeriesMember>, onOpenCharacter: (String) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (m in members) {
-            // A step up the tonal scale, not down: these cards sit on the same background
-            // as the rest of the page, and dropping to `surface` reads as a hole punched
-            // through it in dark mode.
-            Card(
-                modifier = Modifier.clickable { onOpenCharacter(m.glyphId) },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-            ) {
+            Card(Modifier.clickable { onOpenCharacter(m.glyphId) }) {
                 Column(
                     Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(m.char, style = LocalGlyphType.current.medium)
+                    Text(m.char, fontSize = 28.sp)
                     m.matchClass?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text(it, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

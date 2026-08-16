@@ -1,12 +1,9 @@
 package com.hanzidictionary.app
 
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import com.hanzidictionary.app.ui.AppRoot
@@ -27,13 +24,6 @@ class MainActivity : ComponentActivity() {
     private val staleSessionKey = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Must run before super.onCreate: it installs the window's insets listener and
-        // draws the transparent bar backgrounds, both of which the base ComponentActivity
-        // onCreate would otherwise set up first with the opaque defaults.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
-        )
         super.onCreate(savedInstanceState)
         sharedText.value = extractSharedText(intent)
         widgetItem.value = extractWidgetItem(intent)

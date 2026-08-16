@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Mirrors the Compose color scheme's background role, so the launch window
-         (drawn before Compose has anything on screen) doesn't flash a mismatched color. -->
-    <color name="launch_background">#FFF8F4</color>
-</resources>

@@ -8,31 +8,21 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.exclude
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,10 +33,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.DeckSource
@@ -81,6 +71,7 @@ fun ListsScreen(
     onPractice: (DeckSource) -> Unit,
     onOpenArchive: () -> Unit,
     onOpenConfusables: () -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -105,18 +96,15 @@ fun ListsScreen(
     }
     val (lists, stats, activeId, encounteredCount) = state
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             TopAppBar(
                 title = { Text("Study") },
                 navigationIcon = { BackButton(onBack) },
                 actions = {
                     TextButton(onClick = onOpenArchive) { Text("Archive") }
+                    HomeButton(onHome)
                 },
-                scrollBehavior = scrollBehavior,
             )
         },
     ) { padding ->
@@ -127,7 +115,7 @@ fun ListsScreen(
         ) {
             Text(
                 if (state.dueNow > 0) "${state.dueNow} due now" else "Nothing due right now",
-                style = MaterialTheme.typography.titleLarge,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -137,7 +125,7 @@ fun ListsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     "Swipes and the widget use:",
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(
@@ -178,7 +166,7 @@ fun ListsScreen(
                 Text(
                     "No lists yet. Swipe right on anything — a character in your photos, a " +
                         "search result — and it lands in a list you can practice.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -218,11 +206,7 @@ fun ListsScreen(
                     ) { Text("Create") }
                 }
             } else {
-                TextButton(onClick = { creating = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Spacer(Modifier.padding(horizontal = 2.dp))
-                    Text("New list")
-                }
+                TextButton(onClick = { creating = true }) { Text("＋  New list") }
             }
 
             SectionTitle("Other decks")
@@ -259,19 +243,15 @@ private fun ListCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(list.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Text(list.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(
                     summarise(stats),
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.padding(horizontal = 4.dp))
-            TextButton(onClick = onPractice) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                Spacer(Modifier.padding(horizontal = 2.dp))
-                Text("Practice")
-            }
+            TextButton(onClick = onPractice) { Text("▶ Practice") }
         }
     }
 }
@@ -288,9 +268,9 @@ private fun summarise(stats: ListStats?): String {
     return parts.joinToString(" · ")
 }
 
-/** A one-shot action that launches a practice session — an [AssistChip], not a [FilterChip],
- * because unlike the active-list chips above it carries no selected state of its own. */
 @Composable
 private fun DeckChip(label: String, onClick: () -> Unit) {
-    AssistChip(onClick = onClick, label = { Text(label) })
+    Card(Modifier.clickable(onClick = onClick)) {
+        Text(label, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 13.sp)
+    }
 }

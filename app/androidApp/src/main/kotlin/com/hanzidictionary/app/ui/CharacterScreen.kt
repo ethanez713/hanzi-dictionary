@@ -7,25 +7,14 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.exclude
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,21 +23,17 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScaffoldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +61,7 @@ fun CharacterScreen(
     onOpenComponent: (String) -> Unit,
     onOpenCharacter: (String) -> Unit,
     onOpenWord: (String) -> Unit,
+    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     // null page is ambiguous (still loading vs. not in the pack), so track load completion
@@ -103,15 +89,13 @@ fun CharacterScreen(
     // deliberate question — a real destination, but one you go looking for.
     var menuOpen by remember { mutableStateOf(false) }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             TopAppBar(
                 title = { Text(page?.char ?: "…") },
                 navigationIcon = { BackButton(onBack) },
                 actions = {
+                    HomeButton(onHome)
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "More")
                     }
@@ -133,9 +117,9 @@ fun CharacterScreen(
                         }
                     }
                 },
-                scrollBehavior = scrollBehavior,
             )
         },
+        floatingActionButton = { ReturnToCardFab() },
     ) { padding ->
         val p = page
         if (p == null) {
@@ -168,18 +152,10 @@ fun CharacterScreen(
                     // learned, and "nothing looks like this one" is itself worth being able
                     // to ask for. The drawer says so rather than the button vanishing.
                     TextButton(onClick = { showLookAlikes = !showLookAlikes }) {
-                        Text(if (showLookAlikes) "Hide look-alikes" else "Look-alikes")
-                        Icon(
-                            if (showLookAlikes) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                            contentDescription = null,
-                        )
+                        Text(if (showLookAlikes) "Hide look-alikes ▴" else "Look-alikes ▾")
                     }
                     TextButton(onClick = { showDetails = !showDetails }) {
-                        Text(if (showDetails) "Hide details" else "Details")
-                        Icon(
-                            if (showDetails) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                            contentDescription = null,
-                        )
+                        Text(if (showDetails) "Hide details ▴" else "Details ▾")
                     }
                 },
             )
@@ -222,7 +198,7 @@ private fun Header(p: CharacterPage, tts: MandarinTts) {
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(p.char, style = LocalGlyphType.current.large)
+            Text(p.char, fontSize = 64.sp, lineHeight = 70.sp)
             Column(
                 Modifier.weight(1f).padding(top = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -253,31 +229,21 @@ private fun Words(words: List<WordView>, onOpenWord: (String) -> Unit) {
     SectionTitle("In words")
     for (w in words) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onOpenWord(w.id) },
+            Modifier.fillMaxWidth().clickable { onOpenWord(w.id) },
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(w.simp, style = LocalGlyphType.current.small)
+            Text(w.simp, fontSize = 18.sp)
             // The traditional form matters but shouldn't shout at the same size as the
             // headword — smaller and muted keeps the row scannable.
             if (w.trad != w.simp) {
-                Text(
-                    w.trad,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text(w.trad, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            w.pinyin?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            w.pinyin?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             w.gloss?.let {
                 Text(
                     it,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -290,51 +256,21 @@ private fun Words(words: List<WordView>, onOpenWord: (String) -> Unit) {
 
 @Composable
 private fun ReadingChip(reading: ReadingView, playable: Boolean, onPlay: () -> Unit) {
-    val neutral = isNeutralTone(reading.value)
-    val label: @Composable () -> Unit = {
+    Card(modifier = if (playable) Modifier.clickable(onClick = onPlay) else Modifier) {
         Row(
+            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(reading.value, style = MaterialTheme.typography.titleMedium)
-            if (neutral) {
+            Text(reading.value, fontSize = 17.sp)
+            if (isNeutralTone(reading.value)) {
                 Text(
                     "neutral",
-                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-    }
-    // A tappable pronunciation is a real control (AssistChip); one that can't be played
-    // is reference data, so it takes the same static-badge shape as "Common" or "HSK N" —
-    // the two used to be pixel-identical Cards, which is exactly the confusion this fixes.
-    if (playable) {
-        AssistChip(
-            onClick = onPlay,
-            label = label,
-            trailingIcon = { Icon(AppIcons.Speaker, contentDescription = "Play pronunciation") },
-        )
-    } else {
-        Surface(
-            shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ) {
-            Row(
-                Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(reading.value, style = MaterialTheme.typography.titleMedium)
-                if (neutral) {
-                    Text(
-                        "neutral",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            if (playable) Text("🔊", fontSize = 16.sp)
         }
     }
 }
@@ -345,13 +281,11 @@ private fun ReadingChip(reading: ReadingView, playable: Boolean, onPlay: () -> U
 @Composable
 private fun Definition(text: String?) {
     if (text != null) {
-        // Not under a section header, so this is the one body run on the page allowed to
-        // stay at bodyLarge — see the hierarchy rule for everything that IS under one.
-        Text(text, style = MaterialTheme.typography.bodyLarge)
+        Text(text, fontSize = 15.sp, lineHeight = 20.sp)
     } else {
         Text(
             "No English gloss for this character.",
-            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -381,14 +315,10 @@ private fun BreakdownStrip(
             // like 氵 — still lands on the component page, which is the only page it has.
             val open = c.glyphId?.let { { onOpenCharacter(it) } }
                 ?: c.componentId.takeIf { c.navigable }?.let { { onOpenComponent(it) } }
-            // A step up the tonal scale, not down: these cards sit on the same background
-            // as the rest of the page, and dropping to `surface` reads as a hole punched
-            // through it in dark mode.
             Card(
                 modifier = Modifier.fillMaxWidth().then(
                     if (open != null) Modifier.clickable(onClick = open) else Modifier,
                 ),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
             ) {
                 Row(
                     Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -400,12 +330,11 @@ private fun BreakdownStrip(
                     // draws the shape's structure — better than the anonymous ◎ that told
                     // you nothing about which part was missing.
                     val fragment = c.componentId.removePrefix("ids:")
-                    val displayChar = c.displayChar
-                    if (displayChar != null) {
-                        Text(displayChar, style = LocalGlyphType.current.medium, color = color)
-                    } else {
-                        Text(fragment, style = MaterialTheme.typography.titleMedium, color = color)
-                    }
+                    Text(
+                        c.displayChar ?: fragment,
+                        fontSize = if (c.displayChar != null) 32.sp else 18.sp,
+                        color = color,
+                    )
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         val label = functionLabel(c.function)
                         // Provenance badge (spec §7 resolution): computed is the default
@@ -421,11 +350,11 @@ private fun BreakdownStrip(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+                                Text(label, fontSize = 11.sp, color = color)
                                 if (badge != null) {
                                     Text(
                                         badge,
-                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
@@ -442,9 +371,8 @@ private fun BreakdownStrip(
                             ) {
                                 // A reading shows for every part that has one, not just the
                                 // sound-bearing ones — being able to say 兴 xīng is useful
-                                // even in 举, where it lends nothing to the sound. Weight
-                                // marks the difference (size is capped under this section
-                                // header): full weight for a part that explains the
+                                // even in 举, where it lends nothing to the sound. Size marks
+                                // the difference: full for a part that explains the
                                 // pronunciation, a muted footnote otherwise, so an incidental
                                 // reading can't be misread as a sound claim. A radical's name
                                 // (三点水) takes the same slot and is always the quiet form.
@@ -452,31 +380,24 @@ private fun BreakdownStrip(
                                 sound?.let {
                                     Text(
                                         it.text,
-                                        style = if (loud) MaterialTheme.typography.bodyMedium
-                                        else MaterialTheme.typography.labelSmall,
-                                        fontWeight = if (loud) FontWeight.SemiBold else null,
+                                        fontSize = if (loud) 15.sp else 11.sp,
                                         color = if (loud) LocalContentColor.current
                                         else MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                if (loud && tts.available && displayChar != null) {
-                                    IconButton(
-                                        onClick = { tts.speak(displayChar) },
-                                        modifier = Modifier.size(48.dp),
-                                    ) {
-                                        Icon(
-                                            AppIcons.Speaker,
-                                            contentDescription = "Play pronunciation",
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
+                                if (loud && tts.available && c.displayChar != null) {
+                                    Text(
+                                        "🔊",
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.clickable { tts.speak(c.displayChar!!) },
+                                    )
                                 }
                                 // For unclassified parts the gloss is still the most useful
                                 // hint we have — shown muted, not asserted as a role.
                                 gloss?.let {
                                     Text(
                                         it,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontSize = 13.sp,
                                         color = if (showsMeaning) LocalContentColor.current
                                         else MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -493,10 +414,10 @@ private fun BreakdownStrip(
                         // Unicode, so no amount of better source data would name it. The
                         // pipeline already prefers whichever decomposition names all of its
                         // parts, so a card that still reads like this has no such option.
-                        if (displayChar == null && sound == null && gloss == null) {
+                        if (c.displayChar == null && sound == null && gloss == null) {
                             Text(
                                 "no character encodes this shape on its own",
-                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -512,11 +433,11 @@ private fun SoundLine(p: CharacterPage) {
     val phon = p.breakdown.firstOrNull { it.function == "phonetic" || it.function == "both" } ?: return
     val sentence = driftSentence(phon.matchClass) ?: return
     SectionTitle("Sound")
-    Text(sentence, style = MaterialTheme.typography.bodyMedium)
+    Text(sentence, fontSize = 14.sp)
     phon.confidence?.let {
         Text(
             "sound-match confidence ${"%.0f".format(it * 100)}%",
-            style = MaterialTheme.typography.bodySmall,
+            fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -541,32 +462,22 @@ private fun Formation(p: CharacterPage) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     prettyClaim(claim.predicate, claim.value),
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 14.sp,
                     maxLines = if (collapsible && !expanded) 4 else Int.MAX_VALUE,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "source: ${claim.source}",
-                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (collapsible) {
-                        // The whole card is already the tap target (comment above); this is
-                        // the affordance hint for that, not a second, separate control.
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                if (expanded) "less" else "more",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Icon(
-                                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
+                        Text(
+                            if (expanded) "less ▴" else "more ▾",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }
@@ -588,44 +499,19 @@ private fun ScriptMapping(p: CharacterPage, onOpenCharacter: (String) -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        v.fromChar,
-                        style = LocalGlyphType.current.medium,
-                        modifier = Modifier.minimumInteractiveComponentSize()
-                            .clickable { onOpenCharacter(v.fromGlyph) },
-                    )
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "maps to")
-                    Text(
-                        v.toChar,
-                        style = LocalGlyphType.current.medium,
-                        modifier = Modifier.minimumInteractiveComponentSize()
-                            .clickable { onOpenCharacter(v.toGlyph) },
-                    )
+                    Text(v.fromChar, fontSize = 28.sp, modifier = Modifier.clickable { onOpenCharacter(v.fromGlyph) })
+                    Text("→")
+                    Text(v.toChar, fontSize = 28.sp, modifier = Modifier.clickable { onOpenCharacter(v.toGlyph) })
                     v.mappingType?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 if (v.mappingType == "merger" || v.toGlyph in mergerTargets) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Icon(
-                            Icons.Filled.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            "Merger: ${v.toChar} stands in for multiple traditional characters — the traditional form can't be recovered from it alone.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
+                    Text(
+                        "⚠ Merger: ${v.toChar} stands in for multiple traditional characters — the traditional form can't be recovered from it alone.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }
@@ -655,7 +541,7 @@ private fun LookAlikes(items: List<LookAlike>?, char: String, onOpenCharacter: (
     when {
         items == null -> Text(
             "Loading…",
-            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         // Coverage honesty (spec §6), and a real answer to the question asked: plenty of
@@ -663,7 +549,8 @@ private fun LookAlikes(items: List<LookAlike>?, char: String, onOpenCharacter: (
         // character, not a gap to paper over by hiding the button.
         items.isEmpty() -> Text(
             "No character in the pack is shaped confusably like $char.",
-            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         else -> Column {
@@ -678,7 +565,7 @@ private fun LookAlikes(items: List<LookAlike>?, char: String, onOpenCharacter: (
                         {
                             Text(
                                 "shares $part",
-                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -695,24 +582,13 @@ private fun Provenance(p: CharacterPage) {
     val claimSources = p.claims.map { it.source }.toSortedSet()
     val text = "Readings/variants from Unihan; decomposition from cjkvi-ids/makemeahanzi" +
         if (claimSources.isNotEmpty()) "; claims from ${claimSources.joinToString(", ")}" else ""
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(text, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
-/** Static reference badge — "Common", "freq #N", "HSK N", a stroke count. Never clickable,
- * so it's a plain [Surface], not a [Card]: a bare Card here used to be pixel-identical to the
- * tappable pronunciation chip, which is the confusion this shape exists to remove. */
 @Composable
 private fun Chip(text: String) {
-    Surface(
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Text(
-            text,
-            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelMedium,
-        )
+    Card {
+        Text(text, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 12.sp)
     }
 }
 

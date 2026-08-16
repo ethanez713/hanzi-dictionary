@@ -12,14 +12,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -39,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.StudyItem
@@ -107,16 +105,16 @@ fun ListSheet(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(label, style = LocalGlyphType.current.tile)
+                Text(label, fontSize = 30.sp)
                 Spacer(Modifier.padding(horizontal = 6.dp))
-                Text("Study lists", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Text("Study lists", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
             Spacer(Modifier.padding(vertical = 4.dp))
 
             if (lists.isEmpty() && !creating) {
                 Text(
                     "No lists yet. Create one to start studying this.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 6.dp),
                 )
@@ -136,7 +134,7 @@ fun ListSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = inList, onCheckedChange = null)
-                        Text(list.name, Modifier.padding(start = 10.dp), style = MaterialTheme.typography.bodyLarge)
+                        Text(list.name, Modifier.padding(start = 10.dp), fontSize = 16.sp)
                     }
                 }
             }
@@ -168,11 +166,7 @@ fun ListSheet(
                     ) { Text("Create") }
                 }
             } else {
-                TextButton(onClick = { creating = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Spacer(Modifier.padding(horizontal = 2.dp))
-                    Text("New list")
-                }
+                TextButton(onClick = { creating = true }) { Text("＋  New list") }
             }
 
             HorizontalDivider(Modifier.padding(vertical = 10.dp))
@@ -195,7 +189,7 @@ fun ListSheet(
                 } else {
                     "Marks it known in every list at once and takes it out of practice for good."
                 },
-                style = MaterialTheme.typography.bodySmall,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp),
             )
@@ -246,7 +240,7 @@ fun StudyActionRow(item: StudyItem, label: String, trailing: @Composable (() -> 
         if (known) {
             Text(
                 "✓ Known",
-                style = MaterialTheme.typography.bodyMedium,
+                fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterVertically),
             )
