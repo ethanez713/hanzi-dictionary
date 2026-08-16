@@ -1,9 +1,11 @@
 package com.hanzidictionary.app
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import com.hanzidictionary.app.ui.AppRoot
@@ -25,6 +27,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Let the window run under the system bars, then hand the *bottom* one to the app so
+        // the navigation bar's background reaches the screen edge instead of stopping above a
+        // black strip holding the gesture pill. The status bar deliberately keeps the theme's
+        // opaque colour: drawing the app under it too is what makes the top of every screen
+        // read as one tall band of chrome.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.navigationBarColor = Color.TRANSPARENT
         sharedText.value = extractSharedText(intent)
         widgetItem.value = extractWidgetItem(intent)
         val app = application as HanziApp

@@ -1,5 +1,6 @@
 package com.hanzidictionary.app.ui
 
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -8,7 +9,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -238,11 +238,13 @@ fun AppRoot(
         Scaffold(
             bottomBar = {
                 NavigationBar {
+                    // No labels: two destinations named by universally-read icons don't need
+                    // captioning, and the words cost a row of height on every screen. The
+                    // contentDescription carries the name for TalkBack instead.
                     NavigationBarItem(
                         selected = !onPractice,
                         onClick = goHome,
-                        icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                        label = { Text("Home") },
+                        icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
                     )
                     NavigationBarItem(
                         selected = onPractice,
@@ -254,8 +256,7 @@ fun AppRoot(
                                 }
                             }
                         },
-                        icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                        label = { Text("Practice") },
+                        icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Practice") },
                     )
                 }
             },
@@ -266,7 +267,10 @@ fun AppRoot(
         NavHost(
             navController = nav,
             startDestination = HOME_ROUTE,
-            modifier = Modifier.padding(padding),
+            // consume as well as pad: each screen runs its own Scaffold, and without this
+            // they would apply the status-bar inset a second time on top of the one already
+            // spent here, pushing every top bar down by its own height again.
+            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         ) {
             composable(HOME_ROUTE) {
                 SearchScreen(
