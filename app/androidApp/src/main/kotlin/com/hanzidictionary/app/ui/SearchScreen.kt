@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -45,6 +44,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -96,9 +96,7 @@ fun SearchScreen(
     repository: HanziRepository,
     query: String,
     onQueryChange: (String) -> Unit,
-    onOpenCharacter: (String) -> Unit,
-    onOpenWord: (String) -> Unit,
-    onOpenStudy: () -> Unit,
+    lookupStack: LookupStack,
     tts: MandarinTts,
 ) {
     val context = LocalContext.current
@@ -357,17 +355,24 @@ fun SearchScreen(
     Scaffold(
         snackbarHost = { AppSnackbarHost(snackbar) },
         topBar = {
+            val eth = EthanTheme.colors
             TopAppBar(
-                title = { Text("Hanzi Dictionary") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = eth.paper1,
+                    titleContentColor = eth.ink900,
+                ),
+                title = {
+                    Text(
+                        "Dictionary",
+                        fontFamily = Piazzolla,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        fontSize = 20.sp,
+                        color = eth.ink900,
+                    )
+                },
                 actions = {
-                    // A filled button, not a text link: this is the way into the study loop,
-                    // which is what the app is *for* — the dictionary is how you feed it.
-                    Button(
-                        onClick = onOpenStudy,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    ) { Text("Study") }
                     IconButton(onClick = { showAttributions = true }) {
-                        Icon(Icons.Filled.Info, contentDescription = "Data sources")
+                        Icon(Icons.Filled.Info, contentDescription = "Data sources", tint = eth.textFaint)
                     }
                 },
             )
@@ -413,15 +418,13 @@ fun SearchScreen(
                     onToggleDefinitions = { showDefinitions = !showDefinitions },
                     repository = repository,
                     tts = tts,
-                    deckRefresh = listRefresh,
-                    onOpenWord = onOpenWord,
+                    lookupStack = lookupStack,
                     onArchived = { label ->
                         scope.launch { snackbar.snack("Archived $label") }
                     },
                     onUseClipboard = { onQueryChange(it) },
                     onAllow = { permissionLauncher.launch(photoPermission) },
                     onRescan = { rescans++ },
-                    onOpenCharacter = onOpenCharacter,
                     onAdd = ::triageAdd,
                     onDismiss = ::triageDismiss,
                     onUndo = ::undoTriage,
@@ -451,7 +454,7 @@ fun SearchScreen(
                                 secondaryText = r.tradChar,
                                 pinyin = r.primaryPinyin,
                                 gloss = r.definition?.let { displayGloss(it) },
-                                onClick = { onOpenCharacter(r.glyphId) },
+                                onClick = { lookupStack.push(LookupEntry(glyphId = r.glyphId, displayText = r.char)) },
                             )
                         }
                         HorizontalDivider()
@@ -476,7 +479,7 @@ fun SearchScreen(
                                     pinyin = w.pinyin,
                                     gloss = w.gloss,
                                     glossLines = 1,
-                                    onClick = { onOpenWord(w.id) },
+                                    onClick = { lookupStack.push(LookupEntry(wordId = w.id, displayText = w.simp)) },
                                 )
                             }
                             HorizontalDivider()
@@ -552,13 +555,11 @@ private fun PhotoFeed(
     onToggleDefinitions: () -> Unit,
     repository: HanziRepository,
     tts: MandarinTts,
-    deckRefresh: Int,
-    onOpenWord: (String) -> Unit,
+    lookupStack: LookupStack,
     onArchived: (String) -> Unit,
     onUseClipboard: (String) -> Unit,
     onAllow: () -> Unit,
     onRescan: () -> Unit,
-    onOpenCharacter: (String) -> Unit,
     onAdd: (SearchResult) -> Unit,
     onDismiss: (SearchResult) -> Unit,
     onUndo: (String) -> Unit,
@@ -592,19 +593,6 @@ private fun PhotoFeed(
                     label = { Text("From clipboard: $s") },
                 )
             }
-        }
-        // The due card leads the feed: the loop is photograph → file → review, and this is
-        // the step that used to be invisible from here. It sits *in* the scroll rather than
-        // pinned above it, so looking something up never means dismissing a flashcard first.
-        item(key = "due-card") {
-            HomeDueCard(
-                repository = repository,
-                tts = tts,
-                refreshKey = deckRefresh,
-                onOpenCharacter = onOpenCharacter,
-                onOpenWord = onOpenWord,
-                onArchived = onArchived,
-            )
         }
         stickyHeader(key = "photos-header") {
             FeedHeader("From your photos") {
@@ -697,7 +685,7 @@ private fun PhotoFeed(
                                     pinyin = f.primaryPinyin,
                                     gloss = f.definition?.let { displayGloss(it) },
                                     glossLines = 1,
-                                    onClick = { onOpenCharacter(f.glyphId) },
+                                    onClick = { lookupStack.push(LookupEntry(glyphId = f.glyphId, displayText = f.char)) },
                                 )
                             }
                         }
@@ -720,7 +708,7 @@ private fun PhotoFeed(
                                     onSwipeRight = { onAdd(f) },
                                     onSwipeLeft = { onDismiss(f) },
                                 ) {
-                                    CharacterTile(f.char) { onOpenCharacter(f.glyphId) }
+                                    CharacterTile(f.char) { lookupStack.push(LookupEntry(glyphId = f.glyphId, displayText = f.char)) }
                                 }
                             }
                         }
@@ -737,7 +725,7 @@ private fun PhotoFeed(
                         pinyin = r.primaryPinyin,
                         gloss = r.definition?.let { displayGloss(it) },
                         glossLines = 1,
-                        onClick = { onOpenCharacter(r.glyphId) },
+                        onClick = { lookupStack.push(LookupEntry(glyphId = r.glyphId, displayText = r.char)) },
                     )
                     HorizontalDivider()
                 }
@@ -748,7 +736,7 @@ private fun PhotoFeed(
                     recentlyViewed.chunked(FEED_COLUMNS),
                     key = { "recent-${it.first().glyphId}" },
                 ) { row ->
-                    TileRow(row) { r -> CharacterTile(r.char) { onOpenCharacter(r.glyphId) } }
+                    TileRow(row) { r -> CharacterTile(r.char) { lookupStack.push(LookupEntry(glyphId = r.glyphId, displayText = r.char)) } }
                 }
             }
         }

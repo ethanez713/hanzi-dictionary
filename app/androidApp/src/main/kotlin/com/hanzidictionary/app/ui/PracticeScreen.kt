@@ -1,39 +1,31 @@
 package com.hanzidictionary.app.ui
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,16 +35,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.CardPin
-import com.hanzidictionary.core.CardState
 import com.hanzidictionary.core.DeckBucket
 import com.hanzidictionary.core.DeckEntry
 import com.hanzidictionary.core.DeckSource
@@ -61,36 +54,17 @@ import com.hanzidictionary.core.ItemSummary
 import com.hanzidictionary.core.PracticeState
 import com.hanzidictionary.core.Rating
 import com.hanzidictionary.core.StudyItem
-import com.hanzidictionary.core.StudyRepository
 import com.hanzidictionary.core.deckOpenedAt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Flashcard practice, scheduled by FSRS (spec §17).
+ * Study tab: the flashcard practice surface.
  *
- * **The card is the whole interface, and grading is swipe-only.** Swipe right = knew it,
- * left = didn't, up = skip without touching the card's memory; tap reveals the answer, tap
- * again opens the full page. There are deliberately no grade *buttons* beside the gestures:
- * a screen that offers both teaches neither, and the two swipe verbs are exactly what the
- * home-screen widget's two gutters do, so the muscle memory transfers intact. (Hard/Easy
- * are gone for the same reason — FSRS-6 still accepts all four grades, but the UI only ever
- * emits Again and Good.)
- *
- * Everything that isn't a grade lives in the card's own top-right corner — the ⓘ that
- * explains scheduling, and a ⋮ menu holding "I know this", the one irreversible action here.
- * Putting them on the card rather than in the app bar keeps the whole verb set in one place
- * and leaves the bar free for navigation.
- *
- * Revealing is optional on purpose: recognising a character and knowing you recognised it is
- * the thing being tested, and forcing a reveal first would slow the common case down. The
- * revealed side is budgeted to fit one screen without scrolling — sound, meaning, component
- * breakdown, and the words it shows up in.
- *
- * A missed card goes to the back of the session queue rather than out of it, so within a
- * sitting you do see the ones you don't know more often — and across days FSRS decides,
- * scheduling by predicted recall rather than by a fixed ratio.
+ * The glyph is fixed in a 200dp zone and NEVER moves when the card flips — content
+ * expands below the zone on reveal. Grade gutters are always visible (amber left ✗ AGAIN,
+ * jade right ✓ KNEW). Deck strip at the top shows new/due/ahead counts with a progress bar.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,45 +73,30 @@ fun PracticeScreen(
     hskLevels: Map<Int, List<String>>,
     tts: MandarinTts,
     source: DeckSource,
-    onOpenCharacter: (String) -> Unit,
-    onOpenWord: (String) -> Unit,
-    onOpenConfusables: () -> Unit,
-    onHome: () -> Unit,
-    onBack: () -> Unit,
+    lookupStack: LookupStack,
+    onSwitchToDictionary: () -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
-    val cardReturn = LocalCardReturn.current
+    val eth = EthanTheme.colors
 
-    var reverse by remember { mutableStateOf(false) }
-    // All the in-session deck state (which card, its position, whether it's flipped) lives in
-    // one immutable PracticeState so its transitions are unit-tested in core; reassigning it
-    // drives recomposition.
     var state by remember { mutableStateOf(PracticeState(emptyList())) }
     var summaries by remember { mutableStateOf<Map<String, ItemSummary>>(emptyMap()) }
     var loaded by remember { mutableStateOf(false) }
     var back by remember { mutableStateOf<CardBack?>(null) }
-    var showInfo by remember { mutableStateOf(false) }
 
     LaunchedEffect(source) {
         loaded = false
-        val built = withContext(Dispatchers.IO) {
+        val (entries, found) = withContext(Dispatchers.IO) {
             val candidates = resolveCandidates(app, repository, hskLevels, source)
-            val entries = app.studyRepository.buildDeck(candidates)
-
-            // Resolve display text for the whole deck in one pass, and drop anything the
-            // pack no longer carries so a stale list entry can't render as a blank card.
-            val found = repository.itemSummaries(entries.map { it.item }).associateBy { it.item.itemId }
-            entries.filter { it.item.itemId in found } to found
+            val deck = app.studyRepository.buildDeck(candidates)
+            val sums = repository.itemSummaries(deck.map { it.item }).associateBy { it.item.itemId }
+            deck.filter { it.item.itemId in sums } to sums
         }
-        // The card the session was on outranks the deck order — that is what makes opening a
-        // card's character page and coming back a no-op instead of a reshuffle. It is also how
-        // a widget tap lands you on the tapped card: the widget pins it, and the pin is read
-        // here (and by the home card) with no route argument involved.
-        state = deckOpenedAt(deck = built.first, pin = app.practiceCardPin)
-        summaries = built.second
+        state = deckOpenedAt(deck = entries, pin = app.practiceCardPin)
+        summaries = found
         loaded = true
     }
 
@@ -147,9 +106,6 @@ fun PracticeScreen(
             withContext(Dispatchers.IO) { loadBack(repository, entry.item) }
         }
     }
-    // Grade, skip, archive or reveal — whatever moved the session, the pin follows, so a
-    // rebuild resumes here. Never written from an empty state: the first composition passes
-    // through one before the deck arrives, and it must not clobber the pin being read above.
     LaunchedEffect(current?.item?.itemId, state.revealed) {
         val entry = current ?: return@LaunchedEffect
         app.practiceCardPin = CardPin(entry.item.itemId, state.revealed)
@@ -161,7 +117,6 @@ fun PracticeScreen(
             withContext(Dispatchers.IO) { app.studyRepository.grade(entry.item, rating) }
             PracticeWidgetUpdater.refresh(context)
         }
-        // Missed cards come back later this session; recalled ones are done for now.
         state = state.advance(requeue = rating == Rating.AGAIN)
     }
 
@@ -173,9 +128,6 @@ fun PracticeScreen(
                 app.userRepository.setKnown(entry.item.itemId, true, entry.item.kind)
             }
             PracticeWidgetUpdater.refresh(context)
-            // Archiving drops an item out of every list's practice for good, and it now
-            // lives behind a menu instead of a button with a warning under it — so the
-            // safety net moved to an Undo, the same one the list screens offer.
             if (snackbar.snack("Archived $label — out of practice everywhere", action = "Undo")) {
                 withContext(Dispatchers.IO) {
                     app.userRepository.setKnown(entry.item.itemId, false, entry.item.kind)
@@ -187,205 +139,230 @@ fun PracticeScreen(
     }
 
     fun skip() {
-        // A skip is deliberately weightless: no grade, no review_log row, no widget poke —
-        // it sends the card to the back of this session's queue and moves on, leaving its
-        // FSRS memory exactly as it was.
         if (state.current != null) state = state.advance(requeue = true)
     }
 
-    if (showInfo) GradingInfoDialog(onDismiss = { showInfo = false })
-
     Scaffold(
+        containerColor = eth.paper1,
         snackbarHost = { AppSnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                // The deck's source (list name / HSK band / "Recently encountered") lives up
-                // here beside the header, not as a chip in the scroll row — it's a label, not
-                // a control, so it belongs where the screen names itself.
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = eth.paper1,
+                    titleContentColor = eth.ink900,
+                ),
                 title = {
-                    Column {
-                        Text("Practice", fontSize = 20.sp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            sourceLabel(source),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            "Study",
+                            fontFamily = Piazzolla,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp,
+                            color = eth.ink900,
                         )
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(50.dp))
+                                .background(eth.surfaceAccentSoft)
+                                .border(1.dp, eth.orange200, RoundedCornerShape(50.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                sourceLabel(source) + " ▾",
+                                fontFamily = InstrumentSans,
+                                fontSize = 11.5.sp,
+                                color = eth.onAccentSoft,
+                            )
+                        }
                     }
                 },
-                navigationIcon = { BackButton(onBack) },
-                // ⓘ is a screen-level explainer, not a per-card action — it says the same
-                // thing whatever card is up — so it belongs in the bar beside Home rather
-                // than in the card's corner competing with the one action that *is*
-                // per-card.
                 actions = {
-                    IconButton(onClick = { showInfo = true }) {
-                        Icon(Icons.Filled.Info, contentDescription = "How grading works")
+                    IconButton(
+                        onClick = { onSwitchToDictionary() },
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .border(1.dp, eth.borderDefault, RoundedCornerShape(5.dp))
+                            .size(30.dp),
+                    ) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = "Look up a character",
+                            tint = eth.textFaint,
+                            modifier = Modifier.size(15.dp),
+                        )
                     }
-                    HomeButton(onHome)
+                    Spacer(Modifier.width(8.dp))
                 },
             )
         },
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Both are chips so they read as one row of toggles/actions rather than a
-                // chip next to a differently-shaped button. "Meaning → character" reflects a
-                // real on/off state; "Look-alikes" is a one-shot jump, so it never looks
-                // selected.
-                FilterChip(
-                    selected = reverse,
-                    onClick = { reverse = !reverse; state = state.collapse() },
-                    label = { Text("Meaning → character") },
-                )
-                FilterChip(
-                    selected = false,
-                    onClick = onOpenConfusables,
-                    label = { Text("Look-alikes") },
-                )
-            }
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            Column(Modifier.fillMaxSize()) {
+                DeckStrip(state.deck, eth)
 
-            val entry = state.current
-            when {
-                !loaded -> Text("Loading…")
-                entry == null -> EmptyDeck(source)
-                else -> {
-                    Text(
-                        deckSummary(state.deck, state.index),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    val summary = summaries[entry.item.itemId]
-                    val openFull = {
-                        // Leave a trail marker before handing off: the dictionary is deep, and
-                        // this is the card you'll want back when you're four pages in.
-                        cardReturn?.leaving(summary?.text ?: entry.item.itemId)
-                        if (entry.item.isWord) onOpenWord(entry.item.itemId)
-                        else onOpenCharacter(entry.item.itemId)
+                val entry = state.current
+                when {
+                    !loaded -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Loading…", color = eth.textFaint, fontFamily = InstrumentSans)
+                        }
                     }
-                    SwipeCard(
-                        key = entry.item.itemId to state.dealt,
-                        rightAction = KnewAction,
-                        leftAction = MissedAction,
-                        onSwipeRight = { grade(Rating.GOOD) },
-                        onSwipeLeft = { grade(Rating.AGAIN) },
-                        upAction = SkipAction,
-                        onSwipeUp = { skip() },
-                    ) {
-                        PracticeCard(
-                            summary = summary,
-                            back = back,
-                            reverse = reverse,
-                            showAnswer = state.revealed,
-                            tts = tts,
-                            onReveal = { state = state.reveal() },
-                            onOpenFull = openFull,
-                            onArchive = { archive() },
-                        )
+                    entry == null -> EmptyDeck(source, eth)
+                    else -> {
+                        val summary = summaries[entry.item.itemId]
+                        Row(Modifier.fillMaxSize()) {
+                            GradeGutter(
+                                color = eth.amber100,
+                                mark = "✗",
+                                label = "AGAIN",
+                                labelColor = eth.amber600,
+                                modifier = Modifier.width(30.dp).fillMaxHeight(),
+                            )
+                            Column(
+                                Modifier.weight(1f).fillMaxHeight(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                SwipeCard(
+                                    key = entry.item.itemId to state.dealt,
+                                    rightAction = KnewAction,
+                                    leftAction = MissedAction,
+                                    onSwipeRight = { grade(Rating.GOOD) },
+                                    onSwipeLeft = { grade(Rating.AGAIN) },
+                                    upAction = SkipAction,
+                                    onSwipeUp = { skip() },
+                                ) {
+                                    PracticeCard(
+                                        summary = summary,
+                                        back = back,
+                                        showAnswer = state.revealed,
+                                        tts = tts,
+                                        onReveal = { state = state.reveal() },
+                                        onOpenFull = {
+                                            val label = summary?.text ?: entry.item.itemId
+                                            lookupStack.suspendedCardText = label
+                                            if (entry.item.isWord) {
+                                                lookupStack.push(LookupEntry(wordId = entry.item.itemId, displayText = label))
+                                            } else {
+                                                lookupStack.push(LookupEntry(glyphId = entry.item.itemId, displayText = label))
+                                            }
+                                        },
+                                        onArchive = { archive() },
+                                    )
+                                }
+                            }
+                            GradeGutter(
+                                color = eth.jade100,
+                                mark = "✓",
+                                label = "KNEW",
+                                labelColor = eth.jade600,
+                                modifier = Modifier.width(30.dp).fillMaxHeight(),
+                            )
+                        }
                     }
-                    SwipeLegend(MissedAction, KnewAction, up = SkipAction)
-                    if (state.revealed) entry.card?.let { CardHistory(it) }
                 }
             }
         }
     }
 }
 
-
-/** Explains what the three swipes do to a card's schedule (spec §17 grading). */
 @Composable
-private fun GradingInfoDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
-        title = { Text("How grading works") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Each answer tells the scheduler how well you knew the card, and it sets " +
-                        "when you'll see it again — the better you knew it, the longer the gap.",
-                    fontSize = 14.sp,
-                )
-                Text("←  Didn't know — comes back within the minute, then often.", fontSize = 13.sp)
-                Text("→  Knew it — the gap grows every time you get it again.", fontSize = 13.sp)
-                Text("↑  Skip — move on without changing the card's schedule.", fontSize = 13.sp)
-                Text(
-                    "Swipes are the only way to grade, here and on the home-screen widget, " +
-                        "so the same three motions work in both places. Tap the card to turn " +
-                        "it over, and tap it again to open its full page.",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+private fun DeckStrip(deck: List<DeckEntry>, eth: EthanColors) {
+    val newCount = deck.count { it.bucket == DeckBucket.NEW }
+    val dueCount = deck.count { it.bucket == DeckBucket.DUE }
+    val aheadCount = deck.count { it.bucket == DeckBucket.AHEAD }
+    val total = (newCount + dueCount + aheadCount).coerceAtLeast(1)
+
+    Column(
+        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("$newCount new", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textAccent)
+            Text("$dueCount due", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textMuted)
+            Text("$aheadCount ahead", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textFaint)
+        }
+        Row(
+            Modifier.fillMaxWidth().height(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            val segments = listOf(
+                newCount.toFloat() to eth.orange500,
+                dueCount.toFloat() to eth.ink300,
+                aheadCount.toFloat() to eth.ink100,
+            )
+            for ((w, color) in segments) {
+                if (w > 0f) {
+                    Box(
+                        Modifier.weight(w / total).fillMaxHeight()
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(color),
+                    )
+                }
             }
-        },
-    )
-}
-
-/** Per-card history, in plain words rather than SRS jargon. */
-@Composable
-private fun CardHistory(card: CardState) {
-    if (card.reviews == 0) return
-    Text(
-        "recalled ${card.recalled} · missed ${card.lapses}",
-        fontSize = 11.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
-
-@Composable
-private fun EmptyDeck(source: DeckSource) {
-    Text(
-        when (source) {
-            is DeckSource.Encountered ->
-                "Nothing to practice. Characters you look up or find in photos land here " +
-                    "until you file or archive them."
-            is DeckSource.Hsk -> "Every character in this HSK band is archived. 好棒!"
-            is DeckSource.Series -> "Every character in this series is archived."
-            is DeckSource.UserList -> "This list is empty, or everything in it is archived."
-            is DeckSource.Everything ->
-                "No lists yet. Swipe right on a character anywhere in the app to start one."
-        },
-        textAlign = TextAlign.Center,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 32.dp),
-    )
-}
-
-/** Leads with position, then says *why* these cards are up — "ahead" is worth flagging so
- * practicing ahead of schedule never looks like the app losing track of time. */
-private fun deckSummary(deck: List<DeckEntry>, index: Int): String {
-    val due = deck.count { it.bucket == DeckBucket.DUE }
-    val fresh = deck.count { it.bucket == DeckBucket.NEW }
-    val ahead = deck.count { it.bucket == DeckBucket.AHEAD }
-    val parts = buildList {
-        if (due > 0) add("$due due")
-        if (fresh > 0) add("$fresh new")
-        if (ahead > 0) add("$ahead ahead of schedule")
+        }
     }
-    return "${index + 1} of ${deck.size}" + if (parts.isEmpty()) "" else "  ·  ${parts.joinToString(" · ")}"
+    HorizontalDivider(color = eth.inkRule)
+}
+
+@Composable
+private fun GradeGutter(
+    color: Color,
+    mark: String,
+    label: String,
+    labelColor: Color,
+    modifier: Modifier,
+) {
+    Box(
+        modifier.background(color),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(mark, fontFamily = PlexMono, fontSize = 10.sp, color = labelColor)
+            Text(label, fontFamily = PlexMono, fontSize = 10.sp, letterSpacing = 0.1.sp, color = labelColor)
+        }
+    }
+}
+
+@Composable
+private fun EmptyDeck(source: DeckSource, eth: EthanColors) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            when (source) {
+                is DeckSource.Encountered ->
+                    "Nothing to practice. Characters you look up or find in photos land here."
+                is DeckSource.Hsk -> "Every character in this HSK band is archived."
+                is DeckSource.Series -> "Every character in this series is archived."
+                is DeckSource.UserList -> "This list is empty, or everything in it is archived."
+                is DeckSource.Everything ->
+                    "No lists yet. Look up a character and add it to start."
+            },
+            textAlign = TextAlign.Center,
+            color = eth.textFaint,
+            fontFamily = InstrumentSans,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(32.dp),
+        )
+    }
 }
 
 private fun sourceLabel(source: DeckSource): String = when (source) {
     is DeckSource.Everything -> "Everything"
     is DeckSource.UserList -> source.name.ifBlank { "List" }
-    is DeckSource.Encountered -> "Recently encountered"
+    is DeckSource.Encountered -> "Encountered"
     is DeckSource.Hsk -> if (source.level == 7) "HSK 7-9" else "HSK ${source.level}"
     is DeckSource.Series -> "${source.componentId} series"
 }
 
-/** Turns a deck source into the items it stands for. Lists live in the user database;
- * the HSK, series and encountered decks need the content pack, which is why this sits in
- * the app layer rather than in [StudyRepository]. */
 private fun resolveCandidates(
     app: HanziApp,
     repository: HanziRepository,
@@ -400,8 +377,6 @@ private fun resolveCandidates(
     is DeckSource.Series -> {
         val page = repository.componentPage(source.componentId)
         (page.phoneticMembers + page.semanticMembers)
-            .map { it.glyphId }
-            .distinct()
-            .map { StudyItem.character(it) }
+            .map { it.glyphId }.distinct().map { StudyItem.character(it) }
     }
 }
