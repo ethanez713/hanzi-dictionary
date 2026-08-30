@@ -3,6 +3,7 @@ priority rules; extract interpretive fields as claims, never voted (spec §8.4).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from pipeline import ids_parser
@@ -185,3 +186,142 @@ def component_function_claim(e: GlyphEntity) -> dict | None:
         "semantic_component": ety.get("semantic"),
         "hint": ety.get("hint"),
     }
+
+
+# --- Wiktionary cross-check of makemeahanzi's editorial phonetic label (audit 2026-08) ---
+#
+# makemeahanzi keys its etymology to a character's *graphical* form, so on a simplified glyph it
+# keeps the traditional phonetic label even when simplification *replaced* the phonetic with an
+# unrelated sign (陸's 坴→击) or *merged* it into a different character (續's 𧶠→卖). The phonetic
+# detector already refuses to confirm these (they land in the "opaque" branch of
+# phonetic.compute_component_use), and this cross-check vetoes them against the traditional form's
+# Wiktionary glyph-origin — see docs/audits/breakdown-audit-2026-08.md for the method and evidence.
+#
+# It is deliberately conservative: a simplified glyph and its Mandarin phonetic drift are NOT a
+# usable error signal (說's 兌→兑 and 陸's 坴→击 look identical there), so the veto fires only with
+# graphical proof from the traditional character — its Wiktionary phonetic sits in its own
+# decomposition yet is gone from the simplified glyph, or Wiktionary says it has no phonetic at
+# all (顯 is ideographic). A phonetic Wiktionary names only as an archaic ancestor that never
+# appears graphically (没's 𠬛, 家's 𢑓) is left alone: no proof, and usually just notation.
+
+_IDS_OPERATORS = frozenset(chr(c) for c in range(0x2FF0, 0x3000))
+_WIKT_PHONETIC_RE = re.compile(r"phonetic\s+([㐀-鿿\U00020000-\U0002FFFF])")
+# Formation-type verdicts we recognize in an English-Wiktionary etymology, most specific first.
+_FORMATION_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("phono-semantic", ("phono-semantic", "形聲", "形声")),
+    ("ideographic", ("ideogrammic", "ideographic", "會意", "会意")),
+    ("pictographic", ("pictogram", "pictographic", "象形")),
+    ("indicative", ("ideogram indicating", "指事")),
+)
+
+
+# Component-level simplifications OpenCC's *character* table misses because the traditional
+# component never stood alone as a character (爿, the phonetic of 狀/壯/妝, simplifies to 丬 only
+# inside a glyph). Without these, a genuine phonetic that was merely simplified in place reads as
+# "replaced" and gets wrongly vetoed. Keep this to combining phonetics OpenCC can't see.
+_COMPONENT_SIMPLIFICATIONS: dict[str, str] = {"爿": "丬"}
+
+
+def _to_simplified(ch: str, entities: dict[int, GlyphEntity]) -> str:
+    if len(ch) != 1:
+        return ch
+    if ch in _COMPONENT_SIMPLIFICATIONS:
+        return _COMPONENT_SIMPLIFICATIONS[ch]
+    e = entities.get(ord(ch))
+    if e and e.opencc_simplified_of:
+        return chr(e.opencc_simplified_of[0])
+    return ch
+
+
+def _decomp_component_chars(ch: str, entities: dict[int, GlyphEntity]) -> set[str]:
+    if len(ch) != 1:
+        return set()
+    e = entities.get(ord(ch))
+    if not e:
+        return set()
+    return {
+        c for d in e.decompositions for c in d.ids
+        if c not in _IDS_OPERATORS and c not in "？?"
+    }
+
+
+def _phonetic_survives(p_wik: str, e: GlyphEntity, entities: dict[int, GlyphEntity]) -> bool:
+    """Whether the traditional form's phonetic p_wik still sits in the simplified glyph e —
+    as itself, its own simplified form, or (樣→样) a graphical core of it that survived the
+    reduction. When it does, e's makemeahanzi phonetic is that same genuine (drifted) phonetic
+    and must be kept; when it doesn't, simplification replaced or merged it away (續 𧶠→卖)."""
+    parts = _decomp_component_chars(e.char, entities)
+    parts |= {_to_simplified(c, entities) for c in parts}
+    reps = {p_wik, _to_simplified(p_wik, entities)}
+    reps |= _decomp_component_chars(p_wik, entities)
+    reps |= {_to_simplified(r, entities) for r in set(reps)}
+    return bool(reps & parts)
+
+
+def _wiktextract_formation(e: GlyphEntity) -> tuple[str | None, str | None]:
+    """(phonetic_component, formation) from a glyph's OWN wiktextract etymology, or
+    (None, None) when the text carries no glyph-origin verdict we recognize — a bare
+    'Simplified from X' note included, so the caller falls through to the traditional form."""
+    text = etymology_text_claim(e)
+    if not text:
+        return None, None
+    lowered = text.lower()
+    formation = next((name for name, kws in _FORMATION_KEYWORDS
+                      if any(kw.lower() in lowered for kw in kws)), None)
+    if formation is None:
+        return None, None
+    phonetic = None
+    if formation == "phono-semantic":
+        m = _WIKT_PHONETIC_RE.search(text)
+        phonetic = m.group(1) if m else None
+    return phonetic, formation
+
+
+def _traditional_origin(e: GlyphEntity, entities: dict[int, GlyphEntity]) -> GlyphEntity | None:
+    """The traditional character this simplified glyph descends from, whose Wiktionary
+    glyph-origin we judge makemeahanzi against. Skips the glyph itself and any 'traditional'
+    that merely *contains* it (傢 = 亻+家, 製 = 制+衣) — those are derived characters, not the
+    origin, and their phonetic is the glyph itself, which no cross-check can confirm."""
+    for trad_cp in e.opencc_traditional_of:
+        if trad_cp == e.codepoint:
+            continue
+        te = entities.get(trad_cp)
+        if te is not None and e.char not in _decomp_component_chars(te.char, entities):
+            if _wiktextract_formation(te)[1] is not None:
+                return te
+    return None
+
+
+def phonetic_claim_contradicted(e: GlyphEntity, entities: dict[int, GlyphEntity]) -> bool:
+    """True when makemeahanzi's editorial phonetic label for a *simplified* glyph is a
+    simplification artifact that we can prove against the traditional form's Wiktionary
+    glyph-origin, so it should not be shown or voiced as the phonetic:
+
+    - the traditional form has no phonetic at all — it is ideographic/pictographic (顯 → 显), or
+    - simplification removed the real phonetic: the traditional phonetic is a component of the
+      traditional character (續's decomp carries 𧶠, 陸's carries 坴) yet no longer appears in the
+      simplified glyph (𧶠→卖, 坴→击), or
+    - the traditional etymology explicitly says makemeahanzi's component is a corruption of the
+      real phonetic (細: 'phonetic 囟 … corrupted to 田').
+
+    Deliberately conservative. When Wiktionary names only an archaic ancestor that never appears
+    graphically (没's 𠬛 for the visible 殳, 家's 𢑓 for 豕), there is no proof of a replacement, so
+    it abstains — those are notation differences on a genuine, merely-drifted phonetic, not errors."""
+    claim = component_function_claim(e)
+    p_mmh = claim and claim.get("phonetic_component")
+    if not p_mmh:
+        return False
+    te = _traditional_origin(e, entities)
+    if te is None:
+        return False
+    p_wik, formation = _wiktextract_formation(te)
+    if formation != "phono-semantic":
+        return True  # ideographic/pictographic: makemeahanzi's phonetic is spurious
+    if not p_wik:
+        return False
+    if _phonetic_survives(p_wik, e, entities):
+        return False  # the real phonetic carried through simplification (說 兌→兑) — keep
+    trad_carries_phonetic = p_wik in _decomp_component_chars(te.char, entities)
+    corruption_of_claim = "corrupt" in (etymology_text_claim(te) or "").lower() and \
+        p_mmh in (etymology_text_claim(te) or "")
+    return trad_carries_phonetic or corruption_of_claim

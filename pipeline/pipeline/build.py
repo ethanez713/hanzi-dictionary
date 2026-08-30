@@ -250,10 +250,13 @@ def build() -> Path:
         func_claim = merge.component_function_claim(e)
         semantic_component = func_claim.get("semantic_component") if func_claim else None
         phonetic_component = func_claim.get("phonetic_component") if func_claim else None
+        phonetic_contradicted = merge.phonetic_claim_contradicted(e, entities)
         if resolved:
             if resolved.ids:
                 layout_by_id[gid] = resolved.ids[0]
-            rows = phonetic.compute_component_use(cp, entities, resolved, semantic_component, phonetic_component)
+            rows = phonetic.compute_component_use(
+                cp, entities, resolved, semantic_component, phonetic_component, phonetic_contradicted,
+            )
             for row in rows:
                 component_use_objects.append(row)
                 component_use_rows.append((

@@ -76,6 +76,7 @@ def compute_component_use(
     resolved: ResolvedDecomposition,
     semantic_claim_component: str | None,
     phonetic_claim_component: str | None = None,
+    phonetic_claim_contradicted: bool = False,
 ) -> list[ComponentUseRow]:
     parent = entities.get(glyph_cp)
     component_refs = direct_component_ids(resolved)
@@ -104,7 +105,7 @@ def compute_component_use(
             # the reading comparison and the source's etymology agreeing is stronger
             # evidence than either alone (spec §7 resolution enum)
             resolution = "agreement" if is_phonetic_claim else "computed"
-        elif is_phonetic_claim:
+        elif is_phonetic_claim and not phonetic_claim_contradicted:
             # The source asserts a phonetic role but the sound link is inaudible at
             # every stratum we can compute (说/兑, 家/豕 …): keep the assertion, mark
             # it "opaque" so the UI can be honest about the drift, and weight it low
@@ -114,6 +115,8 @@ def compute_component_use(
         elif is_semantic_claim:
             function, match_class, confidence, resolution, stratum = "semantic", None, 0.5, "single_source", None
         else:
+            # Also lands a phonetic claim Wiktionary contradicts (续's 卖, 细's 田): no audible
+            # match and the source is overruled, so the part is an unlabeled sign, not a phonetic.
             function, match_class, confidence, resolution, stratum = "unknown", None, None, "computed", None
 
         rows.append(ComponentUseRow(
