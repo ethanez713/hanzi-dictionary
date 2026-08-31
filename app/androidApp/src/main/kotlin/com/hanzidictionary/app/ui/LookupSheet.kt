@@ -56,11 +56,13 @@ import com.hanzidictionary.core.WordPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** One level in the lookup sheet's trail. Exactly one of glyphId / wordId is non-null. */
+/** One level in the lookup sheet's trail. Exactly one of glyphId / wordId / componentId is
+ * non-null. [componentId] is the bare component character (青, 女), not a "U+" id. */
 data class LookupEntry(
     val glyphId: String? = null,
     val wordId: String? = null,
-    val displayText: String = glyphId ?: wordId ?: "…",
+    val componentId: String? = null,
+    val displayText: String = glyphId ?: wordId ?: componentId ?: "…",
 )
 
 /** Sheet state held per-tab: the trail plus the suspended card's display text.
@@ -116,11 +118,12 @@ fun LookupSheet(
                 .clickable(onClick = { stack.dismiss() }),
         )
 
-        // Sheet itself, offset 196dp from the top
+        // Sheet itself, riding high so the definition gets most of the screen; a strip of the
+        // suspended card still peeks above it as the affordance for tapping back.
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(top = 196.dp)
+                .padding(top = 84.dp)
                 .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
                 .background(eth.paper0)
                 .fillMaxSize(),
@@ -242,6 +245,14 @@ private fun SheetContent(
             eth = eth,
             onLookup = onLookup,
         )
+    } else if (entry.componentId != null) {
+        ComponentSheetContent(
+            componentId = entry.componentId,
+            repository = repository,
+            tts = tts,
+            eth = eth,
+            onLookup = onLookup,
+        )
     }
 }
 
@@ -314,6 +325,19 @@ private fun CharacterSheetContent(
                 p.definition?.let { def ->
                     Text(def, fontSize = 14.5.sp, lineHeight = 19.sp, color = eth.ink700, fontFamily = InstrumentSans)
                 }
+                // Meta (freq · HSK · strokes) rides right under the definition rather than in
+                // its own band, so the two read as one block.
+                val metaParts = listOfNotNull(
+                    p.freqRank?.let { "freq #$it" },
+                    p.hsk?.let { "HSK $it" },
+                    p.strokeCount?.let { "$it strokes" },
+                )
+                if (metaParts.isNotEmpty()) {
+                    Text(
+                        metaParts.joinToString(" · "),
+                        fontFamily = PlexMono, fontSize = 10.5.sp, color = eth.textFaint,
+                    )
+                }
                 // Study actions
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
@@ -332,19 +356,6 @@ private fun CharacterSheetContent(
                     ) { Text("Archive", fontFamily = InstrumentSans, fontSize = 12.sp) }
                 }
             }
-        }
-
-        // Meta row: freq, HSK, strokes
-        val metaParts = listOfNotNull(
-            p.freqRank?.let { "freq #$it" },
-            p.hsk?.let { "HSK $it" },
-            p.strokeCount?.let { "$it strokes" },
-        )
-        if (metaParts.isNotEmpty()) {
-            Text(
-                metaParts.joinToString(" · "),
-                fontFamily = PlexMono, fontSize = 10.5.sp, color = eth.textFaint,
-            )
         }
 
         // Formation eyebrow (formation type)
@@ -370,7 +381,7 @@ private fun CharacterSheetContent(
                     val label = componentLabel(c.displayChar, c.pinyin)
                     val roleLabel = if (isSoundBearing(c.function)) "SOUND · ${label?.text.orEmpty()}"
                     else "MEANING"
-                    Box(
+                    Row(
                         Modifier.weight(1f)
                             .clip(RoundedCornerShape(5.dp))
                             .background(eth.paper1)
@@ -382,13 +393,15 @@ private fun CharacterSheetContent(
                                     onLookup(LookupEntry(glyphId = gid, displayText = displayChar))
                                 }
                             }
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column {
-                            Text(c.displayChar ?: "", fontSize = 28.sp, color = color, fontFamily = NotoCjk)
-                            Text(roleLabel, fontFamily = PlexMono, fontSize = 9.5.sp, color = eth.textFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(c.displayChar ?: "", fontSize = 22.sp, color = color, fontFamily = NotoCjk)
+                        Column(Modifier.weight(1f)) {
+                            Text(roleLabel, fontFamily = PlexMono, fontSize = 8.5.sp, lineHeight = 11.sp, color = eth.textFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             c.definition?.let { d ->
-                                Text(shortGloss(d), fontSize = 12.sp, color = eth.ink700, fontFamily = InstrumentSans, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(shortGloss(d), fontSize = 11.sp, lineHeight = 13.sp, color = eth.ink700, fontFamily = InstrumentSans, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
@@ -404,40 +417,41 @@ private fun CharacterSheetContent(
                 if (v.startsWith("\"")) org.json.JSONObject("{\"t\":$v}").getString("t") else v
             } catch (e: Exception) { etymClaim.value }
             var expanded by remember(glyphId) { mutableStateOf(false) }
-            val shortText = raw.substringBefore(".").trimEnd() + "."
-            val showFull = expanded || raw == shortText
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            val firstSentence = raw.substringBefore(".").trimEnd()
+            val hasMore = firstSentence.length < raw.trimEnd().trimEnd('.').length
+            val showFull = expanded || !hasMore
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
                 Text(
-                    if (showFull) raw else shortText,
+                    // A trailing "…" on the collapsed prose signals there's more; the ↓ is the
+                    // tap target that reveals it.
+                    if (showFull) raw else "$firstSentence …",
+                    Modifier.weight(1f, fill = false),
                     fontSize = 12.5.sp, lineHeight = 18.sp, color = eth.textMuted,
                     fontFamily = InstrumentSans,
                 )
-                if (!showFull) {
+                if (hasMore) {
                     Text(
-                        "Show more",
-                        fontSize = 12.sp, color = eth.textLink, fontFamily = InstrumentSans,
+                        if (showFull) "↑" else "↓",
+                        fontSize = 14.sp, color = eth.textLink, fontFamily = PlexMono,
                         textDecoration = TextDecoration.Underline,
-                        modifier = Modifier.clickable { expanded = true },
-                    )
-                } else if (raw != shortText) {
-                    Text(
-                        "Show less",
-                        fontSize = 12.sp, color = eth.textLink, fontFamily = InstrumentSans,
-                        textDecoration = TextDecoration.Underline,
-                        modifier = Modifier.clickable { expanded = false },
+                        modifier = Modifier.clickable { expanded = !expanded },
                     )
                 }
             }
         }
 
-        // In words
-        if (p.words.isNotEmpty()) {
-            SheetEyebrow("IN WORDS · ${p.words.size}")
-            val showCount = 3
-            var wordsExpanded by remember(glyphId) { mutableStateOf(false) }
-            val displayed = if (wordsExpanded) p.words else p.words.take(showCount)
+        // In words — every word the character appears in, not a truncated peek. The page's
+        // own `words` is capped at 6; this pulls the full list.
+        val allWords by produceState(p.words, glyphId) {
+            value = withContext(Dispatchers.IO) { repository.wordsForGlyph(glyphId, limit = 500) }
+        }
+        if (allWords.isNotEmpty()) {
+            SheetEyebrow("IN WORDS · ${allWords.size}")
             Column {
-                for (w in displayed) {
+                for (w in allWords) {
                     Row(
                         Modifier.fillMaxWidth()
                             .clickable { onLookup(LookupEntry(wordId = w.id, displayText = w.simp)) }
@@ -457,32 +471,27 @@ private fun CharacterSheetContent(
                     HorizontalDivider(color = eth.inkRule)
                 }
             }
-            if (!wordsExpanded && p.words.size > showCount) {
-                Text(
-                    "Show ${p.words.size - showCount} more",
-                    fontSize = 11.sp, color = eth.textLink, fontFamily = PlexMono,
-                    modifier = Modifier.clickable { wordsExpanded = true }.padding(vertical = 4.dp),
-                )
-            }
         }
 
-        // Footer links: component/series pages (spec: "plain mono 11px links")
-        val glyphId2 = p.char
+        // Footer links: component / phonetic-series pages (spec: "plain mono 11px links").
+        // Each carries the component id it opens (the bare char, not a "U+" id).
         val componentLinks = buildList {
-            add("${p.breakdown.size.let { if (it > 0) "${p.breakdown.size} components use ${p.char}" else "" }}")
-            // sound series link if there's a phonetic component
-            p.breakdown.firstOrNull { it.function == "phonetic" || it.function == "both" }
-                ?.let { phon ->
-                    phon.displayChar?.let { add("Sound series ${phon.displayChar}") }
-                }
-        }.filter { it.isNotEmpty() }
+            // The sound side this character belongs to, if it has a phonetic part.
+            p.breakdown.firstOrNull { isSoundBearing(it.function) }
+                ?.displayChar?.let { phon -> add("Sound series $phon" to phon) }
+            // What else this character is a part of.
+            add("${p.char} as a component" to p.char)
+        }
         if (componentLinks.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                for (link in componentLinks) {
+                for ((label, componentId) in componentLinks) {
                     Text(
-                        link,
+                        label,
                         fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink,
                         textDecoration = TextDecoration.Underline,
+                        modifier = Modifier.clickable {
+                            onLookup(LookupEntry(componentId = componentId, displayText = componentId))
+                        },
                     )
                 }
             }
@@ -553,6 +562,89 @@ private fun WordSheetContent(
             }
         }
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ComponentSheetContent(
+    componentId: String,
+    repository: HanziRepository,
+    tts: MandarinTts,
+    eth: EthanColors,
+    onLookup: (LookupEntry) -> Unit,
+) {
+    val page by produceState<com.hanzidictionary.core.ComponentPage?>(null, componentId) {
+        value = withContext(Dispatchers.IO) { repository.componentPage(componentId) }
+    }
+    val p = page ?: return
+
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(p.char ?: componentId, fontSize = 60.sp, fontFamily = NotoCjk, color = eth.ink900)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val reading = p.ownReadings.firstOrNull { it.system == "pinyin" }?.value
+                if (reading != null) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(reading, fontFamily = PlexMono, fontSize = 19.sp, color = eth.ink900)
+                        if (tts.available && p.char != null) {
+                            Text("▶", fontSize = 11.sp, color = eth.textFaint,
+                                modifier = Modifier.clickable { tts.speak(p.char!!) })
+                        }
+                    }
+                }
+                p.definition?.let {
+                    Text(it, fontSize = 14.sp, lineHeight = 19.sp, color = eth.ink700, fontFamily = InstrumentSans)
+                }
+                if (p.glyphId != null) {
+                    Text(
+                        "Open character page",
+                        fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink,
+                        textDecoration = TextDecoration.Underline,
+                        modifier = Modifier.clickable {
+                            onLookup(LookupEntry(glyphId = p.glyphId, displayText = p.char ?: componentId))
+                        },
+                    )
+                }
+            }
+        }
+
+        ComponentMemberSection("SOUND SERIES", p.phoneticMembers, eth, onLookup)
+        ComponentMemberSection("SHARES THIS MEANING PART", p.semanticMembers, eth, onLookup)
+
+        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ComponentMemberSection(
+    title: String,
+    members: List<com.hanzidictionary.core.SeriesMember>,
+    eth: EthanColors,
+    onLookup: (LookupEntry) -> Unit,
+) {
+    if (members.isEmpty()) return
+    SheetEyebrow("$title · ${members.size}")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (m in members) {
+            Box(
+                Modifier.clip(RoundedCornerShape(5.dp))
+                    .background(eth.paper1)
+                    .border(1.dp, eth.borderSubtle, RoundedCornerShape(5.dp))
+                    .clickable { onLookup(LookupEntry(glyphId = m.glyphId, displayText = m.char)) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(m.char, fontSize = 24.sp, fontFamily = NotoCjk, color = eth.ink900)
+            }
+        }
     }
 }
 
