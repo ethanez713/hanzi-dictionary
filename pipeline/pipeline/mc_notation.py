@@ -49,7 +49,7 @@ def compare_syllables(a: str, b: str) -> str | None:
     onset_b, rime_b = split_onset_rime(base_b)
     if onset_a == onset_b and rime_a == rime_b:
         return "exact" if tone_a == tone_b else "tone"
-    if onset_a == onset_b:
+    if onset_a and onset_a == onset_b:  # a shared *empty* onset isn't a positive match (cf. pinyin.py)
         return "initial"
     if rime_a == rime_b:
         return "rime"
