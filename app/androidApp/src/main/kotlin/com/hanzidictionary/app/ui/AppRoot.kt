@@ -3,6 +3,7 @@ package com.hanzidictionary.app.ui
 import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -189,10 +190,22 @@ fun AppRoot(
         onWidgetItemConsumed()
     }
 
+    // Labels stay hidden to keep the bar condensed, and flash for a moment after any tap so
+    // the icon set stays learnable without a permanent strip of text.
+    var labelTick by remember { mutableIntStateOf(0) }
+    var labelsShown by remember { mutableStateOf(false) }
+    LaunchedEffect(labelTick) {
+        if (labelTick == 0) return@LaunchedEffect
+        labelsShown = true
+        kotlinx.coroutines.delay(1500)
+        labelsShown = false
+    }
+
     Scaffold(
         containerColor = eth.paper1,
         bottomBar = {
             NavigationBar(
+                modifier = Modifier.height(64.dp),
                 containerColor = eth.paper0,
                 tonalElevation = 0.dp,
             ) {
@@ -203,31 +216,42 @@ fun AppRoot(
                     unselectedTextColor = eth.textFaint,
                     indicatorColor = eth.surfaceAccentSoft,
                 )
+                fun label(text: String): (@Composable () -> Unit)? =
+                    if (labelsShown) {
+                        { Text(text, fontFamily = InstrumentSans, fontSize = 11.sp) }
+                    } else {
+                        null
+                    }
                 NavigationBarItem(
                     selected = selectedTab == Tab.STUDY,
                     onClick = {
+                        labelTick++
                         if (selectedTab == Tab.STUDY) studyLookupStack.dismiss()
                         else selectedTab = Tab.STUDY
                     },
                     icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Study") },
-                    label = { Text("Study", fontFamily = InstrumentSans, fontSize = 11.sp) },
+                    label = label("Study"),
+                    alwaysShowLabel = false,
                     colors = itemColors,
                 )
                 NavigationBarItem(
                     selected = selectedTab == Tab.DICTIONARY,
                     onClick = {
+                        labelTick++
                         if (selectedTab == Tab.DICTIONARY) dictLookupStack.dismiss()
                         else selectedTab = Tab.DICTIONARY
                     },
                     icon = { Icon(Icons.Outlined.Search, contentDescription = "Dictionary") },
-                    label = { Text("Dictionary", fontFamily = InstrumentSans, fontSize = 11.sp) },
+                    label = label("Dictionary"),
+                    alwaysShowLabel = false,
                     colors = itemColors,
                 )
                 NavigationBarItem(
                     selected = selectedTab == Tab.LIBRARY,
-                    onClick = { selectedTab = Tab.LIBRARY },
+                    onClick = { labelTick++; selectedTab = Tab.LIBRARY },
                     icon = { Icon(Icons.Outlined.List, contentDescription = "Library") },
-                    label = { Text("Library", fontFamily = InstrumentSans, fontSize = 11.sp) },
+                    label = label("Library"),
+                    alwaysShowLabel = false,
                     colors = itemColors,
                 )
             }
