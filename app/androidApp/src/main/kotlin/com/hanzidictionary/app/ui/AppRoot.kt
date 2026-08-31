@@ -105,6 +105,11 @@ fun AppRoot(
     // Initial deck source for Study tab (set by widget deep link)
     var studySource by remember { mutableStateOf<DeckSource?>(null) }
 
+    // Bumped whenever a widget tap re-pins the study card. PracticeScreen keys its deck
+    // (re)load on this so it repositions to the pinned card even when the deck *source* is
+    // unchanged — a widget into the already-active list wouldn't otherwise re-open the deck.
+    var studyResumeToken by remember { mutableIntStateOf(0) }
+
     // Per-tab lookup stacks: incidental lookups open a sheet over the current tab
     val studyLookupStack = remember { LookupStack() }
     val dictLookupStack = remember { LookupStack() }
@@ -169,6 +174,7 @@ fun AppRoot(
             else LookupEntry(glyphId = item.itemId, displayText = displayText)
         )
         selectedTab = Tab.STUDY
+        studyResumeToken++
         onWidgetItemConsumed()
     }
 
@@ -225,6 +231,7 @@ fun AppRoot(
                         hskLevels = hskLevels,
                         tts = tts,
                         source = src ?: DeckSource.Everything,
+                        resumeToken = studyResumeToken,
                         lookupStack = studyLookupStack,
                         onSwitchToDictionary = { selectedTab = Tab.DICTIONARY },
                     )

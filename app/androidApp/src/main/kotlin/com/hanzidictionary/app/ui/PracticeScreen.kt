@@ -73,6 +73,7 @@ fun PracticeScreen(
     hskLevels: Map<Int, List<String>>,
     tts: MandarinTts,
     source: DeckSource,
+    resumeToken: Int = 0,
     lookupStack: LookupStack,
     onSwitchToDictionary: () -> Unit,
 ) {
@@ -87,7 +88,7 @@ fun PracticeScreen(
     var loaded by remember { mutableStateOf(false) }
     var back by remember { mutableStateOf<CardBack?>(null) }
 
-    LaunchedEffect(source) {
+    LaunchedEffect(source, resumeToken) {
         loaded = false
         val (entries, found) = withContext(Dispatchers.IO) {
             val candidates = resolveCandidates(app, repository, hskLevels, source)
