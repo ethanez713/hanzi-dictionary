@@ -67,7 +67,7 @@ DATASET_PATH = DERIVED_DIR / "lookalikes.tsv"
 
 # Bump when the pairing rules change: a dataset generated under older rules is stale even
 # though its Unihan snapshot still matches, and validate() will call for a rebuild.
-RULE_VERSION = 1
+RULE_VERSION = 2
 
 # A pair is only worth shipping if a learner will meet both halves; unranked characters turn
 # the drawer into a list of curiosities. Applied at pack-build time, not derive time, so the
@@ -195,7 +195,10 @@ def compute_pairs(shapes: dict[int, Shape]) -> list[tuple[int, int, str]]:
         # which of those are actually look-alikes.
         for i, cp in enumerate(members):
             for other in members[i + 1:]:
-                if _plausible(shapes[cp], shapes[other]):
+                # A code with an adjacent repeated key (三 = MMM) yields the same deletion
+                # key twice, so the character lands in this bucket more than once — guard
+                # against pairing it with itself.
+                if cp != other and _plausible(shapes[cp], shapes[other]):
                     pairs.setdefault((min(cp, other), max(cp, other)), "cangjie")
 
     # Same four corners in the same order is its own claim of similarity, and it catches
