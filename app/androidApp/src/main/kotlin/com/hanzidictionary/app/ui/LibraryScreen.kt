@@ -2,6 +2,7 @@ package com.hanzidictionary.app.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -75,6 +80,9 @@ fun LibraryScreen(
     hskLevels: Map<Int, List<String>>,
     onPractice: (DeckSource) -> Unit,
     onLookup: (LookupEntry) -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenArchive: () -> Unit,
+    onEditList: (Long) -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
@@ -158,6 +166,9 @@ fun LibraryScreen(
                     IconButton(onClick = { showNewList = true }) {
                         Icon(Icons.Filled.Add, contentDescription = "New list", tint = eth.textFaint)
                     }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = eth.textFaint)
+                    }
                 },
             )
         },
@@ -185,6 +196,7 @@ fun LibraryScreen(
                         stats = stats,
                         isActive = isActive,
                         onPractice = { onPractice(DeckSource.UserList(list.id, list.name)) },
+                        onEdit = { onEditList(list.id) },
                         onSetActive = {
                             scope.launch {
                                 withContext(Dispatchers.IO) {
@@ -253,7 +265,7 @@ fun LibraryScreen(
             PoolRow(
                 label = "Archived characters",
                 sublabel = "${state.archivedCount} characters marked as known",
-                onClick = { /* archive detail not yet implemented */ },
+                onClick = onOpenArchive,
             )
             HorizontalDivider(color = eth.inkRule)
 
@@ -294,13 +306,14 @@ private fun ListRow(
     stats: ListStats?,
     isActive: Boolean,
     onPractice: () -> Unit,
+    onEdit: () -> Unit,
     onSetActive: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val eth = EthanTheme.colors
     var showMenu by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onPractice).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onEdit).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -343,6 +356,25 @@ private fun ListRow(
         }
         IconButton(onClick = onPractice) {
             Icon(Icons.Filled.PlayArrow, contentDescription = "Practice", tint = eth.textFaint)
+        }
+        Box {
+            IconButton(onClick = { showMenu = true }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "List options", tint = eth.textFaint)
+            }
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Edit list") },
+                    onClick = { showMenu = false; onEdit() },
+                )
+                DropdownMenuItem(
+                    text = { Text(if (isActive) "Unset as active" else "Set as active") },
+                    onClick = { showMenu = false; onSetActive() },
+                )
+                DropdownMenuItem(
+                    text = { Text("Delete list") },
+                    onClick = { showMenu = false; onDelete() },
+                )
+            }
         }
     }
 }

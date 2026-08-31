@@ -36,6 +36,11 @@ class HanziApp : Application() {
 
     val tts: MandarinTts by lazy { MandarinTts(this) }
 
+    /** User-facing preferences (theme, swipe-hint visibility). Observable Compose state. */
+    val settings: AppSettings by lazy {
+        AppSettings(getSharedPreferences(AppSettings.PREFS, MODE_PRIVATE))
+    }
+
     /** One driver for the whole user database; both repositories are query facades over
      * it, so they see each other's writes immediately (archiving in [userRepository] has
      * to drop the schedule [studyRepository] reads). AndroidSqliteDriver runs the .sqm

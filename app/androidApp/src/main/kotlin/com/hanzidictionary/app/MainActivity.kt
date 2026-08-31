@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import com.hanzidictionary.app.ui.AppRoot
 import com.hanzidictionary.app.ui.AppTheme
+import com.hanzidictionary.app.ui.isDark
 import com.hanzidictionary.app.widget.PracticeWidgetProvider
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.isStaleSession
@@ -38,7 +39,17 @@ class MainActivity : ComponentActivity() {
         widgetItem.value = extractWidgetItem(intent)
         val app = application as HanziApp
         setContent {
-            AppTheme {
+            // Reading the mode (Compose state) here makes a Settings change flip the theme
+            // live. Keep the system bars' icon contrast in step with the resolved choice.
+            val dark = app.settings.themeMode.isDark()
+            val view = androidx.compose.ui.platform.LocalView.current
+            androidx.compose.runtime.SideEffect {
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+            AppTheme(darkTheme = dark) {
                 AppRoot(
                     repository = app.repository,
                     userRepository = app.userRepository,

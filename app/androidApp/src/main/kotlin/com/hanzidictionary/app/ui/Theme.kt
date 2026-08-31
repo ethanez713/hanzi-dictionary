@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.R
+import com.hanzidictionary.app.ThemeMode
 
 /** Noto Sans CJK: bundled for offline use and to avoid tofu on CJK Extension characters
  * (the system font drops them). Used only where text may contain CJK; latin UI text uses
@@ -193,6 +194,14 @@ private val EthanTypography = Typography(
     labelMedium = TextStyle(fontFamily = PlexMono, fontWeight = FontWeight.Normal, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.04.sp),
     labelSmall  = TextStyle(fontFamily = PlexMono, fontWeight = FontWeight.Normal, fontSize = 10.sp, lineHeight = 13.sp, letterSpacing = 0.075.sp),
 )
+
+/** Resolve the effective dark/light choice for a [ThemeMode] against the system setting. */
+@Composable
+fun ThemeMode.isDark(): Boolean = when (this) {
+    ThemeMode.AUTO -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
 
 @Composable
 fun AppTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {

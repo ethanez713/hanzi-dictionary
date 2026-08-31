@@ -2,6 +2,7 @@ package com.hanzidictionary.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,6 +77,7 @@ fun PracticeScreen(
     resumeToken: Int = 0,
     lookupStack: LookupStack,
     onSwitchToDictionary: () -> Unit,
+    onEditList: (Long) -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
@@ -202,7 +204,14 @@ fun PracticeScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxSize()) {
-                DeckStrip(state.deck, eth)
+                // Tapping the deck strip edits the list being studied — but only a real
+                // user list is editable; HSK/Encountered/Everything pools are not.
+                val editableListId = (source as? DeckSource.UserList)?.listId
+                DeckStrip(
+                    deck = state.deck,
+                    eth = eth,
+                    onClick = editableListId?.let { { onEditList(it) } },
+                )
 
                 val entry = state.current
                 when {
@@ -270,14 +279,16 @@ fun PracticeScreen(
 }
 
 @Composable
-private fun DeckStrip(deck: List<DeckEntry>, eth: EthanColors) {
+private fun DeckStrip(deck: List<DeckEntry>, eth: EthanColors, onClick: (() -> Unit)? = null) {
     val newCount = deck.count { it.bucket == DeckBucket.NEW }
     val dueCount = deck.count { it.bucket == DeckBucket.DUE }
     val aheadCount = deck.count { it.bucket == DeckBucket.AHEAD }
     val total = (newCount + dueCount + aheadCount).coerceAtLeast(1)
 
     Column(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 9.dp),
+        Modifier.fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 9.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(
@@ -288,6 +299,10 @@ private fun DeckStrip(deck: List<DeckEntry>, eth: EthanColors) {
             Text("$newCount new", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textAccent)
             Text("$dueCount due", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textMuted)
             Text("$aheadCount ahead", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textFaint)
+            if (onClick != null) {
+                Spacer(Modifier.weight(1f))
+                Text("edit ›", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink)
+            }
         }
         Row(
             Modifier.fillMaxWidth().height(3.dp),

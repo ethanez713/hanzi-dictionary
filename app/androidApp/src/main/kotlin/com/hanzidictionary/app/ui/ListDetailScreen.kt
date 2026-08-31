@@ -85,7 +85,6 @@ fun ListDetailScreen(
     listId: Long,
     onOpenItem: (StudyItem) -> Unit,
     onPractice: (DeckSource) -> Unit,
-    onHome: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -181,7 +180,6 @@ fun ListDetailScreen(
                     TextButton(onClick = { onPractice(DeckSource.UserList(listId, name)) }) {
                         Text("▶ Practice")
                     }
-                    HomeButton(onHome)
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "List options")
                     }

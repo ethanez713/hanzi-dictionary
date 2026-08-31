@@ -80,6 +80,13 @@ private suspend fun activeDeckSource(app: HanziApp): DeckSource = withContext(Di
 
 private enum class Tab { STUDY, DICTIONARY, LIBRARY }
 
+/** Full-screen surfaces layered above the tabs (and the nav bar) without a NavHost. */
+private sealed interface AppOverlay {
+    data object Settings : AppOverlay
+    data object Archive : AppOverlay
+    data class ListEdit(val listId: Long) : AppOverlay
+}
+
 @Composable
 fun AppRoot(
     repository: HanziRepository,
@@ -114,6 +121,9 @@ fun AppRoot(
     val studyLookupStack = remember { LookupStack() }
     val dictLookupStack = remember { LookupStack() }
 
+    // Full-screen surfaces (Settings, Archive, list editor) layered above the tabs.
+    var overlay by remember { mutableStateOf<AppOverlay?>(null) }
+
     // Load the active deck source on first open
     LaunchedEffect(Unit) {
         if (studySource == null) {
@@ -128,6 +138,7 @@ fun AppRoot(
         searchQuery = ""
         studyLookupStack.dismiss()
         dictLookupStack.dismiss()
+        overlay = null
         selectedTab = Tab.STUDY
     }
 
@@ -234,6 +245,7 @@ fun AppRoot(
                         resumeToken = studyResumeToken,
                         lookupStack = studyLookupStack,
                         onSwitchToDictionary = { selectedTab = Tab.DICTIONARY },
+                        onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
                     )
                     if (studyLookupStack.isOpen) {
                         LookupSheet(
@@ -274,9 +286,47 @@ fun AppRoot(
                             dictLookupStack.push(entry)
                             selectedTab = Tab.DICTIONARY
                         },
+                        onOpenSettings = { overlay = AppOverlay.Settings },
+                        onOpenArchive = { overlay = AppOverlay.Archive },
+                        onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
                     )
                 }
             }
         }
+    }
+
+    when (val o = overlay) {
+        null -> {}
+        AppOverlay.Settings ->
+            SettingsScreen(app.settings, repository, onBack = { overlay = null })
+        AppOverlay.Archive ->
+            ArchiveScreen(
+                userRepository = userRepository,
+                hskLevels = hskLevels,
+                onOpenCharacter = { gid ->
+                    dictLookupStack.push(LookupEntry(glyphId = gid))
+                    overlay = null
+                    selectedTab = Tab.DICTIONARY
+                },
+                onBack = { overlay = null },
+            )
+        is AppOverlay.ListEdit ->
+            ListDetailScreen(
+                listId = o.listId,
+                onOpenItem = { item ->
+                    dictLookupStack.push(
+                        if (item.isWord) LookupEntry(wordId = item.itemId)
+                        else LookupEntry(glyphId = item.itemId),
+                    )
+                    overlay = null
+                    selectedTab = Tab.DICTIONARY
+                },
+                onPractice = { src ->
+                    studySource = src
+                    overlay = null
+                    selectedTab = Tab.STUDY
+                },
+                onBack = { overlay = null },
+            )
     }
 }
