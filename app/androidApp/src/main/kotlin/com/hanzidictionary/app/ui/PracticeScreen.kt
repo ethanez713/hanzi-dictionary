@@ -223,18 +223,32 @@ fun PracticeScreen(
                     entry == null -> EmptyDeck(source, eth)
                     else -> {
                         val summary = summaries[entry.item.itemId]
+                        // Hidden hints collapse the gutters to thin colour strips, handing the
+                        // reclaimed width to the card.
+                        val showHints = app.settings.showSwipeHints
+                        val gutterWidth = if (showHints) 30.dp else 6.dp
                         Row(Modifier.fillMaxSize()) {
                             GradeGutter(
                                 color = eth.amber100,
                                 mark = "✗",
                                 label = "AGAIN",
                                 labelColor = eth.amber600,
-                                modifier = Modifier.width(30.dp).fillMaxHeight(),
+                                showLabel = showHints,
+                                modifier = Modifier.width(gutterWidth).fillMaxHeight(),
                             )
                             Column(
                                 Modifier.weight(1f).fillMaxHeight(),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
+                                if (showHints) {
+                                    Text(
+                                        "↑ skip",
+                                        fontFamily = PlexMono,
+                                        fontSize = 10.sp,
+                                        color = eth.textFaint,
+                                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+                                    )
+                                }
                                 SwipeCard(
                                     key = entry.item.itemId to state.dealt,
                                     rightAction = KnewAction,
@@ -268,7 +282,8 @@ fun PracticeScreen(
                                 mark = "✓",
                                 label = "KNEW",
                                 labelColor = eth.jade600,
-                                modifier = Modifier.width(30.dp).fillMaxHeight(),
+                                showLabel = showHints,
+                                modifier = Modifier.width(gutterWidth).fillMaxHeight(),
                             )
                         }
                     }
@@ -333,18 +348,24 @@ private fun GradeGutter(
     mark: String,
     label: String,
     labelColor: Color,
+    showLabel: Boolean,
     modifier: Modifier,
 ) {
     Box(
         modifier.background(color),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(mark, fontFamily = PlexMono, fontSize = 10.sp, color = labelColor)
-            Text(label, fontFamily = PlexMono, fontSize = 10.sp, letterSpacing = 0.1.sp, color = labelColor)
+        if (showLabel) {
+            // One glyph per line so a narrow gutter never has to wrap the word mid-letter.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                Text(mark, fontFamily = PlexMono, fontSize = 11.sp, color = labelColor)
+                for (ch in label) {
+                    Text(ch.toString(), fontFamily = PlexMono, fontSize = 10.sp, lineHeight = 12.sp, color = labelColor)
+                }
+            }
         }
     }
 }
