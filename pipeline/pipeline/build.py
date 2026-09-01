@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re as _re_sent
 from pathlib import Path
 
 from fetchers.common import SNAPSHOT_ROOT
@@ -110,27 +111,116 @@ def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[l
     return word_rows, word_char_rows
 
 
+_OPUS_LATIN = _re_sent.compile(r"[A-Za-z]")
+_OPUS_CJK = _re_sent.compile(r"[一-鿿]")
+_OPUS_JUNK = set("♪♫[]{}()<>@#*_=/\\|~^`")
+_OPUS_END = set("。！？!?.…")
+_OPUS_STRIP = "-–—•*\"“”'‘’ 　"  # leading/trailing dialogue dashes, bullets, quotes, spaces
+
+
+def _clean_opus_zh(zh: str) -> str:
+    """Strip subtitle framing (leading dialogue dashes, surrounding quotes)."""
+    return zh.strip().strip(_OPUS_STRIP).strip()
+
+
+def _opus_ok(zh: str, en: str, min_len: int, max_len: int) -> bool:
+    """Keep only clean, sentence-shaped subtitle/talk pairs — the corpora are noisy (music
+    cues, dialogue dashes, on-screen text, mis-alignments), and a bad example is worse than a
+    missing one on a learner card. [zh] is already cleaned by [_clean_opus_zh]."""
+    n = len(zh)
+    if n < min_len or n > max_len:
+        return False
+    if not _OPUS_CJK.search(zh):
+        return False
+    if len(_OPUS_LATIN.findall(zh)) > 2:  # stray latin ok; a latin sentence is a mis-align
+        return False
+    if any(c in _OPUS_JUNK for c in zh):
+        return False
+    if zh[-1] not in _OPUS_END:  # require a real sentence end, not a mid-line fragment
+        return False
+    en = en.strip().strip(_OPUS_STRIP)
+    if not (3 <= len(en) <= 160) or not any(c.isascii() and c.isalpha() for c in en):
+        return False
+    # Gross length mismatch is the tell-tale of a bad subtitle alignment (a 4-char line
+    # translated as a 20-word sentence, or vice versa). English runs ~1-4 chars per hanzi.
+    if not (0.8 * n <= len(en) <= 6 * n + 12):
+        return False
+    return True
+
+
+def _opus_coverage(
+    sources: list[tuple[Path, Path]],
+    needed: set[str],
+    words_in,
+    per_word: int,
+    min_len: int,
+    max_len: int,
+) -> dict[str, list[tuple[str, str]]]:
+    """Stream aligned OPUS moses files **in priority order**, filling each still-needed word
+    to [per_word] from the SHORTEST clean pairs a source offers before moving to the next,
+    noisier source — so a clean TED sentence is never evicted by a shorter OpenSubtitles one.
+    Memory is bounded by needed×per_word, not the 11M-line corpus."""
+    result: dict[str, list[tuple[str, str]]] = {}
+    remaining = set(needed)
+    for zh_path, en_path in sources:
+        if not remaining:
+            break
+        best: dict[str, list[tuple[int, str, str]]] = {}
+        with zh_path.open(encoding="utf-8") as zf, en_path.open(encoding="utf-8") as ef:
+            for zh_line, en_line in zip(zf, ef):
+                zh = _clean_opus_zh(zh_line)
+                if not (min_len <= len(zh) <= max_len):
+                    continue
+                en = en_line.strip().strip(_OPUS_STRIP)
+                if not _opus_ok(zh, en, min_len, max_len):
+                    continue
+                for w in words_in(zh):
+                    if w not in remaining:
+                        continue
+                    keep = per_word - len(result.get(w, ()))
+                    if keep <= 0:
+                        continue
+                    bucket = best.setdefault(w, [])
+                    key = (len(zh), zh, en)
+                    if len(bucket) < keep:
+                        bucket.append(key)
+                        bucket.sort()
+                    elif key < bucket[-1]:
+                        bucket[-1] = key
+                        bucket.sort()
+        for w, lst in best.items():
+            result.setdefault(w, []).extend((zh, en) for _, zh, en in lst)
+            if len(result[w]) >= per_word:
+                remaining.discard(w)
+    return result
+
+
 def build_sentences(
     tatoeba_dir: Path,
     word_simps: set[str],
+    opus_sources: list[tuple[Path, Path]] | None = None,
+    opus_words: set[str] | None = None,
     per_word: int = 5,
     short_max: int = 34,
     coverage_max: int = 50,
     coverage_min: int = 2,
+    opus_min_len: int = 6,
 ) -> list[tuple]:
-    """Tatoeba Mandarin sentences (with an English translation) as example rows keyed by
-    word simp. Rows: (simp, zh, en, tatoeba_id).
+    """Mandarin example sentences (with an English translation) as rows keyed by word simp.
+    Rows: (simp, zh, en, tatoeba_id) — tatoeba_id is NULL for the OPUS-sourced rows.
 
-    Two passes over the same shortest-first candidate pool. **Pass 1** fills up to
-    [per_word] clean short (≤[short_max]) examples per word, so common words get tidy ones.
-    **Pass 2** is coverage: a word that only ever appears in a longer sentence (≤[coverage_max])
-    still gets up to [coverage_min] examples rather than none — the whole point of this being
-    the thing that leaves obscure-but-real words with no sentence at all. Only truly-unseen
-    words end up empty.
+    **Tatoeba first** (human-curated, cleanest): two passes over its shortest-first pool —
+    pass 1 fills up to [per_word] short (≤[short_max]) examples per word, pass 2 tops words
+    seen only in longer sentences (≤[coverage_max]) up to [coverage_min].
 
-    Join is cmn_sentences -> links -> eng_sentences. English texts are loaded only for the
-    subset actually linked from a Mandarin sentence, so memory stays bounded despite the
-    full English dump being large."""
+    **Then OPUS coverage fill** ([opus_sources], in priority order — TED2020 before the far
+    larger, noisier OpenSubtitles): only words STILL under [coverage_min] get topped up, from
+    the shortest clean pairs those corpora contain. This targets the ~1/3 of HSK words Tatoeba
+    never mentions without ballooning already-covered common words, so the phone footprint
+    stays a function of the per-word caps, not the multi-GB corpora.
+
+    Tatoeba join is cmn_sentences -> links -> eng_sentences; English texts are loaded only for
+    the linked subset so memory stays bounded despite the full English dump being large."""
 
     # Tatoeba rows are "id \t lang \t text"; ids are positive integers. The .isdigit() guards
     # skip a malformed line in a future dump rather than crashing the whole build on int().
@@ -191,26 +281,34 @@ def build_sentences(
     max_wl = min(max((len(s) for s in word_simps), default=0), 8)
 
     def words_in(zh: str) -> list[str]:
-        """Distinct word_simps appearing as a substring of [zh]."""
+        """Words in [zh] by forward **maximal-match** segmentation, not raw substring.
+
+        Substring matching produced false examples: 及其 "matched" inside 以及+其他, 水产品
+        inside 补水+产品 — the word isn't really used, it just straddles a boundary. Greedy
+        longest-word-at-each-position segmentation tokenises 以及其他 as 以及 · 其他, so 及其
+        never surfaces from it. It can miss a legitimately-overlapping word, but for pulling
+        example sentences that only removes examples where the word wasn't really the point."""
         n = len(zh)
         seen: set[str] = set()
-        for i in range(n):
-            for length in range(2, max_wl + 1):
-                if i + length > n:
+        i = 0
+        while i < n:
+            matched = 0
+            for length in range(min(max_wl, n - i), 1, -1):
+                if zh[i:i + length] in word_simps:
+                    seen.add(zh[i:i + length])
+                    matched = length
                     break
-                sub = zh[i:i + length]
-                if sub not in seen and sub in word_simps:
-                    seen.add(sub)
+            i += matched if matched else 1
         return list(seen)
 
     picked: dict[str, int] = {}
-    added: set[tuple[str, int]] = set()
+    added: set[tuple[str, str]] = set()  # (word, sentence) — dedup across sources
     rows: list[tuple] = []
 
-    def take(sub: str, cid: int, zh: str, en: str, cap: int) -> None:
-        if picked.get(sub, 0) < cap and (sub, cid) not in added:
+    def take(sub: str, cid, zh: str, en: str, cap: int) -> None:
+        if picked.get(sub, 0) < cap and (sub, zh) not in added:
             picked[sub] = picked.get(sub, 0) + 1
-            added.add((sub, cid))
+            added.add((sub, zh))
             rows.append((sub, zh, en, cid))
 
     # Pass 1: clean short examples.
@@ -224,6 +322,17 @@ def build_sentences(
     for _, cid, zh, en in candidates:
         for sub in words_in(zh):
             take(sub, cid, zh, en, coverage_min)
+
+    # OPUS coverage fill: only HSK/common words ([opus_words]) that Tatoeba still leaves under
+    # coverage_min. Restricting to words worth having keeps the noisier subtitle corpus off the
+    # long tail (obscure words are fine to leave empty) and the pack small.
+    if opus_sources:
+        pool = opus_words if opus_words is not None else word_simps
+        needed = {w for w in pool if picked.get(w, 0) < coverage_min}
+        found = _opus_coverage(opus_sources, needed, words_in, coverage_min, opus_min_len, coverage_max)
+        for sub, pairs in found.items():
+            for zh, en in pairs:
+                take(sub, None, zh, en, coverage_min)
 
     return rows
 
@@ -318,7 +427,33 @@ def build() -> Path:
     # normalize stays character-data only; its manifest still joins the source table.
     tatoeba_dir = latest_snapshot("tatoeba")
     manifests["tatoeba"] = json.loads((tatoeba_dir / "manifest.json").read_text())
-    sentence_rows = build_sentences(tatoeba_dir, word_simps={row[1] for row in word_rows})
+    # Optional OPUS coverage fill from **TED2020** (professional talk translations), if that
+    # snapshot is present — a clean checkout builds Tatoeba-only. TED2020 alone lifts HSK
+    # multi-char word coverage ~67%→95%.
+    #
+    # OpenSubtitles was evaluated and DELIBERATELY DROPPED: subtitle "translations" are
+    # localised/condensed, not faithful (她是个模范 → "Lucky you, man"), with frequent
+    # mis-alignments — wrong for a dictionary — while adding only ~4% more HSK coverage over
+    # TED. Don't re-add it without solving the faithfulness problem.
+    try:
+        opus_root = latest_snapshot("opus")
+    except FileNotFoundError:
+        opus_root = None
+    opus_sources = []
+    if opus_root is not None:
+        ted_zh = opus_root / "ted2020" / "TED2020.en-zh_cn.zh_cn"
+        ted_en = opus_root / "ted2020" / "TED2020.en-zh_cn.en"
+        if ted_zh.exists() and ted_en.exists():
+            opus_sources.append((ted_zh, ted_en))
+            manifests["opus"] = json.loads((opus_root / "manifest.json").read_text())
+    # Fill OPUS coverage only for HSK / corpus-frequent words (row[6]=hsk, row[5]=freq_rank).
+    opus_words = {row[1] for row in word_rows if row[5] is not None or row[6] is not None}
+    sentence_rows = build_sentences(
+        tatoeba_dir,
+        word_simps={row[1] for row in word_rows},
+        opus_sources=opus_sources or None,
+        opus_words=opus_words,
+    )
 
     series_rows_typed = phonetic.compute_phonetic_series(component_use_objects, freq_rank_map)
     phonetic_series_rows = [

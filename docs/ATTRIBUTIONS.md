@@ -35,6 +35,17 @@ community [FSRS-Kotlin](https://github.com/open-spaced-repetition/FSRS-Kotlin)
 port ships **no license file** and so was deliberately not used — the MIT-licensed
 Python and Rust implementations are the ones to reference if this is ever revisited.
 
+**Personal build only (not for the published dataset):** [TED2020](http://opus.nlpl.eu/TED2020-v1.php)
+(en-zh_cn, via OPUS) — professionally-translated TED-talk sentence pairs, mined by
+`build.build_sentences` to fill example sentences for the ~1/3 of HSK words Tatoeba never
+mentions (HSK multi-char word coverage ~67%→95%). TED talk transcripts are **CC BY-NC-ND
+4.0**, so these sentences cannot be redistributed in a published dataset — the OPUS fill is
+optional (built only when the snapshot is present), so a publishable Tatoeba-only pack is
+still producible. See `pipeline/fetchers/fetch_opus.py`. **OpenSubtitles (OPUS) was evaluated
+and rejected:** subtitle "translations" are localised/condensed rather than faithful, and
+frequently mis-aligned — wrong for dictionary examples — for only ~4% more HSK coverage than
+TED.
+
 **Not currently included:** makemeahanzi's `graphics.txt`/stroke-order SVGs
 (Arphic Public License) — deferred until stroke rendering is actually built
 (spec §9/M3); Dong Chinese lexicon data (`peterolson/chinese-lexicon`) — used
