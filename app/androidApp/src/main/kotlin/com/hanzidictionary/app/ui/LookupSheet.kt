@@ -62,6 +62,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** How many "in words" compounds the character sheet shows — the most frequent handful,
+ * not every rare compound (the full list ran to dozens for common characters). */
+private const val IN_WORDS_LIMIT = 8
+
 /** One level in the lookup sheet's trail. Exactly one of glyphId / wordId / componentId is
  * non-null. [componentId] is the bare component character (青, 女), not a "U+" id. */
 data class LookupEntry(
@@ -506,15 +510,18 @@ private fun CharacterSheetContent(
             }
         }
 
-        // In words — every word the character appears in, not a truncated peek. The page's
-        // own `words` is capped at 6; this pulls the full list.
-        val allWords by produceState(p.words, glyphId) {
-            value = withContext(Dispatchers.IO) { repository.wordsForGlyph(glyphId, limit = 500) }
+        // In words — the most common words this character appears in. wordsForGlyph is already
+        // ordered by corpus frequency; dedup identical simplified forms (CC-CEDICT lists a few
+        // homographs twice) and keep the top handful, not every rare compound.
+        val topWords by produceState(p.words.distinctBy { it.simp }.take(IN_WORDS_LIMIT), glyphId) {
+            value = withContext(Dispatchers.IO) {
+                repository.wordsForGlyph(glyphId, limit = 60).distinctBy { it.simp }.take(IN_WORDS_LIMIT)
+            }
         }
-        if (allWords.isNotEmpty()) {
-            SheetEyebrow("IN WORDS · ${allWords.size}")
+        if (topWords.isNotEmpty()) {
+            SheetEyebrow("IN WORDS")
             Column {
-                for (w in allWords) {
+                for (w in topWords) {
                     Row(
                         Modifier.fillMaxWidth()
                             .clickable { onLookup(LookupEntry(wordId = w.id, displayText = w.simp)) }
@@ -658,7 +665,7 @@ private fun WordSheetContent(
                 }
             }
             Text(
-                "Sentences from Tatoeba (CC BY 2.0)",
+                "Sentences from Tatoeba (CC BY 2.0) & TED2020 (CC BY-NC-ND)",
                 fontFamily = PlexMono, fontSize = 9.5.sp, color = eth.textFaint,
             )
         }
