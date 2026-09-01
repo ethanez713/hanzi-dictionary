@@ -561,6 +561,38 @@ private fun WordSheetContent(
                 }
             }
         }
+
+        // Example sentences — the point of a word page (spec §9), dropped when the word view
+        // became a sheet. Each Mandarin line is speakable; its English gloss sits under it.
+        if (p.sentences.isNotEmpty()) {
+            SheetEyebrow("SENTENCES")
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                for (s in p.sentences) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                s.zh, Modifier.weight(1f),
+                                fontSize = 16.sp, lineHeight = 23.sp, color = eth.ink900, fontFamily = NotoCjk,
+                            )
+                            if (tts.available) {
+                                Text("🔊", fontSize = 14.sp, modifier = Modifier.clickable { tts.speak(s.zh) })
+                            }
+                        }
+                        s.en?.let {
+                            Text(it, fontSize = 12.5.sp, lineHeight = 17.sp, color = eth.textMuted, fontFamily = InstrumentSans)
+                        }
+                    }
+                }
+            }
+            Text(
+                "Sentences from Tatoeba (CC BY 2.0)",
+                fontFamily = PlexMono, fontSize = 9.5.sp, color = eth.textFaint,
+            )
+        }
+
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
