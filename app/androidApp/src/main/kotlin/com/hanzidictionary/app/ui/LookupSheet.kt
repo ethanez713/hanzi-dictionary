@@ -28,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,24 +37,29 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
+import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.CharacterPage
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.WordPage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** One level in the lookup sheet's trail. Exactly one of glyphId / wordId / componentId is
@@ -103,6 +109,7 @@ fun LookupSheet(
     if (!stack.isOpen) return
 
     val eth = EthanTheme.colors
+    val snackbar = remember { SnackbarHostState() }
 
     // Back: pop one level, or dismiss if at depth 1
     BackHandler {
@@ -132,10 +139,60 @@ fun LookupSheet(
             HorizontalDivider(color = eth.inkRule)
 
             val entry = stack.trail.lastOrNull() ?: return@Column
-            SheetContent(entry, stack, repository, userRepository, tts, eth)
+            SheetContent(entry, stack, repository, userRepository, tts, eth, snackbar)
         }
+
+        // Add-to-list / archive confirmations float above the sheet's own scroll.
+        Box(Modifier.align(Alignment.BottomCenter)) { AppSnackbarHost(snackbar) }
     }
 }
+
+/** Shared study-actions for the sheet's "+ Add to list" / "Archive" buttons: file the item
+ * into the active list (creating one if needed) or archive it, each with an Undo. Pokes the
+ * widget after every mutation (a placed widget follows the active list / due set). */
+@Composable
+private fun rememberSheetActions(snackbar: SnackbarHostState): SheetActions {
+    val context = LocalContext.current
+    val app = context.applicationContext as HanziApp
+    val scope = rememberCoroutineScope()
+    return remember(app) {
+        SheetActions(
+            addToList = { item, label ->
+                scope.launch {
+                    val listName = withContext(Dispatchers.IO) {
+                        val list = app.studyRepository.ensureActiveList()
+                        app.studyRepository.addToList(list.id, item)
+                        list.name
+                    }
+                    PracticeWidgetUpdater.refresh(context)
+                    if (snackbar.snack("Added $label to \"$listName\"", action = "Undo")) {
+                        withContext(Dispatchers.IO) {
+                            app.studyRepository.activeListId()?.let {
+                                app.studyRepository.removeFromList(it, item.itemId)
+                            }
+                        }
+                        PracticeWidgetUpdater.refresh(context)
+                    }
+                }
+            },
+            archive = { item, label ->
+                scope.launch {
+                    withContext(Dispatchers.IO) { app.userRepository.setKnown(item.itemId, true, item.kind) }
+                    PracticeWidgetUpdater.refresh(context)
+                    if (snackbar.snack("Archived $label", action = "Undo")) {
+                        withContext(Dispatchers.IO) { app.userRepository.setKnown(item.itemId, false, item.kind) }
+                        PracticeWidgetUpdater.refresh(context)
+                    }
+                }
+            },
+        )
+    }
+}
+
+private class SheetActions(
+    val addToList: (StudyItem, String) -> Unit,
+    val archive: (StudyItem, String) -> Unit,
+)
 
 @Composable
 private fun SheetHeader(stack: LookupStack, eth: EthanColors) {
@@ -224,8 +281,10 @@ private fun SheetContent(
     userRepository: UserRepository,
     tts: MandarinTts,
     eth: EthanColors,
+    snackbar: SnackbarHostState,
 ) {
     val onLookup = { e: LookupEntry -> stack.push(e) }
+    val actions = rememberSheetActions(snackbar)
 
     if (entry.glyphId != null) {
         CharacterSheetContent(
@@ -236,6 +295,7 @@ private fun SheetContent(
             tts = tts,
             eth = eth,
             onLookup = onLookup,
+            actions = actions,
         )
     } else if (entry.wordId != null) {
         WordSheetContent(
@@ -244,6 +304,7 @@ private fun SheetContent(
             tts = tts,
             eth = eth,
             onLookup = onLookup,
+            actions = actions,
         )
     } else if (entry.componentId != null) {
         ComponentSheetContent(
@@ -266,6 +327,7 @@ private fun CharacterSheetContent(
     tts: MandarinTts,
     eth: EthanColors,
     onLookup: (LookupEntry) -> Unit,
+    actions: SheetActions,
 ) {
     var loaded by remember(glyphId) { mutableStateOf(false) }
     val page by produceState<CharacterPage?>(null, glyphId) {
@@ -339,9 +401,10 @@ private fun CharacterSheetContent(
                     )
                 }
                 // Study actions
+                val charItem = StudyItem.character(glyphId)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { /* opens list sheet */ },
+                        onClick = { actions.addToList(charItem, p.char) },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = eth.accent,
                             contentColor = eth.onAccent,
@@ -350,7 +413,7 @@ private fun CharacterSheetContent(
                         modifier = Modifier.height(30.dp),
                     ) { Text("+ Add to list", fontFamily = InstrumentSans, fontSize = 12.sp) }
                     OutlinedButton(
-                        onClick = { /* archive */ },
+                        onClick = { actions.archive(charItem, p.char) },
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                         modifier = Modifier.height(30.dp),
                     ) { Text("Archive", fontFamily = InstrumentSans, fontSize = 12.sp) }
@@ -508,6 +571,7 @@ private fun WordSheetContent(
     tts: MandarinTts,
     eth: EthanColors,
     onLookup: (LookupEntry) -> Unit,
+    actions: SheetActions,
 ) {
     val page by produceState<WordPage?>(null, wordId) {
         value = withContext(Dispatchers.IO) { repository.wordPage(wordId) }
@@ -535,13 +599,19 @@ private fun WordSheetContent(
                 for ((i, sense) in p.senses.take(2).withIndex()) {
                     Text("${i + 1}. $sense", fontSize = 14.5.sp, color = eth.ink700, fontFamily = InstrumentSans)
                 }
+                val wordItem = StudyItem.word(wordId)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = {},
+                        onClick = { actions.addToList(wordItem, p.simp) },
                         colors = ButtonDefaults.buttonColors(containerColor = eth.accent, contentColor = eth.onAccent),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                         modifier = Modifier.height(30.dp),
                     ) { Text("+ Add to list", fontFamily = InstrumentSans, fontSize = 12.sp) }
+                    OutlinedButton(
+                        onClick = { actions.archive(wordItem, p.simp) },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        modifier = Modifier.height(30.dp),
+                    ) { Text("Archive", fontFamily = InstrumentSans, fontSize = 12.sp) }
                 }
             }
         }
