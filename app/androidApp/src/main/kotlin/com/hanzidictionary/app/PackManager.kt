@@ -25,7 +25,7 @@ object PackManager {
 
     // Bump when a shipped pack changes so an installed app re-copies it. This is the
     // in-APK bundled version; the GitHub-Releases delta-update path (spec §9) is later.
-    const val BUNDLED_PACK_VERSION = 15
+    const val BUNDLED_PACK_VERSION = 16
     private const val PREFS = "pack"
     private const val KEY_INSTALLED_VERSION = "installed_version"
 

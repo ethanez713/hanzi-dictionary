@@ -19,7 +19,7 @@ import re as _re_sent
 from pathlib import Path
 
 from fetchers.common import SNAPSHOT_ROOT
-from pipeline import load, lookalike, merge, normalize, parsers, phonetic, pinyin, radicals
+from pipeline import dong, load, lookalike, merge, normalize, parsers, phonetic, pinyin, radicals
 from pipeline.normalize import GlyphEntity
 
 SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract", "hsk", "cedict", "wordfreq"]
@@ -414,6 +414,55 @@ def build() -> Path:
             ))
 
     selected_set = set(selected)
+    selected_gids = {f"U+{cp:04X}" for cp in selected}
+
+    # ── Dong Chinese authoritative override (user decision 2026-09-01: "Dong wins where it
+    # has data") ─────────────────────────────────────────────────────────────────────────
+    # For the ~4.5k characters the Dong lexicon covers, its human-verified component functions
+    # and formation type REPLACE the algorithmic detector's — higher quality on exactly the
+    # common characters a learner meets. The detector still governs every character Dong does
+    # not cover. (Dong is personal-build-only; see fetch_dong_chinese.py / ATTRIBUTIONS.
+    # Optional: a clean checkout without the snapshot builds a detector-only, publishable pack.)
+    try:
+        dong_dir = latest_snapshot("dong-chinese-lexicon-PRIVATE")
+    except FileNotFoundError:
+        dong_dir = None
+    dong_by_gid = {}
+    if dong_dir is not None:
+        manifests["dong"] = json.loads((dong_dir / "manifest.json").read_text())
+        dong_by_gid = {
+            f"U+{ord(ch):04X}": e
+            for ch, e in dong.parse_dong(dong_dir / "index.js").items()
+            if f"U+{ord(ch):04X}" in selected_gids
+        }
+    override = set(dong_by_gid)
+    component_use_rows = [r for r in component_use_rows if r[0] not in override]
+    component_use_objects = [o for o in component_use_objects if f"U+{o.glyph_id:04X}" not in override]
+    claim_rows = [c for c in claim_rows if not (c[0] in override and c[1] == "component_function")]
+    dong_retrieved = manifests["dong"]["retrieved_at"] if dong_by_gid else None
+    for gid, e in dong_by_gid.items():
+        cp = int(gid[2:], 16)
+        for pos, (comp_char, fn) in enumerate(e.components):
+            # A phonetic role is asserted by Dong but its sound-match class isn't computed here
+            # → "opaque", the same class the detector uses for an asserted-but-unmeasured sound.
+            match_class = "opaque" if fn in (dong.SOUND, dong.BOTH) else None
+            component_use_rows.append((gid, comp_char, pos, fn, match_class, 0.98, "single_source"))
+            component_use_objects.append(
+                phonetic.ComponentUseRow(cp, comp_char, pos, fn, match_class, 0.98, "single_source")
+            )
+        func_claim = {"formation_type": e.formation_type}
+        sem = next((c for c, f in e.components if f == dong.MEANING), None)
+        phon = next((c for c, f in e.components if f in (dong.SOUND, dong.BOTH)), None)
+        if sem:
+            func_claim["semantic_component"] = sem
+        if phon:
+            func_claim["phonetic_component"] = phon
+        claim_rows.append((
+            gid, "component_function", json.dumps(func_claim, ensure_ascii=False),
+            "dong", None, 0.95, dong_retrieved,
+        ))
+    print(f"  Dong override: {len(override)} characters (human-verified component functions)")
+
     drafts = merge.resolve_variant_edges(entities)
     variant_edge_rows = [
         (f"U+{d.from_glyph:04X}", f"U+{d.to_glyph:04X}", "simplification", d.mapping_type, None, "unihan")

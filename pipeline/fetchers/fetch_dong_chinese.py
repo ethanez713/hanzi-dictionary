@@ -1,10 +1,13 @@
-"""Fetch peterolson/chinese-lexicon (built for dong-chinese.com) for PRIVATE VALIDATION
-ONLY — human-verified component function labels for ~3,800 characters.
+"""Fetch peterolson/chinese-lexicon (built for dong-chinese.com) — human-verified component
+function labels + formation types for ~4,500 characters (`pipeline/dong.py` parses them).
 
-Not part of fetch_all/FETCHERS: spec §5 flags this source's license as unconfirmed for
-publication ("confirm license before ingesting"), but explicitly allows private QA use
-regardless ("usable privately for validation regardless", spec §12 M0). This snapshot
-must never be merged into the published dataset or the app data pack.
+**Now ingested into the PERSONAL app pack** (user decision 2026-09-01: "Dong wins where it
+has data") as the authoritative component-function source for the characters it covers,
+overriding the algorithmic detector — see the Dong override block in `build.py`. This is fine
+because the app is **not published anywhere**; the source's license is still unconfirmed for
+publication, so it must NOT go into any PUBLISHED dataset (the override reads a snapshot that
+a clean checkout won't have, so a published Tatoeba-/detector-only pack still builds without
+it). Not part of fetch_all/FETCHERS; run directly.
 """
 from __future__ import annotations
 

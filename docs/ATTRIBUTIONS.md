@@ -46,11 +46,16 @@ and rejected:** subtitle "translations" are localised/condensed rather than fait
 frequently mis-aligned — wrong for dictionary examples — for only ~4% more HSK coverage than
 TED.
 
+Also personal-build-only: **Dong Chinese lexicon** (`peterolson/chinese-lexicon`, built for
+dong-chinese.com) — human-verified component functions + formation types for ~4,569 shipped
+characters, parsed by `pipeline/dong.py` and used as the AUTHORITATIVE override for the
+algorithmic detector on the characters it covers (user decision 2026-09-01: "Dong wins where
+it has data"). Its license is unconfirmed for publication, so like TED2020 it must not go into
+a published dataset — the override is optional (a clean checkout without the snapshot builds a
+detector-only, publishable pack). See `pipeline/fetchers/fetch_dong_chinese.py`.
+
 **Not currently included:** makemeahanzi's `graphics.txt`/stroke-order SVGs
-(Arphic Public License) — deferred until stroke rendering is actually built
-(spec §9/M3); Dong Chinese lexicon data (`peterolson/chinese-lexicon`) — used
-only for private validation (spec §12), never ingested into any published or
-shipped artifact; see `pipeline/fetchers/fetch_dong_chinese.py`.
+(Arphic Public License) — deferred (stroke rendering not built; spec §9/M3).
 
 ## Why makemeahanzi matters here specifically
 
