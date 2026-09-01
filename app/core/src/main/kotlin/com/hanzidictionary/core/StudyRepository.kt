@@ -106,6 +106,10 @@ class StudyRepository(
     fun itemsInList(listId: Long): List<StudyItem> =
         q.itemsInList(listId).executeAsList().map { StudyItem(it.item_id, it.kind) }
 
+    /** When each item was filed into the list, for the "date added" sort. */
+    fun addedAtInList(listId: Long): Map<String, Long> =
+        q.itemsInList(listId).executeAsList().associate { it.item_id to it.added_at }
+
     fun allListItems(): List<StudyItem> =
         q.itemsInAllLists().executeAsList().map { StudyItem(it.item_id, it.kind) }
 

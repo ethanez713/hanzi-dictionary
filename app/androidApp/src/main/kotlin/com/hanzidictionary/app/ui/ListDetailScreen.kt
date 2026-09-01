@@ -2,6 +2,7 @@ package com.hanzidictionary.app.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,8 +53,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Which column drives the "Studying" sort — each has its own tap target next to the count. */
-private enum class MissedSort { COUNT, PERCENT }
+/** The ways a list's "Studying" items can be ordered, each a single menu entry. */
+private enum class ListSort(val label: String) {
+    RECENT("Recently added"),
+    OLDEST("Oldest added"),
+    MISSED_PCT("Most missed (%)"),
+    MISSED_COUNT("Most missed (#)"),
+}
 
 /** Missed share of reviews, rounded. 0 (rather than null) for an ungraded card, so it sorts
  * to the quiet end of either direction alongside actually-perfect cards. */
@@ -69,6 +75,8 @@ private data class Loaded(
     val archived: List<ItemSummary>,
     /** Keyed by item id — the per-word knew/missed trailing each row in "Studying". */
     val cardStates: Map<String, CardState>,
+    /** Item id -> when it was filed into the list, for the "date added" sort. */
+    val addedAt: Map<String, Long>,
 )
 
 /**
@@ -97,11 +105,11 @@ fun ListDetailScreen(
     var learning by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var archived by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var cardStates by remember { mutableStateOf<Map<String, CardState>>(emptyMap()) }
-    // Percent, most-missed-first by default: rate matters more than raw count for deciding
-    // what's actually shaky (a word reviewed twice and missed once outranks one reviewed 50
-    // times and missed five).
-    var missedSortField by remember { mutableStateOf(MissedSort.PERCENT) }
-    var missedDescending by remember { mutableStateOf(true) }
+    var addedAt by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    // Default to most-recently-added: building a list, the thing you just filed is what you
+    // want to see. Missed-rate sorts stay available for deciding what's shaky.
+    var sort by remember { mutableStateOf(ListSort.RECENT) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
     var showArchived by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
@@ -118,12 +126,14 @@ fun ListDetailScreen(
                 learning = summaries.filter { it.item.itemId !in known },
                 archived = summaries.filter { it.item.itemId in known },
                 cardStates = app.studyRepository.cardStates(items.map { it.itemId }),
+                addedAt = app.studyRepository.addedAtInList(listId),
             )
         }
         name = loaded.name
         learning = loaded.learning
         archived = loaded.archived
         cardStates = loaded.cardStates
+        addedAt = loaded.addedAt
     }
 
     fun archive(summary: ItemSummary) {
@@ -160,14 +170,11 @@ fun ListDetailScreen(
         }
     }
 
-    val missedSortKey: (ItemSummary) -> Int = { summary ->
-        val card = cardStates[summary.item.itemId]
-        if (missedSortField == MissedSort.COUNT) card?.lapses ?: 0 else missedPercent(card)
-    }
-    val sortedLearning = if (missedDescending) {
-        learning.sortedByDescending(missedSortKey)
-    } else {
-        learning.sortedBy(missedSortKey)
+    val sortedLearning = when (sort) {
+        ListSort.RECENT -> learning.sortedByDescending { addedAt[it.item.itemId] ?: 0L }
+        ListSort.OLDEST -> learning.sortedBy { addedAt[it.item.itemId] ?: 0L }
+        ListSort.MISSED_PCT -> learning.sortedByDescending { missedPercent(cardStates[it.item.itemId]) }
+        ListSort.MISSED_COUNT -> learning.sortedByDescending { cardStates[it.item.itemId]?.lapses ?: 0 }
     }
 
     Scaffold(
@@ -217,24 +224,22 @@ fun ListDetailScreen(
                     ) {
                         SectionTitle("Studying (${learning.size})")
                         Spacer(Modifier.weight(1f))
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            MissedSortToggle(
-                                label = "#",
-                                field = MissedSort.COUNT,
-                                active = missedSortField,
-                                descending = missedDescending,
-                            ) {
-                                if (missedSortField == MissedSort.COUNT) missedDescending = !missedDescending
-                                else missedSortField = MissedSort.COUNT
+                        Box {
+                            TextButton(onClick = { sortMenuOpen = true }) {
+                                Text("${sort.label} ▾", fontSize = 13.sp)
                             }
-                            MissedSortToggle(
-                                label = "%",
-                                field = MissedSort.PERCENT,
-                                active = missedSortField,
-                                descending = missedDescending,
-                            ) {
-                                if (missedSortField == MissedSort.PERCENT) missedDescending = !missedDescending
-                                else missedSortField = MissedSort.PERCENT
+                            DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                                for (option in ListSort.entries) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                option.label,
+                                                fontWeight = if (option == sort) FontWeight.Bold else FontWeight.Normal,
+                                            )
+                                        },
+                                        onClick = { sort = option; sortMenuOpen = false },
+                                    )
+                                }
                             }
                         }
                     }
@@ -375,25 +380,3 @@ private fun KnewMissedTrailing(card: CardState?) {
     }
 }
 
-/** One column's tap target in the "Studying" sort header — bold with an arrow when it's the
- * active sort, a plain label otherwise. Tapping the active column flips direction; tapping
- * the other one switches to it (keeping the current direction). */
-@Composable
-private fun MissedSortToggle(
-    label: String,
-    field: MissedSort,
-    active: MissedSort,
-    descending: Boolean,
-    onClick: () -> Unit,
-) {
-    val isActive = field == active
-    Text(
-        if (isActive) "$label ${if (descending) "▼" else "▲"}" else label,
-        fontSize = 13.sp,
-        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .clickable(onClickLabel = "Sort by missed $label") { onClick() }
-            .padding(6.dp),
-    )
-}
