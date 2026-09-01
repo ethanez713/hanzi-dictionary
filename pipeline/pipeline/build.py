@@ -113,12 +113,20 @@ def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[l
 def build_sentences(
     tatoeba_dir: Path,
     word_simps: set[str],
-    per_word: int = 3,
-    max_len: int = 30,
+    per_word: int = 5,
+    short_max: int = 34,
+    coverage_max: int = 50,
+    coverage_min: int = 2,
 ) -> list[tuple]:
     """Tatoeba Mandarin sentences (with an English translation) as example rows keyed by
-    word simp. Keeps the shortest few sentences containing each word, so common words get
-    clean, short examples. Rows: (simp, zh, en, tatoeba_id).
+    word simp. Rows: (simp, zh, en, tatoeba_id).
+
+    Two passes over the same shortest-first candidate pool. **Pass 1** fills up to
+    [per_word] clean short (≤[short_max]) examples per word, so common words get tidy ones.
+    **Pass 2** is coverage: a word that only ever appears in a longer sentence (≤[coverage_max])
+    still gets up to [coverage_min] examples rather than none — the whole point of this being
+    the thing that leaves obscure-but-real words with no sentence at all. Only truly-unseen
+    words end up empty.
 
     Join is cmn_sentences -> links -> eng_sentences. English texts are loaded only for the
     subset actually linked from a Mandarin sentence, so memory stays bounded despite the
@@ -173,17 +181,17 @@ def build_sentences(
                 cmn_to_eng[ai] = int(b)
     eng = load_texts(tatoeba_dir / "eng_sentences.tsv", set(cmn_to_eng.values()))
 
-    # Shortest first, so the examples we keep are the cleanest.
+    # Shortest first, so the examples we keep are the cleanest, in both passes.
     candidates = sorted(
         (len(cmn[cid]), cid, cmn[cid], eng[eid])
         for cid, eid in cmn_to_eng.items()
-        if 0 < len(cmn[cid]) <= max_len
+        if 0 < len(cmn[cid]) <= coverage_max
     )
 
     max_wl = min(max((len(s) for s in word_simps), default=0), 8)
-    picked: dict[str, int] = {}
-    rows: list[tuple] = []
-    for _, cid, zh, en in candidates:
+
+    def words_in(zh: str) -> list[str]:
+        """Distinct word_simps appearing as a substring of [zh]."""
         n = len(zh)
         seen: set[str] = set()
         for i in range(n):
@@ -191,12 +199,32 @@ def build_sentences(
                 if i + length > n:
                     break
                 sub = zh[i:i + length]
-                if sub in seen or sub not in word_simps:
-                    continue
-                seen.add(sub)
-                if picked.get(sub, 0) < per_word:
-                    picked[sub] = picked.get(sub, 0) + 1
-                    rows.append((sub, zh, en, cid))
+                if sub not in seen and sub in word_simps:
+                    seen.add(sub)
+        return list(seen)
+
+    picked: dict[str, int] = {}
+    added: set[tuple[str, int]] = set()
+    rows: list[tuple] = []
+
+    def take(sub: str, cid: int, zh: str, en: str, cap: int) -> None:
+        if picked.get(sub, 0) < cap and (sub, cid) not in added:
+            picked[sub] = picked.get(sub, 0) + 1
+            added.add((sub, cid))
+            rows.append((sub, zh, en, cid))
+
+    # Pass 1: clean short examples.
+    for ln, cid, zh, en in candidates:
+        if ln > short_max:
+            continue
+        for sub in words_in(zh):
+            take(sub, cid, zh, en, per_word)
+
+    # Pass 2: coverage for words seen only in longer sentences.
+    for _, cid, zh, en in candidates:
+        for sub in words_in(zh):
+            take(sub, cid, zh, en, coverage_min)
+
     return rows
 
 

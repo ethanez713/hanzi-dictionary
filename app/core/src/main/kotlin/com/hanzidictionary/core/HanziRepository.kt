@@ -462,7 +462,7 @@ class HanziRepository(
 
     private companion object {
         /** A few examples is plenty on a word page; more would bury the definitions. */
-        const val SENTENCE_LIMIT = 4L
+        const val SENTENCE_LIMIT = 5L
 
         /** The character page's own drawer, which you opened to compare things, so it can
          * afford more rows than a word page's aside — 请 alone has a dozen 青-sharers. */
