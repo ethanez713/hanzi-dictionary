@@ -227,9 +227,11 @@ fun PracticeScreen(
                         // reclaimed width to the card.
                         val showHints = app.settings.showSwipeHints
                         val gutterWidth = if (showHints) 30.dp else 6.dp
+                        // Hidden hints also drop the gutter tint — the reclaimed strips blend
+                        // into the background rather than lingering as bare colour bars.
                         Row(Modifier.fillMaxSize()) {
                             GradeGutter(
-                                color = eth.amber100,
+                                color = if (showHints) eth.amber100 else eth.paper1,
                                 mark = "✗",
                                 label = "AGAIN",
                                 labelColor = eth.amber600,
@@ -278,7 +280,7 @@ fun PracticeScreen(
                                 }
                             }
                             GradeGutter(
-                                color = eth.jade100,
+                                color = if (showHints) eth.jade100 else eth.paper1,
                                 mark = "✓",
                                 label = "KNEW",
                                 labelColor = eth.jade600,
