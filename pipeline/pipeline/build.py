@@ -94,6 +94,8 @@ def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[l
     hsk_words = parsers.parse_hsk_word_levels(snapshot_paths["hsk"] / "complete.min.json")
     freq_ranks = parsers.parse_word_frequencies(snapshot_paths["wordfreq"] / "zh_cn_full.txt")
 
+    known_words = {simp for _t, simp, _n, _d in entries}
+
     word_rows: list[tuple] = []
     word_char_rows: list[tuple] = []
     for trad, simp, numbered, defs in entries:
@@ -104,7 +106,8 @@ def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[l
             continue
         wid = f"w{len(word_rows) + 1:06d}"
         word_rows.append((
-            wid, simp, trad, pinyin.cedict_pinyin(numbered),
+            wid, simp, trad,
+            pinyin.cedict_pinyin(pinyin.neutralize_potential_bu(simp, numbered, known_words)),
             json.dumps(defs, ensure_ascii=False), freq_ranks.get(simp), hsk_words.get(simp),
         ))
         for pos, g in enumerate(gids):

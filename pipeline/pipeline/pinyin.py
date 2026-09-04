@@ -115,3 +115,23 @@ def best_match(readings_a: list[str], readings_b: list[str]) -> str | None:
                 best = m
     return best
 
+
+def neutralize_potential_bu(simp: str, numbered: str, known_words: set[str]) -> str:
+    """Fix CC-CEDICT's inconsistent tone on the 不 of a potential complement (V不C).
+
+    The 不 in 受不了 / 来不及 is unstressed in speech, but CC-CEDICT tags it bu4 in some
+    entries and bu5 in others with no pattern to it — 及 as a complement is split 2/2, 得 is
+    16/1. So the tone tagged on 不 is not evidence of anything and cannot be voted on.
+
+    A V不C is only rewritten when its affirmative V得C is also a CC-CEDICT entry, which is
+    what makes it a potential complement rather than a plain negation. Without that test the
+    same shape sweeps up 三不管, 且不说 and the transliteration 冬不拉. The cost of the test
+    is that a V不C whose affirmative CC-CEDICT happens to lack (等不及) is left alone."""
+    if len(simp) != 3 or simp[1] != "不":
+        return numbered
+    tokens = numbered.split(" ")
+    if len(tokens) != 3 or tokens[1].lower() != "bu4":
+        return numbered
+    if simp[0] + "得" + simp[2] not in known_words:
+        return numbered
+    return " ".join([tokens[0], "bu5", tokens[2]])

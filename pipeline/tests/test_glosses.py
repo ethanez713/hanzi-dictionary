@@ -1,4 +1,4 @@
-"""Component role glosses and the CC-CEDICT character gloss (audit 2026-09).
+"""Component role glosses and the CC-CEDICT gloss/pinyin fixes (audit 2026-09).
 Fast, snapshot-free: hand-built inputs mirror the real data shapes measured in
 docs/audits/gloss-audit-2026-09.md.
 
@@ -8,6 +8,7 @@ import unittest
 
 from pipeline import radicals
 from pipeline.build import single_char_cedict_defs
+from pipeline.pinyin import neutralize_potential_bu
 
 
 def mmh(semantic, hint, kind="pictophonetic"):
@@ -59,6 +60,29 @@ class VoteRoleGlosses(unittest.TestCase):
         g = radicals.vote_role_glosses({})
         self.assertEqual(g["⻏"][0], "city")
         self.assertEqual(g["𤣩"][0], "jade")
+
+
+class NeutralizePotentialBu(unittest.TestCase):
+    KNOWN = {"受不了", "受得了", "三不管", "冬不拉", "来不及"}
+
+    def test_rewrites_a_potential_complement(self):
+        self.assertEqual(
+            neutralize_potential_bu("受不了", "shou4 bu4 liao3", self.KNOWN),
+            "shou4 bu5 liao3")
+
+    def test_leaves_plain_negation_alone(self):
+        """三不管 and 冬不拉 (a Kazakh instrument) share the X不Y shape but have no
+        affirmative form, which is the whole point of the test."""
+        for word, py in (("三不管", "san1 bu4 guan3"), ("冬不拉", "dong1 bu4 la1")):
+            self.assertEqual(neutralize_potential_bu(word, py, self.KNOWN), py)
+
+    def test_leaves_already_neutral_alone(self):
+        self.assertEqual(
+            neutralize_potential_bu("来不及", "lai2 bu5 ji2", self.KNOWN), "lai2 bu5 ji2")
+
+    def test_ignores_words_that_are_not_three_syllables(self):
+        self.assertEqual(
+            neutralize_potential_bu("不是", "bu4 shi4", self.KNOWN), "bu4 shi4")
 
 
 class SingleCharCedictDefs(unittest.TestCase):
