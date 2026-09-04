@@ -20,7 +20,8 @@ CREATE TABLE glyph (
     stroke_count INTEGER,
     freq_rank    INTEGER,
     hsk          INTEGER,
-    definition   TEXT
+    definition   TEXT,
+    cedict_defs  TEXT
 );
 
 CREATE TABLE reading (
@@ -107,6 +108,16 @@ CREATE TABLE sentence (
 );
 CREATE INDEX idx_sentence_simp ON sentence(simp);
 
+-- What a component contributes to a character, which is not its standalone meaning:
+-- 页 alone is "page" but lends 项 its "head". Voted from makemeahanzi role hints.
+CREATE TABLE component_gloss (
+    component_id TEXT PRIMARY KEY,
+    gloss        TEXT NOT NULL,
+    source_id    TEXT NOT NULL,
+    support      INTEGER NOT NULL,
+    agreement    REAL NOT NULL
+);
+
 -- ---- queries ----
 
 glyphByChar:
@@ -126,6 +137,9 @@ SELECT * FROM decomposition WHERE glyph_id = :glyphId;
 
 componentUseForGlyph:
 SELECT * FROM component_use WHERE glyph_id = :glyphId ORDER BY position;
+
+componentGlossFor:
+SELECT gloss FROM component_gloss WHERE component_id = :componentId;
 
 claimsForSubject:
 SELECT * FROM claim WHERE subject_id = :subjectId;

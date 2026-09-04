@@ -22,7 +22,8 @@ CREATE TABLE glyph (
     stroke_count INTEGER,
     freq_rank    INTEGER,
     hsk          INTEGER,
-    definition   TEXT                -- short English gloss (Unihan kDefinition)
+    definition   TEXT,               -- short English gloss (Unihan kDefinition), classical
+    cedict_defs  TEXT                 -- JSON array of CC-CEDICT senses, the modern gloss
 );
 CREATE INDEX idx_glyph_char ON glyph(char);
 CREATE INDEX idx_glyph_freq_rank ON glyph(freq_rank);
@@ -113,6 +114,17 @@ CREATE TABLE sentence (
     tatoeba_id INTEGER          -- source cmn sentence id (attribution / dedup)
 );
 CREATE INDEX idx_sentence_simp ON sentence(simp);
+
+-- What a component contributes to the characters it appears in, which is not the same as
+-- what it means on its own (页 is "page" alone but lends 项 its "head"). Voted from
+-- makemeahanzi role hints or curated; see pipeline/radicals.py.
+CREATE TABLE component_gloss (
+    component_id TEXT PRIMARY KEY,   -- glyph.char or combining form, as in component_use
+    gloss        TEXT NOT NULL,
+    source_id    TEXT NOT NULL,      -- makemeahanzi | curated
+    support      INTEGER NOT NULL,   -- characters voting for this gloss (0 when curated)
+    agreement    REAL NOT NULL       -- support / all votes for this component
+);
 
 CREATE TABLE script_form (
     glyph_id  TEXT NOT NULL REFERENCES glyph(id),

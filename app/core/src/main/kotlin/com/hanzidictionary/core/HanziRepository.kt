@@ -157,7 +157,12 @@ class HanziRepository(
                 navigable = !isPseudo,
                 glyphId = compGlyph?.id,
                 resolution = cu.resolution,
-                definition = compGlyph?.definition,
+                // CC-CEDICT first: Unihan's gloss for a component is classical, so a sound
+                // part like 工 reads better as "work" than "labor, work".
+                definition = compGlyph?.let { firstSenses(it.cedict_defs) ?: it.definition },
+                roleGloss = if (isMeaningBearing(cu.function))
+                    db.hanziQueries.componentGlossFor(cu.component_id).executeAsOneOrNull()
+                else null,
                 pinyin = compPinyin,
             )
         }
@@ -181,6 +186,7 @@ class HanziRepository(
             scripts = g.scripts,
             tier = tier,
             definition = g.definition,
+            modernSenses = parseSenses(g.cedict_defs),
             strokeCount = g.stroke_count,
             freqRank = g.freq_rank,
             hsk = g.hsk,

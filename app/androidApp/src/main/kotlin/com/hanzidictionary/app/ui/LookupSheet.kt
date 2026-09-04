@@ -58,6 +58,7 @@ import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.WordPage
+import com.hanzidictionary.core.isSoundBearing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -388,7 +389,11 @@ private fun CharacterSheetContent(
                         }
                     }
                 }
-                p.definition?.let { def ->
+                // CC-CEDICT leads: Unihan's gloss is a classical one and routinely misses the
+                // sense the words below actually use (项 is "neck, nape" there, "item" here).
+                val headlineGloss = p.modernSenses.take(4).joinToString("; ").ifEmpty { null }
+                    ?: p.definition
+                headlineGloss?.let { def ->
                     Text(def, fontSize = 14.5.sp, lineHeight = 19.sp, color = eth.ink700, fontFamily = InstrumentSans)
                 }
                 // Meta (freq · HSK · strokes) rides right under the definition rather than in
@@ -467,8 +472,13 @@ private fun CharacterSheetContent(
                         Text(c.displayChar ?: "", fontSize = 22.sp, color = color, fontFamily = NotoCjk)
                         Column(Modifier.weight(1f)) {
                             Text(roleLabel, fontFamily = PlexMono, fontSize = 8.5.sp, lineHeight = 11.sp, color = eth.textFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            c.definition?.let { d ->
-                                Text(shortGloss(d), fontSize = 11.sp, lineHeight = 13.sp, color = eth.ink700, fontFamily = InstrumentSans, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            // A meaning part is glossed by what it contributes here, not by
+                            // what it means alone, and the role gloss replaces rather than
+                            // joins it: this line is one ellipsized row, and "head" is the
+                            // whole point where "head · page, sheet, leaf" is truncated noise.
+                            val gloss = c.roleGloss ?: c.definition?.let { shortGloss(it) }
+                            gloss?.let { d ->
+                                Text(d, fontSize = 11.sp, lineHeight = 13.sp, color = eth.ink700, fontFamily = InstrumentSans, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }

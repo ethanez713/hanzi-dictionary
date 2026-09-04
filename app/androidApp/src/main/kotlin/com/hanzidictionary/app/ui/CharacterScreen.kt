@@ -47,6 +47,8 @@ import com.hanzidictionary.core.ReadingView
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.WordView
+import com.hanzidictionary.core.isMeaningBearing
+import com.hanzidictionary.core.isSoundBearing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject

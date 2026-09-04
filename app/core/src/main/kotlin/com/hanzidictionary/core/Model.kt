@@ -29,9 +29,22 @@ data class ComponentBreakdown(
     val glyphId: String?,      // set when the component is itself a pack character, so a tap
                                // can open its character page rather than its component page
     val resolution: String,    // computed|agreement|single_source|conflict (spec §7 honesty)
-    val definition: String?,   // the component's own gloss — what a meaning-component contributes
+    val definition: String?,   // the component's own standalone gloss
+    val roleGloss: String?,    // what this part contributes here ("head" for 页 in 项), set
+                               // only on meaning-bearing parts — a sound part contributes no
+                               // meaning, so a role gloss on one would be a fiction
     val pinyin: String?,       // the component's primary reading — what a sound-component contributes
 )
+
+/** True when this component lends its character meaning — the parts a role gloss describes. */
+fun isMeaningBearing(function: String): Boolean = function == "semantic" || function == "both"
+
+/** True when this component is the one lending its character the sound.
+ *
+ * A component's reading is worth showing whatever its role — a part you can *say* is a part
+ * you can remember — but only here is the reading the point, so this is what decides whether
+ * it's set at full size or as a footnote under the gloss. */
+fun isSoundBearing(function: String): Boolean = function == "phonetic" || function == "both"
 
 data class ClaimView(
     val predicate: String,     // component_function|etymology_text|...
@@ -70,7 +83,9 @@ data class CharacterPage(
     val scripts: String,       // simp|trad|both
     val tier: Int,             // 1 = has Middle+Old Chinese data (full drift analysis),
                                // 2 = modern-computed only (spec §6 honesty)
-    val definition: String?,   // short English gloss (Unihan kDefinition)
+    val definition: String?,   // Unihan kDefinition — a classical gloss, so it can miss the
+                               // sense a learner meets (项 is "neck, nape" here, not "item")
+    val modernSenses: List<String>,  // CC-CEDICT senses; the gloss to lead with when present
     val strokeCount: Long?,
     val freqRank: Long?,
     val hsk: Long?,

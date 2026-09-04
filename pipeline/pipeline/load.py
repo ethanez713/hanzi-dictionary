@@ -29,7 +29,7 @@ def load_sources(conn: sqlite3.Connection, manifests: dict[str, dict]) -> None:
 
 
 def load_glyphs(conn: sqlite3.Connection, glyphs: list[tuple]) -> None:
-    conn.executemany("INSERT INTO glyph VALUES (?,?,?,?,?,?,?)", glyphs)
+    conn.executemany("INSERT INTO glyph VALUES (?,?,?,?,?,?,?,?)", glyphs)
 
 
 def load_readings(conn: sqlite3.Connection, readings: list[tuple]) -> None:
@@ -75,6 +75,12 @@ def load_words(conn: sqlite3.Connection, rows: list[tuple]) -> None:
 
 def load_word_chars(conn: sqlite3.Connection, rows: list[tuple]) -> None:
     conn.executemany("INSERT INTO word_char VALUES (?,?,?)", rows)
+
+
+def load_component_glosses(conn: sqlite3.Connection, rows: list[tuple]) -> None:
+    conn.executemany(
+        "INSERT INTO component_gloss (component_id, gloss, source_id, support, agreement)"
+        " VALUES (?,?,?,?,?)", rows)
 
 
 def load_sentences(conn: sqlite3.Connection, rows: list[tuple]) -> None:

@@ -14,6 +14,7 @@ for a personal project. Run `python -m pipeline.build` from pipeline/ after
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import re as _re_sent
 from pathlib import Path
@@ -337,6 +338,36 @@ def build_sentences(
     return rows
 
 
+def single_char_cedict_defs(cedict_dir: Path) -> dict[str, list[str]]:
+    """Simplified character -> its CC-CEDICT senses, which build_words drops as too short.
+
+    Unihan's kDefinition is a classical gloss and routinely misses the sense a learner
+    actually meets — 项 is "neck, nape of neck; sum; funds" there and "back of neck / item /
+    thing / ... / classifier for principles, items, clauses, tasks" here.
+
+    A character with several readings contributes all of them, but proper-noun readings go
+    last: CC-CEDICT gives 项 a "surname Xiang" entry that would otherwise head the gloss.
+    A capitalised pinyin token is CC-CEDICT's own marker for that."""
+    entries = parsers.parse_cedict(cedict_dir / "cedict_ts.u8")
+    by_char: dict[str, list[tuple[bool, list[str]]]] = {}
+    for _trad, simp, numbered, defs in entries:
+        if len(simp) != 1:
+            continue
+        is_proper = numbered[:1].isupper()
+        by_char.setdefault(simp, []).append((is_proper, defs))
+
+    out: dict[str, list[str]] = {}
+    for char, readings in by_char.items():
+        senses: list[str] = []
+        for _proper, defs in sorted(readings, key=lambda r: r[0]):
+            for d in defs:
+                if d not in senses:
+                    senses.append(d)
+        if senses:
+            out[char] = senses
+    return out
+
+
 def build() -> Path:
     snapshot_paths = {name: latest_snapshot(name) for name in SOURCES}
     manifests = load_manifests(snapshot_paths)
@@ -364,6 +395,8 @@ def build() -> Path:
     # look-alike pairing needs and the pack schema has nowhere to keep.
     layout_by_id: dict[str, str] = {}
 
+    cedict_defs = single_char_cedict_defs(snapshot_paths["cedict"])
+
     # Parent definitions for radical-gloss derivation (讠's useful gloss lives on 言).
     parent_defs = {
         parent: (entities.get(ord(parent)).definition if ord(parent) in entities else None)
@@ -375,7 +408,11 @@ def build() -> Path:
         gid = f"U+{cp:04X}"
         rank = freq_rank_map.get(cp)
         definition = radicals.radical_gloss(e.char, e.definition, parent_defs) or e.definition
-        glyph_rows.append((gid, e.char, glyph_scripts(e), e.total_strokes, rank, e.hsk, definition))
+        senses = cedict_defs.get(e.char)
+        glyph_rows.append((
+            gid, e.char, glyph_scripts(e), e.total_strokes, rank, e.hsk, definition,
+            json.dumps(senses, ensure_ascii=False) if senses else None,
+        ))
 
         for system, value, freq in dedupe_readings(e):
             reading_rows.append((gid, system, value, None, freq, "unihan" if system not in ("mc_baxter", "oc_zz", "oc_bs") else "wiktextract"))
@@ -462,6 +499,29 @@ def build() -> Path:
             "dong", None, 0.95, dong_retrieved,
         ))
     print(f"  Dong override: {len(override)} characters (human-verified component functions)")
+
+    # Role glosses are voted from makemeahanzi and are therefore untouched by the Dong
+    # override above, which only replaces component_use and the component_function claim.
+    role_glosses = radicals.vote_role_glosses(
+        {cp: e.makemeahanzi for cp, e in entities.items() if e.makemeahanzi}
+    )
+    component_gloss_rows = [
+        (component, gloss, source, support, agreement)
+        for component, (gloss, source, support, agreement) in sorted(role_glosses.items())
+    ]
+    semantic_uses = collections.Counter(
+        r[1] for r in component_use_rows if r[3] in ("semantic", "both")
+    )
+    glossed = sum(n for c, n in semantic_uses.items() if c in role_glosses)
+    unglossed = sorted(
+        ((n, c) for c, n in semantic_uses.items() if c not in role_glosses), reverse=True
+    )
+    print(f"  component_gloss: {len(component_gloss_rows)} components "
+          f"({sum(1 for r in component_gloss_rows if r[2] == 'curated')} curated) "
+          f"covering {glossed}/{sum(semantic_uses.values())} semantic displays")
+    if unglossed:
+        print("    no role gloss (falls back to the standalone gloss): "
+              + " ".join(f"{c}:{n}" for n, c in unglossed[:12]))
 
     drafts = merge.resolve_variant_edges(entities)
     variant_edge_rows = [
@@ -583,15 +643,17 @@ def build() -> Path:
     load.load_confusables(conn, confusable_rows)
     load.load_words(conn, word_rows)
     load.load_word_chars(conn, word_char_rows)
+    load.load_component_glosses(conn, component_gloss_rows)
     load.load_sentences(conn, sentence_rows)
     conn.commit()
     conn.close()
 
     print(f"built {db_path}")
-    print(f"  glyphs={len(glyph_rows)} readings={len(reading_rows)} decompositions={len(decomposition_rows)}")
+    print(f"  glyphs={len(glyph_rows)} ({sum(1 for r in glyph_rows if r[7])} with CC-CEDICT senses) readings={len(reading_rows)} decompositions={len(decomposition_rows)}")
     print(f"  component_use={len(component_use_rows)} claims={len(claim_rows)}")
     print(f"  variant_edges={len(variant_edge_rows)} phonetic_series={len(phonetic_series_rows)} confusables={len(confusable_rows)}")
     print(f"  words={len(word_rows)} word_chars={len(word_char_rows)} sentences={len(sentence_rows)}")
+    print(f"  component_glosses={len(component_gloss_rows)}")
     return db_path
 
 

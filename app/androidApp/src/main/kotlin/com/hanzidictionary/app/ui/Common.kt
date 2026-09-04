@@ -178,15 +178,8 @@ fun functionColor(function: String): Color = when (function) {
     else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
-/** True when this component is the one lending its character the sound.
- *
- * A component's reading is worth showing whatever its role — a part you can *say* is a part
- * you can remember — but only here is the reading the point, so this is what decides whether
- * it's set at full size or as a footnote under the gloss. */
-fun isSoundBearing(function: String): Boolean = function == "phonetic" || function == "both"
 
 /** True when this component is the one lending its character the meaning. */
-fun isMeaningBearing(function: String): Boolean = function == "semantic" || function == "both"
 
 /**
  * What goes on a component's sound line: either a reading or a radical's name, never both.

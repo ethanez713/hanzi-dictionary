@@ -75,7 +75,7 @@ def build_core_db(src: sqlite3.Connection) -> None:
     core_tables = [
         "source", "glyph", "reading", "decomposition", "component_use",
         "claim", "variant_edge", "phonetic_series", "word", "word_char",
-        "sentence", "script_form", "confusable", "audio",
+        "sentence", "script_form", "confusable", "audio", "component_gloss",
     ]
     _copy_schema_and_data(
         src, CORE_DB, core_tables,

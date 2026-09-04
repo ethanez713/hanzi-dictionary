@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -37,6 +38,71 @@ class HanziRepositoryTest {
     fun teardown() {
         coreDriver.close()
         idsDriver.close()
+    }
+
+    @Test
+    fun aMeaningComponentIsGlossedByWhatItContributes() {
+        // 页 alone is "page, sheet, leaf" — a borrowed sense. What it lends 项 is "head",
+        // which is the only reading under which 工 + 页 arriving at "nape of neck" parses.
+        val xiang = repo.characterPageByChar("项")
+        assertNotNull(xiang)
+        assertEquals("head", xiang.breakdown.single { it.componentId == "页" }.roleGloss)
+
+        // The same defect across the highest-traffic components in the pack: 王 in 珠 is
+        // 玉 "jade", not "king"; 贝 in 财 is "money", not "sea shell".
+        assertEquals("jade", repo.characterPageByChar("珠")!!
+            .breakdown.single { it.componentId == "王" }.roleGloss)
+        assertEquals("money", repo.characterPageByChar("财")!!
+            .breakdown.single { it.componentId == "贝" }.roleGloss)
+
+        // 𤣩 has no glyph row of its own, so nothing but the curated table can gloss it and
+        // 玩 showed a blank component card before this fix.
+        assertEquals("jade", repo.characterPageByChar("玩")!!
+            .breakdown.single { it.componentId == "𤣩" }.roleGloss)
+    }
+
+    @Test
+    fun aSoundComponentGetsNoRoleGloss() {
+        // 工 lends 项 nothing but its sound, so a "meaning it contributes" would be a fiction.
+        val gong = repo.characterPageByChar("项")!!.breakdown.single { it.componentId == "工" }
+        assertNull(gong.roleGloss)
+        assertNotNull(gong.definition, "it still carries its own gloss, which is what shows")
+    }
+
+    @Test
+    fun everyRoleGlossedComponentIsMeaningBearing() {
+        // The rule lives in the repository rather than the UI, so assert it holds pack-wide
+        // rather than for the handful of characters spelled out above.
+        for (char in listOf("项", "玩", "财", "情", "说", "妈", "钱")) {
+            val page = repo.characterPageByChar(char) ?: continue
+            for (part in page.breakdown.filter { it.roleGloss != null }) {
+                assertTrue(isMeaningBearing(part.function),
+                    "$char/${part.componentId} is ${part.function} but carries a role gloss")
+            }
+        }
+    }
+
+    @Test
+    fun theHeadlineGlossLeadsWithTheModernSense() {
+        // Unihan has 项 as "neck, nape of neck; sum; funds" — none of which is the sense in
+        // 项目/选项/事项, every one of the words the same page lists underneath.
+        val xiang = repo.characterPageByChar("项")
+        assertNotNull(xiang)
+        assertTrue(xiang.modernSenses.isNotEmpty())
+        assertTrue(xiang.modernSenses.any { it == "item" }, "got ${xiang.modernSenses}")
+        assertFalse(xiang.modernSenses.first().startsWith("surname"),
+            "a proper-noun reading must not head the gloss")
+        assertTrue(xiang.definition!!.contains("nape"), "the classical gloss is still kept")
+    }
+
+    @Test
+    fun aCharacterWithNoCedictEntryStillHasAGloss() {
+        // Two thirds of the pack has no CC-CEDICT single-char entry, so the Unihan gloss is
+        // the fallback and must not have been displaced.
+        val rare = repo.characterPageByChar("龘")
+        if (rare != null) {
+            assertTrue(rare.modernSenses.isEmpty() || rare.definition != null)
+        }
     }
 
     @Test

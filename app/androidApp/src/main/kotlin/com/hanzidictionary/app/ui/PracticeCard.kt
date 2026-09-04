@@ -38,6 +38,7 @@ import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ItemSummary
 import com.hanzidictionary.core.StudyItem
+import com.hanzidictionary.core.isSoundBearing
 
 /** The back of a card: everything worth teaching once the answer is out. */
 internal data class CardBack(
