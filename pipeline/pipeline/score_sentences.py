@@ -3,9 +3,9 @@
 Hours of local GPU, so it runs on its own and caches every score; `pipeline.build` reads the
 cache when it exists and ignores it when it doesn't. Interrupt it freely — rerunning resumes.
 
-    python -m pipeline.score_sentences --scope hsk14    # ~12k sentences, ~2.5 h
-    python -m pipeline.score_sentences --scope common   # ~29k sentences, ~6 h
-    python -m pipeline.score_sentences --scope all      # ~78k sentences, ~16 h
+    python -m pipeline.score_sentences --scope hsk14    # ~11k sentences, ~3.5 h
+    python -m pipeline.score_sentences --scope common   # ~25k sentences, ~10 h
+    python -m pipeline.score_sentences --scope all      # ~57k sentences, ~30 h
 
 Scope exists because most of the corpus cannot benefit: a word with a single example keeps it
 whatever it scores (build_sentences never empties a word), and an obscure word's example is
@@ -32,6 +32,18 @@ SCOPES = {
 }
 
 
+# Seconds per sentence, measured at a mean length of 13 characters. Cost tracks length
+# because the sentence is the prompt, so the estimate scales rather than assuming an average.
+SECONDS_PER_SENTENCE_AT_LEN_13 = 1.5
+
+
+def estimate_hours(texts: list[str]) -> float:
+    if not texts:
+        return 0.0
+    mean_len = sum(len(t) for t in texts) / len(texts)
+    return len(texts) * SECONDS_PER_SENTENCE_AT_LEN_13 * (mean_len / 13) / 3600
+
+
 def sentences_for(scope: str) -> list[tuple[str, str]]:
     con = sqlite3.connect(f"file:{PACK}?mode=ro", uri=True)
     rows = con.execute(f"""
@@ -54,9 +66,10 @@ def main() -> None:
 
     items = sentences_for(args.scope)
     cached = quality.load_cache(args.cache)
-    todo = sum(1 for k, _ in items if k not in cached)
-    print(f"scope={args.scope}: {len(items)} sentences, {len(cached)} already cached, {todo} to score")
-    print(f"estimated {todo * 0.74 / 3600:.1f} h — safe to interrupt, rerun to resume\n")
+    pending = [text for k, text in items if k not in cached]
+    print(f"scope={args.scope}: {len(items)} sentences, "
+          f"{len(items) - len(pending)} already cached, {len(pending)} to score")
+    print(f"estimated {estimate_hours(pending):.1f} h — safe to interrupt, rerun to resume\n")
 
     started = time.time()
 

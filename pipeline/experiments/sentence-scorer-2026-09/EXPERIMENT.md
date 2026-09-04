@@ -13,7 +13,7 @@ its five siblings, because brevity and word frequency are what such a model meas
 
 Asked directly, the local `qwen2.5:7b` scores it 2 while its siblings score 4-5. That is one
 case. **This experiment asks whether the model is measuring idiomaticity at all, or noise
-that happened to land right once** — before anyone spends 2.5 to 16 hours of GPU on it.
+that happened to land right once** — before anyone spends hours of GPU on it.
 
 No human labels Chinese anywhere in this. Corrupting sentences the model already rated highly
 manufactures a labelled set for free.
@@ -93,7 +93,7 @@ cd pipeline
 PYTHONPATH=. .venv/bin/python -m pipeline.score_sentences --scope hsk14
 ```
 
-~12,000 sentences, ~2.5 h on the RTX 3050, writing
+~10,700 sentences, ~3.5 h on the RTX 3050, writing
 `pipeline/data/derived/sentence-quality.jsonl`. Interrupt it whenever; rerun to resume. It
 prints a rate and an ETA every 500 sentences, and a score histogram at the end.
 
@@ -102,9 +102,13 @@ whatever it scores, and an obscure word's example is not worth the GPU:
 
 | `--scope` | Sentences | GPU | Covers |
 | --- | --- | --- | --- |
-| `hsk14` | ~12,000 | ~2.5 h | HSK 1-4 or top-2000 frequency |
-| `common` | ~29,000 | ~6 h | any HSK level or top-5000 frequency |
-| `all` | ~78,000 | ~16 h | everything, including the OPUS/TED2020 rows |
+| `hsk14` | ~10,700 | ~3.5 h | HSK 1-4 or top-2000 frequency |
+| `common` | ~24,600 | ~10 h | any HSK level or top-5000 frequency |
+| `all` | ~57,300 | ~30 h | everything, including the OPUS/TED2020 rows |
+
+Counts are distinct sentence *texts*, which is what gets scored — the same sentence attached
+to two words is one judgement. Times are measured at 1.5 s/sentence for a 13-character
+sentence and scale with length, so the CLI's own estimate is the one to trust.
 
 The cache is keyed by sentence text, so a later wider scope only scores what the narrower one
 did not. Start at `hsk14` and look at what it removed before buying more.

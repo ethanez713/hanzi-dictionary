@@ -228,8 +228,9 @@ speaker reported.
 - **Score only the sentences where a score can change something.** A word with one example
   keeps it whatever it scores, so scoring it is wasted GPU, and an obscure word's example is
   not worth an hour of it. Restricted to words that have more than one sentence *and* are
-  HSK-graded or in the top 5,000 by frequency, the run is 29,165 sentences (~6 h); tightened
-  to HSK 1-4 or the top 2,000, it is 12,069 (~2.5 h) against 16 h for the whole pack. The
+  HSK-graded or in the top 5,000 by frequency, the run is 24,600 distinct sentences (~10 h);
+  tightened to HSK 1-4 or the top 2,000, it is 10,700 (~3.5 h) against 30 h for the whole
+  pack. The
   cache is keyed per sentence and fills incrementally, so a tighter scope now does not
   prevent a wider one later.
 
