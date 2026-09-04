@@ -40,3 +40,6 @@ app/.cxx/
 
 # OS
 .DS_Store
+
+# Experiment run logs (the reviewable output is results.json beside them)
+pipeline/experiments/*/run.log

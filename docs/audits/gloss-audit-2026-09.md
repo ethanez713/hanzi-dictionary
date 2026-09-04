@@ -225,9 +225,13 @@ speaker reported.
   The echoed index is load-bearing, not decoration: an earlier bare `{"scores":[…]}` array
   silently returned 19 scores for 20 sentences, which shifts every score after the gap.
   Reject and re-score any chunk whose returned indices don't match what was sent.
-- The run is **~7.5 h for the 36,321 Tatoeba sentences and ~16 h for all 77,849** including
-  the OPUS rows. Run Tatoeba first and OPUS after — the cache is keyed per sentence and
-  fills incrementally, so the work splits across nights without redoing anything.
+- **Score only the sentences where a score can change something.** A word with one example
+  keeps it whatever it scores, so scoring it is wasted GPU, and an obscure word's example is
+  not worth an hour of it. Restricted to words that have more than one sentence *and* are
+  HSK-graded or in the top 5,000 by frequency, the run is 29,165 sentences (~6 h); tightened
+  to HSK 1-4 or the top 2,000, it is 12,069 (~2.5 h) against 16 h for the whole pack. The
+  cache is keyed per sentence and fills incrementally, so a tighter scope now does not
+  prevent a wider one later.
 
 **3b — author nativeness as a tie-break.** `fetch_tatoeba.py` additionally fetches
 `per_language/cmn/cmn_sentences_detailed` and `user_languages`, giving each sentence its
@@ -238,8 +242,12 @@ wrote 21% of the pack. Nativeness is therefore **too coarse to filter on** and i
 to break ties between sentences of equal quality score. `sentences_with_audio` is a second
 tie-break on the same footing: a recorded sentence is more likely to be worth hearing.
 
-The final ordering is `(quality_score desc, native_authored, has_audio, length)` — length,
-which is the whole ranking today, drops to last.
+**The score filters; it does not sort.** Sentences scoring ≤2 are dropped (subject to the
+drop-if-replaceable rule); everything above that keeps the existing ordering, with nativeness
+and audio as tie-breaks ahead of length. Sorting by the raw score would hand the model's
+systematic biases the whole ranking, and it has them: in trial runs it scored ordinary
+traditional-character and foreign-proper-noun sentences 4 where equivalent simplified ones
+got 5. A bottom-end filter is insensitive to that; a sort key is not.
 
 **Rejected: corpus n-gram plausibility.** A word-bigram model over TED2020 (399k lines,
 1.48M bigrams, CEDICT segmentation) ranked 这个项目是一块金 **first** of the five 项目
