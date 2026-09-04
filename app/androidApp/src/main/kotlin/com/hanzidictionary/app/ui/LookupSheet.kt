@@ -400,7 +400,10 @@ private fun CharacterSheetContent(
                 // its own band, so the two read as one block.
                 val metaParts = listOfNotNull(
                     p.freqRank?.let { "freq #$it" },
-                    p.hsk?.let { "HSK $it" },
+                    // glyph.hsk is the lowest level of any HSK word *containing* this
+                    // character, not a level for the character itself — say so, and name the
+                    // list, since HSK 2.0 and 3.0 grade the same word very differently.
+                    p.hsk?.let { "HSK 3.0 ${if (it == 7L) "L7-9" else "L$it"} word" },
                     p.strokeCount?.let { "$it strokes" },
                 )
                 if (metaParts.isNotEmpty()) {
