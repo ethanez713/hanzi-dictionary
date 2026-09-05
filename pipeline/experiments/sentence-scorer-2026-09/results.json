@@ -67,5 +67,7 @@
     "audio_control_not_reversed": true
   },
   "verdict": "PROCEED",
-  "elapsed_minutes": 0.0
+  "elapsed_minutes": 0.0,
+  "verdict_superseded_by": "REVIEW-200.md",
+  "verdict_note": "PROCEED is retracted. A 200-sentence review found ~17% precision at the drop threshold: the corruption arms measured recall on damaged sentences and never precision on undamaged ones. Do not start a production run on this verdict."
 }

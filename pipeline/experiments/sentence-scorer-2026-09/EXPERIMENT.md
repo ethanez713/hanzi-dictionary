@@ -1,5 +1,11 @@
 # Sentence-scorer validation — read this first
 
+> **The PROCEED verdict in `results.json` is retracted — see `REVIEW-200.md`, which is the
+> current state of this question. Do not start the production run described below.** The
+> criteria here measured recall on corrupted sentences and never precision on untouched
+> ones, so a model that answers 2 too readily passes every one of them. Keep the rest of
+> this file for the procedure and the resumability notes, not for the verdict.
+
 **Ephemeral.** Delete this whole directory once the sentence-quality filter has shipped or
 been abandoned. It exists to answer one question and then stop existing.
 
