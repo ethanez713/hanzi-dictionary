@@ -45,16 +45,23 @@ class ScoringUnavailable(RuntimeError):
 
 
 def _call_ollama(prompt: str, num_predict: int, timeout: int, model: str) -> dict:
+    """One scoring call. `think: false` is load-bearing on a reasoning model: left on, the
+    current generation puts its whole answer in the `thinking` field and returns an EMPTY
+    `response`, so every sentence scores None and the run silently produces nothing. It also
+    halves the cost here — there is nothing to reason about in "rate this 1-5", and the
+    scores come back identical either way. The `thinking` fallback covers a model or Ollama
+    build that ignores the flag, so the failure is at worst slow rather than total."""
     body = json.dumps({
-        "model": model, "prompt": prompt, "stream": False, "format": "json",
+        "model": model, "prompt": prompt, "stream": False, "format": "json", "think": False,
         "options": {"temperature": 0, "num_predict": num_predict},
     }).encode()
     request = urllib.request.Request(OLLAMA_URL, body, {"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(json.loads(response.read())["response"])
+            payload = json.loads(response.read())
     except urllib.error.URLError as exc:
         raise ScoringUnavailable(f"{OLLAMA_URL} unreachable: {exc}") from exc
+    return json.loads(payload.get("response") or payload.get("thinking") or "{}")
 
 
 def score_batch(sentences: list[str], *, model: str = MODEL, timeout: int = 600) -> list[int | None]:
