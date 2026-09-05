@@ -215,6 +215,19 @@ def main() -> None:
         "mean_abs_diff": round(mean([abs(a - b) for a, b in both]), 3),
     }
 
+    # How much of that instability lands on the decision the filter actually makes. A score
+    # that wobbles 4<->5 costs nothing; one that wobbles across the drop threshold decides a
+    # sentence's fate on a coin flip, and the mean absolute difference hides the difference.
+    threshold_flips = sum(1 for a, b in both if (a <= 2) != (b <= 2))
+    condemned = [(a, b) for a, b in both if a <= 2 or b <= 2]
+    results["threshold_stability"] = {
+        "threshold": 2,
+        "n": len(both),
+        "pct_verdict_flips": round(100 * threshold_flips / len(both), 1) if both else None,
+        "n_condemned_by_either_run": len(condemned),
+        "n_condemned_by_both": sum(1 for a, b in condemned if a <= 2 and b <= 2),
+    }
+
     # --- 3. Recorded-audio control -------------------------------------------------------
     print("[3/3] audio control...", flush=True)
     audio_ids = fetch_audio_ids()
@@ -252,6 +265,11 @@ def main() -> None:
         "audio_control_not_reversed": (results["audio_control"] is None
                                        or results["audio_control"]["difference"] >= 0),
     }
+    # Deliberately not a pass criterion: a single-pass filter is unreliable at the threshold,
+    # but that is a fixable property of the filter, not a verdict on the model. The fix — a
+    # confirming second pass over only the condemned sentences — is in EXPERIMENT.md.
+    results["threshold_stability"]["single_pass_is_reliable"] = (
+        results["threshold_stability"]["pct_verdict_flips"] or 0) < 0.5
     results["checks"] = checks
     results["verdict"] = "PROCEED" if all(checks.values()) else "DO NOT PROCEED"
     results["elapsed_minutes"] = round((time.time() - started) / 60, 1)

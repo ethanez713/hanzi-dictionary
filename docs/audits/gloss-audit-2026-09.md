@@ -213,6 +213,10 @@ which produced each and a model swap re-scores rather than blending the two.
   rows that have no id) to a score. `build_sentences` reads it when present and ignores it
   when absent, exactly as the Dong lexicon is treated — so a clean checkout with no Ollama
   still builds a valid, publishable pack.
+- **A drop needs two passes to agree.** One pass is not reliable at the threshold: 2% of
+  sentences flip their drop/keep verdict between runs, and of the sentences either pass put
+  at ≤2, fewer than half were agreed by both. Re-scoring only the condemned sentences costs
+  about 3.5% more GPU and removes most of the false drops.
 - **The rule is drop-if-replaceable, never drop-to-empty.** 9,325 words have exactly one
   example sentence and 21,857 have two, so an unconditional cut would empty thousands of
   word pages. A sentence scoring ≤2 is dropped only while its word keeps at least one

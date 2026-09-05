@@ -44,6 +44,7 @@ finish — see *Rerunning* below.
 | `mean_drop` | Original score minus corrupted score. Compare against `retest.mean_abs_diff` — a drop smaller than the noise floor means nothing. |
 | `pct_caught_at_threshold` | Of corruptions whose original scored ≥4, the share the model pushed to ≤2 — i.e. what the shipped filter would actually catch. |
 | `known_case` | The reported sentence 这个项目是一块金 against its four siblings on the same word. The original observation, re-run. |
+| `threshold_stability` | How much of the retest wobble lands on the drop/keep decision itself. `mean_abs_diff` hides this: a score that moves 4↔5 costs nothing, one that moves 5↔2 decides a sentence's fate on a coin flip. |
 | `audio_control` | Sentences with a recorded Tatoeba reading vs without. A weak positive control; a **negative** difference means the score is tracking something other than quality. |
 
 ### Pass criteria (fixed before any data was collected)
@@ -145,6 +146,13 @@ Steps 7-9 of `~/.claude/worklog/chinese.md`. In `build_sentences`:
 1. Load the cache when it exists; when it does not, change nothing — a clean checkout with no
    Ollama must still build a valid, publishable pack, exactly as it does without the Dong
    lexicon.
+1b. **Confirm every condemnation with a second pass.** A single pass is not reliable at the
+   threshold — measured, 2% of sentences flip their drop/keep verdict between runs, and only
+   3 of the 7 sentences either run put at ≤2 were agreed by both. Half of what one pass drops
+   is a fluke. Re-score *only* the sentences that scored ≤2 and drop only where both passes
+   agree. That is roughly 3.5% of the corpus, so the fix costs almost nothing, and it is why
+   `score_all` must not be given the same cache key for the confirming pass.
+
 2. Drop a sentence scoring ≤2 **only while its word keeps at least one**. 9,325 words have
    exactly one example and 21,857 have two; an unconditional cut empties thousands of word
    pages. Coverage must not regress, and the build should print how many sentences were
