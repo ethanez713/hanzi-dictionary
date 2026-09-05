@@ -201,11 +201,12 @@ component breakdown.
 Two mechanical filters, in order of how much they are worth. Neither needs a human to read
 any Chinese.
 
-**3a — a local-model naturalness score (the one that works).** `qwen2.5:7b` on the local
-Ollama server rates each sentence 1-5 for naturalness. Measured on the reported case it
-separates cleanly: 这个项目是一块金 scores 2 while every sibling sentence for 项目, 项链 and
-及时 scores 4-5. This is the only signal tested that identifies the defect the native
-speaker reported.
+**3a — a local-model naturalness score (the one that works).** The local Ollama model
+(`pipeline.quality.MODEL`) rates each sentence 1-5 for naturalness. Measured on the reported
+case it separates cleanly: 这个项目是一块金 scores 2 while every sibling sentence for 项目,
+项链 and 及时 scores 4-5. This is the only signal tested that identifies the defect the
+native speaker reported. Scores are comparable only within one model, so the cache records
+which produced each and a model swap re-scores rather than blending the two.
 
 - **Scoring runs offline and is cached, never at build time.** A `sentence_quality` snapshot
   under `pipeline/data/snapshots/` maps `tatoeba_id` (and a hash of the text, for the OPUS

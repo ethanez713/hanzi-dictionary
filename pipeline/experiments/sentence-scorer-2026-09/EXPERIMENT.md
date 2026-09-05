@@ -11,9 +11,13 @@ rendered word for word. Sentences are currently ranked by **length alone**, and 
 bad sentence's shape marks it: a word-bigram model over TED2020 ranked that one *first* of
 its five siblings, because brevity and word frequency are what such a model measures.
 
-Asked directly, the local `qwen2.5:7b` scores it 2 while its siblings score 4-5. That is one
-case. **This experiment asks whether the model is measuring idiomaticity at all, or noise
-that happened to land right once** — before anyone spends hours of GPU on it.
+Asked directly, a local model scores it 2 while its siblings score 4-5. That is one case.
+**This experiment asks whether the model is measuring idiomaticity at all, or noise that
+happened to land right once** — before anyone spends hours of GPU on it.
+
+The model under test is whatever `pipeline/quality.py` sets as `MODEL`; `results.json`
+records it. Scores from different models are not comparable, so re-run this whole experiment
+after any model change — the cache does the same, keyed by model.
 
 No human labels Chinese anywhere in this. Corrupting sentences the model already rated highly
 manufactures a labelled set for free.
@@ -60,8 +64,9 @@ finish — see *Rerunning* below.
     `pipeline/quality.py` (measured at 100% single-shot agreement against 98% at ten) and
     rerun; the run gets slower, not worse.
   - (2) failed: the model is not reading Chinese at this size. Do not tune the prompt — try a
-    different local model, or drop the idea. **Do not send sentences to a cloud model**; this
-    is a token-cost decision the user has already made.
+    different local model (check https://ollama.com/library for the current generation that
+    fits 6 GB), or drop the idea. **Do not send sentences to a cloud model**; this is a
+    token-cost decision the user has already made.
   - (3) failed but (2) passed: it detects grammar, not idiomaticity. That is exactly the
     n-gram failure again and does not fix the reported bug. Abandon the filter and leave the
     sentence ranking as it is — the honest outcome, and the one this experiment exists to

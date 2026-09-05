@@ -22,7 +22,12 @@ from pathlib import Path
 from typing import Callable, Iterable, Iterator
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "qwen2.5:7b"
+# Chosen for Chinese: the Qwen line is trained on it natively, which matters more here than
+# raw size. 4b is the largest of its generation that fits this box's 6 GB card — the 9b
+# starts at 6.6 GB. Before trusting this for a long run, check whether it has aged out:
+# `ollama list` prints the install date and https://ollama.com/library carries the current
+# generation. A model swap invalidates every cached score (see load_cache).
+MODEL = "qwen3.5:4b"
 
 # Ten at a time costs 0.74 s/sentence against 3.02 s one at a time and agrees with the
 # single-shot score within one point 98% of the time, so the batching is nearly free.
@@ -83,9 +88,16 @@ def _clamp(score: int) -> int | None:
     return score if 1 <= score <= 5 else None
 
 
-def load_cache(path: Path) -> dict[str, int]:
-    """Scores already on disk. A half-written final line is dropped rather than raised on:
-    the process is expected to be killed mid-run, and one lost score is not worth a crash."""
+def load_cache(path: Path, model: str = MODEL) -> dict[str, int]:
+    """Scores already on disk **for this model**.
+
+    Rows carry the model that produced them and rows from any other are ignored, so swapping
+    models re-scores instead of silently blending two models' judgements into one ranking —
+    the scores are only comparable to each other. Rows are never rewritten or deleted; the
+    file is append-only so an interrupted run cannot corrupt what came before.
+
+    A half-written final line is dropped rather than raised on: the process is expected to be
+    killed mid-run, and one lost score is not worth a crash."""
     if not path.exists():
         return {}
     out: dict[str, int] = {}
@@ -93,7 +105,8 @@ def load_cache(path: Path) -> dict[str, int]:
         for line in f:
             try:
                 row = json.loads(line)
-                out[row["k"]] = row["s"]
+                if row.get("m") == model:
+                    out[row["k"]] = row["s"]
             except (json.JSONDecodeError, KeyError):
                 continue
     return out
@@ -114,7 +127,7 @@ def score_all(
     expected case, not the exceptional one. Failures are deliberately NOT cached, so a
     later run retries them instead of inheriting a hole."""
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache = load_cache(cache_path)
+    cache = load_cache(cache_path, model)
     pending = [(k, text) for k, text in items if k not in cache]
     done = 0
 
@@ -125,7 +138,7 @@ def score_all(
                 if score is None:
                     continue
                 cache[key] = score
-                out.write(json.dumps({"k": key, "s": score}) + "\n")
+                out.write(json.dumps({"k": key, "s": score, "m": model}) + "\n")
             out.flush()
             os.fsync(out.fileno())
             done += len(chunk)

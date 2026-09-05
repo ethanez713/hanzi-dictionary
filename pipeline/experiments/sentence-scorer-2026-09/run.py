@@ -1,4 +1,4 @@
-"""Does qwen2.5:7b actually measure idiomaticity, or just fluency-shaped noise?
+"""Does the local model actually measure idiomaticity, or just fluency-shaped noise?
 
 Answers it without anyone hand-labelling Chinese: corrupt sentences the model already
 rated highly, in ways that mimic the defect we are hunting, and see whether the score
