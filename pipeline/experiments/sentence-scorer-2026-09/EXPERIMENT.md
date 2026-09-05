@@ -43,10 +43,15 @@ finish — see *Rerunning* below.
 | `corruption.noun_swap` | A content word replaced by one from an unrelated sentence: still grammatical, wrong collocation. The closest analogue to 一块金. |
 | `mean_drop` | Original score minus corrupted score. Compare against `retest.mean_abs_diff` — a drop smaller than the noise floor means nothing. |
 | `pct_caught_at_threshold` | Of corruptions whose original scored ≥4, the share the model pushed to ≤2 — i.e. what the shipped filter would actually catch. |
+| `known_case` | The reported sentence 这个项目是一块金 against its four siblings on the same word. The original observation, re-run. |
 | `audio_control` | Sentences with a recorded Tatoeba reading vs without. A weak positive control; a **negative** difference means the score is tracking something other than quality. |
 
-### Pass criteria (fixed 2026-09-05, before the run)
+### Pass criteria (fixed before any data was collected)
 
+0. `known_case.flagged_score` ≤ 2 **and** `known_case.mean_sibling_score` ≥ 4 — the
+   observation that started this, re-checked against the configured model. A model that
+   cannot reproduce it has no business scoring ten thousand sentences however well it does
+   on synthetic corruptions.
 1. `retest.pct_within_1` ≥ 90 and `retest.mean_abs_diff` ≤ 0.5 — below this the score is too
    unstable to threshold, and nothing else in the file matters.
 2. `corruption.transpose.pct_scored_lower` ≥ 60.
@@ -54,12 +59,14 @@ finish — see *Rerunning* below.
 4. `audio_control.difference` ≥ 0 (or the control is `null`, if Tatoeba's audio list could
    not be fetched — that degrades the evidence but does not fail the run).
 
-`verdict` is `PROCEED` only when all four hold.
+`verdict` is `PROCEED` only when all five hold.
 
 ### What to do with each verdict
 
 - **PROCEED** — run the production pass below.
 - **DO NOT PROCEED** — read which check failed before touching anything.
+  - (0) failed: this model cannot do the task the whole idea rests on. Try the next size up
+    that fits 6 GB before anything else; do not tune the prompt to rescue one case.
   - Only (1) failed: the model is unstable, not wrong. Try `BATCH_SIZE = 5` in
     `pipeline/quality.py` (measured at 100% single-shot agreement against 98% at ten) and
     rerun; the run gets slower, not worse.

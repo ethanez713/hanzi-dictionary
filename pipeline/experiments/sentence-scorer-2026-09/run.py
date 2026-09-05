@@ -136,6 +136,26 @@ def main() -> None:
 
     results: dict = {"seed": SEED, "model": quality.MODEL, "batch_size": quality.BATCH_SIZE}
 
+    # --- 0. The motivating case ----------------------------------------------------------
+    # The observation that started all of this, re-checked against whatever model is
+    # configured now. Cheap, and a model that cannot reproduce it has no business scoring
+    # 10,000 sentences however well it does on synthetic corruptions.
+    print("[0/3] the reported case...", flush=True)
+    flagged = "这个项目是一块金。"
+    siblings = [zh for (zh,) in con.execute(
+        "SELECT zh FROM sentence WHERE simp = '项目' AND zh != ?", (flagged,))]
+    case = quality.score_all(
+        [(f"c{i}", t) for i, t in enumerate([flagged] + siblings)],
+        CACHE_DIR / "known_case.jsonl", on_progress=None)
+    sibling_scores = [case[f"c{i}"] for i in range(1, len(siblings) + 1) if f"c{i}" in case]
+    results["known_case"] = {
+        "flagged_sentence": flagged,
+        "flagged_score": case.get("c0"),
+        "n_siblings": len(sibling_scores),
+        "mean_sibling_score": round(mean(sibling_scores), 3),
+    }
+    print(f"    flagged={case.get('c0')}  siblings mean={mean(sibling_scores):.2f}", flush=True)
+
     # --- 1. Corruption sensitivity -------------------------------------------------------
     print("[1/3] scoring originals...", flush=True)
     originals = rows[:N_CORRUPT]
@@ -220,7 +240,11 @@ def main() -> None:
     noise = retest["mean_abs_diff"]
     real = [k for k in ("classifier", "noun_swap")
             if (corruption[k]["mean_drop"] or 0) >= noise + 1.0]
+    known = results["known_case"]
     checks = {
+        "known_case_separated": (known["flagged_score"] is not None
+                                 and known["flagged_score"] <= 2
+                                 and known["mean_sibling_score"] >= 4),
         "retest_within_1_ge_90": (retest["pct_within_1"] or 0) >= 90,
         "retest_noise_le_0_5": noise <= 0.5,
         "transpose_lower_ge_60pct": (corruption["transpose"]["pct_scored_lower"] or 0) >= 60,
