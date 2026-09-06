@@ -1,10 +1,12 @@
 # Sentence-scorer validation — read this first
 
-> **The PROCEED verdict in `results.json` is retracted — see `REVIEW-200.md`, which is the
-> current state of this question. Do not start the production run described below.** The
-> criteria here measured recall on corrupted sentences and never precision on untouched
-> ones, so a model that answers 2 too readily passes every one of them. Keep the rest of
-> this file for the procedure and the resumability notes, not for the verdict.
+> **Read `REVIEW-400.md` first — it is the current state of this question.** The PROCEED
+> verdict in `results.json` was retracted (`REVIEW-200.md`) and then resolved: the failure
+> was the batching, not the model, and scored one sentence at a time precision is 94%.
+> The criteria in *this* file measured recall on corrupted sentences and never precision on
+> untouched ones, so a model that answers 2 too readily passes every one of them — that hole
+> is why the corruption arms alone must never gate a production run again. Keep the rest of
+> this file for the procedure and the resumability notes.
 
 **Ephemeral.** Delete this whole directory once the sentence-quality filter has shipped or
 been abandoned. It exists to answer one question and then stop existing.

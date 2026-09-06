@@ -213,23 +213,24 @@ which produced each and a model swap re-scores rather than blending the two.
   rows that have no id) to a score. `build_sentences` reads it when present and ignores it
   when absent, exactly as the Dong lexicon is treated — so a clean checkout with no Ollama
   still builds a valid, publishable pack.
-- **A drop needs two passes to agree.** One pass is not reliable at the threshold: 2% of
-  sentences flip their drop/keep verdict between runs, and of the sentences either pass put
-  at ≤2, fewer than half were agreed by both. Re-scoring only the condemned sentences costs
-  about 3.5% more GPU and removes most of the false drops.
+- **Drop at ≤2 unconditionally; drop at 3 only when the word keeps another sentence.**
+  Measured over 400 labelled sentences: ≤2 is 95.7% precise and catches a third of defects,
+  ≤3 is 94.3% precise and catches two thirds. The graded rule takes the safer threshold where
+  a deletion is irreversible and the higher recall only where the cost is one of several
+  examples. No second confirming pass is needed — that was a response to the batching noise,
+  which is gone.
 - **The rule is drop-if-replaceable, never drop-to-empty.** 9,325 words have exactly one
   example sentence and 21,857 have two, so an unconditional cut would empty thousands of
   word pages. A sentence scoring ≤2 is dropped only while its word keeps at least one
   sentence; the last one is kept whatever it scores. Coverage cannot regress.
 - Scoring is stdlib-only (`urllib.request` against `localhost:11434`), matching the
   pipeline's no-dependency rule, and stays local — no sentence leaves the machine.
-- **Ten sentences per request, and the response schema echoes each sentence's number**
-  (`{"r":[{"i":<n>,"s":<score>}]}`). Batching is what makes the run affordable — 0.74 s per
-  sentence at ten, against 3.02 s one at a time — and costs nothing in quality: 98% of
-  scores land within one point of the single-shot score, and no batch came back malformed.
-  The echoed index is load-bearing, not decoration: an earlier bare `{"scores":[…]}` array
-  silently returned 19 scores for 20 sentences, which shifts every score after the gap.
-  Reject and re-score any chunk whose returned indices don't match what was sent.
+- **One sentence per request. Never batch.** Batching ten at a time made the score depend on
+  which neighbours a sentence was scored beside: every one of the 45 sentences that happened
+  to be scored twice disagreed with itself, and precision at the drop threshold measured 17%
+  — five sound sentences deleted per defective one. One at a time the model is deterministic
+  and precision is 94%. Throughput comes from two concurrent workers and a bare-digit
+  response instead, which is faster than the batched form ever was.
 - **Score only the sentences where a score can change something.** A word with one example
   keeps it whatever it scores, so scoring it is wasted GPU, and an obscure word's example is
   not worth an hour of it. Restricted to words that have more than one sentence *and* are

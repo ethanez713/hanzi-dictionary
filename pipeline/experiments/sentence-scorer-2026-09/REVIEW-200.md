@@ -1,5 +1,9 @@
 # Review of 200 scored sentences — the PROCEED verdict does not hold
 
+> **Resolved by `REVIEW-400.md`.** Everything below is correct and still worth reading for
+> the mechanism, but the conclusion "not ready" applied to *batched* scoring. One sentence
+> per request fixes it: precision 17% → 94%. Keep this file for why batching is banned.
+
 `results.json` says PROCEED. **It is wrong, and the run described in EXPERIMENT.md must not
 be started on its strength.** This file supersedes it; read this first.
 

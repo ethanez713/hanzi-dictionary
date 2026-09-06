@@ -3,9 +3,11 @@
 Hours of local GPU, so it runs on its own and caches every score; `pipeline.build` reads the
 cache when it exists and ignores it when it doesn't. Interrupt it freely — rerunning resumes.
 
-    python -m pipeline.score_sentences --scope hsk14    # ~11k sentences, ~3.5 h
-    python -m pipeline.score_sentences --scope common   # ~25k sentences, ~10 h
-    python -m pipeline.score_sentences --scope all      # ~57k sentences, ~30 h
+    python -m pipeline.score_sentences --scope hsk14    # ~11k sentences, ~40 min
+    python -m pipeline.score_sentences --scope common   # ~25k sentences, ~1.5 h
+    python -m pipeline.score_sentences --scope all      # ~57k sentences, ~3.5 h
+
+Times are on battery; mains power roughly halves them.
 
 Scope exists because most of the corpus cannot benefit: a word with a single example keeps it
 whatever it scores (build_sentences never empties a word), and an obscure word's example is
@@ -32,16 +34,17 @@ SCOPES = {
 }
 
 
-# Seconds per sentence, measured at a mean length of 13 characters. Cost tracks length
-# because the sentence is the prompt, so the estimate scales rather than assuming an average.
-SECONDS_PER_SENTENCE_AT_LEN_13 = 1.5
+# Measured over the 400 labelled sentences (mean length 24) on battery power, two workers.
+# Cost still tracks length because the sentence is the prompt, so the estimate scales rather
+# than assuming an average; mains power is roughly twice as fast as this.
+SECONDS_PER_SENTENCE_AT_LEN_24 = 0.35
 
 
 def estimate_hours(texts: list[str]) -> float:
     if not texts:
         return 0.0
     mean_len = sum(len(t) for t in texts) / len(texts)
-    return len(texts) * SECONDS_PER_SENTENCE_AT_LEN_13 * (mean_len / 13) / 3600
+    return len(texts) * SECONDS_PER_SENTENCE_AT_LEN_24 * (mean_len / 24) / 3600
 
 
 def sentences_for(scope: str) -> list[tuple[str, str]]:
