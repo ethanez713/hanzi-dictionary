@@ -48,12 +48,20 @@ def estimate_hours(texts: list[str]) -> float:
 
 
 def sentences_for(scope: str) -> list[tuple[str, str]]:
+    """Sentences to score, **most learner-relevant first**.
+
+    The full run is many hours, so the order decides what a pack rebuilt part-way through
+    gets: HSK words ahead of the long tail, low levels ahead of high, frequent words ahead of
+    rare. Stopping early then costs the least useful scores rather than a random slice, and
+    the per-sentence cache makes resuming free."""
     con = sqlite3.connect(f"file:{PACK}?mode=ro", uri=True)
     rows = con.execute(f"""
-        SELECT DISTINCT s.zh FROM sentence s
+        SELECT s.zh FROM sentence s
         JOIN word w ON w.simp = s.simp
         WHERE s.simp IN (SELECT simp FROM sentence GROUP BY simp HAVING COUNT(*) > 1)
         {SCOPES[scope]}
+        GROUP BY s.zh
+        ORDER BY MIN(COALESCE(w.hsk, 99)), MIN(COALESCE(w.freq_rank, 999999))
     """).fetchall()
     con.close()
     # Keyed by the text, not a sentence id: the OPUS rows have no id, and identical text
