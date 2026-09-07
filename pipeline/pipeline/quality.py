@@ -42,12 +42,55 @@ MODEL = "qwen3.5:4b"
 # is slower again because the GPU is already saturated.
 WORKERS = 2
 
-# A bare digit rather than JSON. Measured over the same 400 labelled sentences it scores as
-# well (94.3% precision at the drop threshold against 92.2%) and is 3.7x faster, because
-# nearly all the generated tokens in the JSON form were punctuation.
+# A bare digit rather than JSON. Measured over 400 labelled sentences it scores as well and
+# is far cheaper, because nearly every token the JSON form generated was punctuation.
+#
+# The rules and the sixteen examples are load-bearing, not decoration. Twelve prompts were
+# compared on a held-out split (experiments/sentence-scorer-2026-09/prompt-results.json and
+# confirm-results.json); a plain rubric catches 33% of defects at the strict threshold and
+# this one catches 51%, at the same ~95% precision, for 7% more time. Three findings from
+# that sweep are worth not rediscovering:
+#
+#   - Chinese instructions beat English ones (0.67 against 0.49 recall). English compresses
+#     the two classes together and forces a threshold where precision collapses.
+#   - A HANDFUL of examples helps; a pile of them hurts. Forty and sixty-seven pairs both
+#     dropped precision to 0.85-0.92 — more examples make the model harsher rather than
+#     sharper. Don't "improve" this by adding more.
+#   - Thinking mode and a binary yes/no question are both much worse; thinking is also 25x
+#     slower and talks itself into faulting sound sentences.
+#
+# The examples are inlined rather than read from the experiment's bank because this has to
+# run from a clean checkout, and because changing them changes the calibration.
+_RULES = """判断标准：
+1. 搭配是否得当（例如「减弱碰击地面」「花费信仰」「拥护能源需求」都是错误搭配）。
+2. 是否有语法错误：成分残缺或多余、重复的字、错别字（「源在」应为「源于」、「的的」、「即是」应为「既是」）。
+3. 语序是否是中文语序，而不是照搬英文（例如把「在……的时候」「通过……」放到句末）。
+4. 是否是直译腔：字面翻译英文习语而在中文里不成立。
+5. 量词、介词、连词是否用对。
+注意：繁体字、台湾或香港用词、书面语、专业术语、粗俗内容都不算错误。"""
+
+_EXAMPLES = """例子：
+一家人在陽臺上吃早飯。 → 5
+下一次我會早一點到。 → 5
+他有很多具有影响力的朋友。 → 5
+你为什么会出现在我工作单位？ → 5
+你无需去列举那些奇珍异葩或是化石的例子。 → 2
+在这么嘈杂的环境中无法学习。 → 5
+声名说，“我们当时不在那 不是我们进行的射击 这根本没有发生。 → 2
+如果这继续下去， 继续这样下去， 可能会演变为血案。 → 2
+我们能不能让它更价格适宜？ → 2
+我购买一本书花费了三十美元。 → 5
+整体的耗电量相当于西班牙。 → 2
+爱哄骗着我们有了小宝宝。 → 2
+牛津大学历史博物馆 是可出租这件星盘的。 → 2
+薩米是一名全日制學生。 → 5
+那我毕尔巴鄂的真正惊喜所在。 → 2
+鉴于这片区域的危险，出于安全考虑，他建议我们一起走。 → 5"""
+
 _PROMPT_HEAD = (
-    "你是中文母语者。给这句话的自然度打分，只输出一个数字"
-    "（5=完全自然地道，4=自然，3=别扭，2=有语法或搭配错误，1=不通顺），不要输出别的。\n句子："
+    "你是中文母语者。给这句话的自然度打分"
+    "（5=完全自然地道，4=自然，3=别扭，2=有语法或搭配错误，1=不通顺）。\n"
+    f"{_RULES}\n{_EXAMPLES}\n只输出一个数字，不要输出别的。\n句子："
 )
 
 
