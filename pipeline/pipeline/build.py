@@ -20,7 +20,7 @@ import re as _re_sent
 from pathlib import Path
 
 from fetchers.common import SNAPSHOT_ROOT
-from pipeline import dong, load, lookalike, merge, normalize, parsers, phonetic, pinyin, radicals
+from pipeline import dong, load, lookalike, merge, normalize, parsers, phonetic, pinyin, quality, radicals
 from pipeline.normalize import GlyphEntity
 
 SOURCES = ["unihan", "makemeahanzi", "cjkvi-ids", "opencc", "wiktextract", "hsk", "cedict", "wordfreq"]
@@ -199,6 +199,9 @@ def _opus_coverage(
     return result
 
 
+QUALITY_CACHE = Path(__file__).resolve().parents[1] / "data" / "derived" / "sentence-quality.jsonl"
+
+
 def build_sentences(
     tatoeba_dir: Path,
     word_simps: set[str],
@@ -338,7 +341,53 @@ def build_sentences(
             for zh, en in pairs:
                 take(sub, None, zh, en, coverage_min)
 
-    return rows
+    return drop_unnatural(rows)
+
+
+# Scores below this are defective; a 3 is merely awkward and only worth dropping when the
+# word can spare it. Measured on 400 labelled sentences: ~95% of what lands at <=2 deserves
+# it, and ~95% of what lands at <=3 does too, but the 3 band is where the judgement is
+# closest. See experiments/sentence-scorer-2026-09/REVIEW-400.md.
+DROP_ALWAYS = 2
+DROP_IF_SPARE = 3
+
+
+def drop_unnatural(rows: list[tuple]) -> list[tuple]:
+    """Remove sentences the local model judged unidiomatic, if the scores exist.
+
+    Absent the cache this is a no-op, so a clean checkout with no Ollama still builds a
+    valid, publishable pack — the same contract the Dong lexicon has.
+
+    **A word never loses its last example.** 9,325 words have exactly one sentence and 21,857
+    have two, so an unconditional cut would empty thousands of word pages to fix a handful.
+    The filter can only ever make a word's examples better, never fewer than one."""
+    scores = quality.load_cache(QUALITY_CACHE)
+    if not scores:
+        print("  sentence quality: no scores cached, keeping every sentence")
+        return rows
+
+    by_word: dict[str, list[tuple]] = {}
+    for row in rows:
+        by_word.setdefault(row[0], []).append(row)
+
+    kept: list[tuple] = []
+    dropped = spared = 0
+    for word_rows in by_word.values():
+        ranked = sorted(word_rows, key=lambda r: -scores.get(r[1], 5))
+        for i, row in enumerate(ranked):
+            score = scores.get(row[1])
+            doomed = score is not None and (
+                score <= DROP_ALWAYS or (score <= DROP_IF_SPARE and i > 0))
+            if doomed and i > 0:
+                dropped += 1
+            elif doomed:
+                spared += 1     # its word has nothing better; keep it rather than empty the page
+                kept.append(row)
+            else:
+                kept.append(row)
+    print(f"  sentence quality: {len(scores)} scored, {dropped} dropped, "
+          f"{spared} kept as a word's only example")
+    return kept
 
 
 def single_char_cedict_defs(cedict_dir: Path) -> dict[str, list[str]]:
