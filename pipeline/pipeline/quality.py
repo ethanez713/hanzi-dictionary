@@ -31,6 +31,12 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 # `ollama list` prints the install date and https://ollama.com/library carries the current
 # generation. A model swap invalidates every cached score (see load_cache).
 MODEL = "qwen3.5:4b"
+# The Ollama version is part of the scoring regime too, not just the model. 0.33.3 disagreed
+# with 0.24.0 on 9 of 200 sentences — always a short one falling from 5 to 1 — while 0.24
+# reproduces its own scores 200/200. Upgrading mid-corpus therefore invalidates the cache the
+# same way a model swap does, except load_cache cannot detect it. It also buys nothing: it
+# reports prompt_eval_cached_count=0, i.e. no prefix reuse, at the same 0.9 s/sentence.
+# See experiments/sentence-scorer-2026-09/OLLAMA-0.33-PREFIX-CACHE.md.
 
 # One sentence per request, and this is not negotiable. Scoring ten at a time was three
 # times faster and destroyed the result: the score depended on which neighbours a sentence
