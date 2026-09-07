@@ -14,8 +14,10 @@ See docs/audits/gloss-audit-2026-09.md.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -94,6 +96,10 @@ _PROMPT_HEAD = (
 )
 
 
+# Long enough to sit through an Ollama restart and its model reload (~31 s of backoff).
+_TRANSPORT_ATTEMPTS = 6
+
+
 class ScoringUnavailable(RuntimeError):
     """Ollama is not reachable — the caller decides whether that is fatal."""
 
@@ -110,11 +116,19 @@ def _call_ollama(prompt: str, num_predict: int, timeout: int, model: str) -> str
         "options": {"temperature": 0, "num_predict": num_predict},
     }).encode()
     request = urllib.request.Request(OLLAMA_URL, body, {"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            payload = json.loads(response.read())
-    except urllib.error.URLError as exc:
-        raise ScoringUnavailable(f"{OLLAMA_URL} unreachable: {exc}") from exc
+    for attempt in range(_TRANSPORT_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                payload = json.loads(response.read())
+            break
+        # An Ollama restart mid-run closes the socket, which urllib surfaces as a raw
+        # RemoteDisconnected rather than a URLError, so an unretried blip once killed a
+        # 15-hour run at sentence 5,500. Waiting out a restart costs half a minute; a
+        # server that is genuinely gone still fails, one sentence later.
+        except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
+            if attempt == _TRANSPORT_ATTEMPTS - 1:
+                raise ScoringUnavailable(f"{OLLAMA_URL} unreachable: {exc}") from exc
+            time.sleep(2 ** attempt)
     return payload.get("response") or payload.get("thinking") or ""
 
 
