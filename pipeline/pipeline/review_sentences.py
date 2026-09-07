@@ -30,6 +30,11 @@ def main() -> None:
     args = ap.parse_args()
 
     con = sqlite3.connect(f"file:{args.pack}?mode=ro", uri=True)
+    columns = {r[1] for r in con.execute("PRAGMA table_info(sentence)")}
+    if not {"quality", "shown"} <= columns:
+        raise SystemExit(
+            f"{args.pack} predates the quality columns — rebuild it first:\n"
+            "  python -m pipeline.build && python -m pipeline.package")
     rows = con.execute("""
         SELECT simp, quality, shown, zh, COALESCE(en, ''),
                CASE WHEN tatoeba_id IS NULL THEN 'opus' ELSE 'tatoeba' END
