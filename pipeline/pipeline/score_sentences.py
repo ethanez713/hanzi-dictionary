@@ -3,11 +3,9 @@
 Hours of local GPU, so it runs on its own and caches every score; `pipeline.build` reads the
 cache when it exists and ignores it when it doesn't. Interrupt it freely — rerunning resumes.
 
-    python -m pipeline.score_sentences --scope hsk14    # ~11k sentences, ~40 min
-    python -m pipeline.score_sentences --scope common   # ~25k sentences, ~1.5 h
-    python -m pipeline.score_sentences --scope all      # ~57k sentences, ~3.5 h
-
-Times are on battery; mains power roughly halves them.
+    python -m pipeline.score_sentences --scope hsk14    # ~11k sentences, ~2.7 h
+    python -m pipeline.score_sentences --scope common   # ~25k sentences, ~6 h
+    python -m pipeline.score_sentences --scope all      # ~57k sentences, ~14 h
 
 Scope exists because most of the corpus cannot benefit: a word with a single example keeps it
 whatever it scores (build_sentences never empties a word), and an obscure word's example is
@@ -34,17 +32,15 @@ SCOPES = {
 }
 
 
-# Measured over the 400 labelled sentences (mean length 24) on battery power, two workers.
-# Cost still tracks length because the sentence is the prompt, so the estimate scales rather
-# than assuming an average; mains power is roughly twice as fast as this.
-SECONDS_PER_SENTENCE_AT_LEN_24 = 0.35
+# Measured over the corpus itself at two workers: 0.89 s/sentence on mains, 0.99 on battery.
+# It does not track sentence length, because the 445-token rules-and-examples prompt head is
+# ~95% of every request (0.65 s of prompt eval against 0.04 s of generation) and Ollama
+# re-evaluates it in full each time rather than reusing the identical prefix.
+SECONDS_PER_SENTENCE = 0.9
 
 
 def estimate_hours(texts: list[str]) -> float:
-    if not texts:
-        return 0.0
-    mean_len = sum(len(t) for t in texts) / len(texts)
-    return len(texts) * SECONDS_PER_SENTENCE_AT_LEN_24 * (mean_len / 24) / 3600
+    return len(texts) * SECONDS_PER_SENTENCE / 3600
 
 
 def sentences_for(scope: str) -> list[tuple[str, str]]:
