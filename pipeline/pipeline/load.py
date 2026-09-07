@@ -84,4 +84,5 @@ def load_component_glosses(conn: sqlite3.Connection, rows: list[tuple]) -> None:
 
 
 def load_sentences(conn: sqlite3.Connection, rows: list[tuple]) -> None:
-    conn.executemany("INSERT INTO sentence (simp, zh, en, tatoeba_id) VALUES (?,?,?,?)", rows)
+    conn.executemany("INSERT INTO sentence (simp, zh, en, tatoeba_id, quality, shown)"
+                     " VALUES (?,?,?,?,?,?)", rows)

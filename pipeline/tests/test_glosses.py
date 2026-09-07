@@ -85,11 +85,12 @@ class NeutralizePotentialBu(unittest.TestCase):
             neutralize_potential_bu("不是", "bu4 shi4", self.KNOWN), "bu4 shi4")
 
 
-class DropUnnatural(unittest.TestCase):
-    """The sentence-quality filter (audit 2026-09). Rows are (simp, zh, en, tatoeba_id)."""
+class MarkUnnatural(unittest.TestCase):
+    """The sentence-quality marking (audit 2026-09). In: (simp, zh, en, tatoeba_id);
+    out: the same plus (quality, shown). Nothing is ever removed."""
 
     def setUp(self):
-        import tempfile, pathlib, json
+        import tempfile, pathlib
         from pipeline import build as build_mod
         self.build = build_mod
         self.dir = pathlib.Path(tempfile.mkdtemp())
@@ -110,49 +111,66 @@ class DropUnnatural(unittest.TestCase):
     def rows(self, *pairs):
         return [(w, z, None, None) for w, z in pairs]
 
-    def test_defective_sentence_is_dropped_when_the_word_can_spare_it(self):
+    def shown(self, out):
+        return sorted(r[1] for r in out if r[5])
+
+    def test_nothing_is_ever_deleted(self):
+        """The whole point: a wrong judgement must be recoverable without a re-fetch."""
         self.cache({"good": 5, "bad": 2})
-        kept = self.build.drop_unnatural(self.rows(("词", "good"), ("词", "bad")))
-        self.assertEqual([r[1] for r in kept], ["good"])
+        out = self.build.mark_unnatural(self.rows(("词", "good"), ("词", "bad")))
+        self.assertEqual(len(out), 2)
+        self.assertEqual(sorted(r[1] for r in out), ["bad", "good"])
+
+    def test_the_score_is_stored_beside_the_sentence(self):
+        self.cache({"good": 5, "bad": 2})
+        out = {r[1]: r[4] for r in self.build.mark_unnatural(
+            self.rows(("词", "good"), ("词", "bad")))}
+        self.assertEqual(out, {"good": 5, "bad": 2})
+
+    def test_defective_sentence_is_hidden_when_the_word_can_spare_it(self):
+        self.cache({"good": 5, "bad": 2})
+        out = self.build.mark_unnatural(self.rows(("词", "good"), ("词", "bad")))
+        self.assertEqual(self.shown(out), ["good"])
 
     def test_a_word_never_loses_its_last_example(self):
         """9,325 words have exactly one sentence. Emptying their pages to remove one bad
         example is a far worse trade than showing it."""
         self.cache({"only": 2})
-        kept = self.build.drop_unnatural(self.rows(("词", "only")))
-        self.assertEqual([r[1] for r in kept], ["only"])
+        out = self.build.mark_unnatural(self.rows(("词", "only")))
+        self.assertEqual(self.shown(out), ["only"])
 
-    def test_all_defective_still_leaves_the_best_one(self):
+    def test_all_defective_still_shows_the_best_one(self):
         self.cache({"bad1": 2, "bad2": 1})
-        kept = self.build.drop_unnatural(self.rows(("词", "bad1"), ("词", "bad2")))
-        self.assertEqual([r[1] for r in kept], ["bad1"], "keeps the higher-scoring one")
+        out = self.build.mark_unnatural(self.rows(("词", "bad1"), ("词", "bad2")))
+        self.assertEqual(self.shown(out), ["bad1"])
 
     def test_merely_awkward_survives_when_it_is_all_there_is(self):
         self.cache({"awkward": 3})
-        kept = self.build.drop_unnatural(self.rows(("词", "awkward")))
-        self.assertEqual(len(kept), 1)
+        self.assertEqual(self.shown(self.build.mark_unnatural(self.rows(("词", "awkward")))),
+                         ["awkward"])
 
-    def test_merely_awkward_is_dropped_when_something_better_exists(self):
+    def test_merely_awkward_is_hidden_when_something_better_exists(self):
         self.cache({"fine": 5, "awkward": 3})
-        kept = self.build.drop_unnatural(self.rows(("词", "fine"), ("词", "awkward")))
-        self.assertEqual([r[1] for r in kept], ["fine"])
+        out = self.build.mark_unnatural(self.rows(("词", "fine"), ("词", "awkward")))
+        self.assertEqual(self.shown(out), ["fine"])
 
-    def test_unscored_sentences_are_kept(self):
+    def test_unscored_sentences_are_shown(self):
         self.cache({"scored": 5})
-        kept = self.build.drop_unnatural(self.rows(("词", "scored"), ("词", "unscored")))
-        self.assertEqual(sorted(r[1] for r in kept), ["scored", "unscored"])
+        out = self.build.mark_unnatural(self.rows(("词", "scored"), ("词", "unscored")))
+        self.assertEqual(self.shown(out), ["scored", "unscored"])
 
-    def test_no_cache_is_a_no_op(self):
+    def test_no_cache_shows_everything(self):
         """A clean checkout with no Ollama must still build a valid pack."""
         self.build.QUALITY_CACHE = self.dir / "absent.jsonl"
-        rows = self.rows(("词", "a"), ("词", "b"))
-        self.assertEqual(self.build.drop_unnatural(rows), rows)
+        out = self.build.mark_unnatural(self.rows(("词", "a"), ("词", "b")))
+        self.assertEqual(self.shown(out), ["a", "b"])
+        self.assertTrue(all(r[4] is None for r in out))
 
-    def test_words_are_filtered_independently(self):
+    def test_words_are_judged_independently(self):
         self.cache({"a_good": 5, "a_bad": 2, "b_bad": 2})
-        kept = self.build.drop_unnatural(
+        out = self.build.mark_unnatural(
             self.rows(("甲", "a_good"), ("甲", "a_bad"), ("乙", "b_bad")))
-        self.assertEqual(sorted(r[1] for r in kept), ["a_good", "b_bad"])
+        self.assertEqual(self.shown(out), ["a_good", "b_bad"])
 
 
 class SingleCharCedictDefs(unittest.TestCase):

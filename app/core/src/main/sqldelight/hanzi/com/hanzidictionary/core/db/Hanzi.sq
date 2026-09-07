@@ -100,11 +100,15 @@ CREATE TABLE word_char (
 );
 
 -- Example sentences (Tatoeba, CC BY 2.0 FR), keyed by the word's simplified form.
+-- Sentences judged unidiomatic are marked shown=0, never deleted, so the ranking stays
+-- auditable and undoing it is a change to sentencesForWord rather than a rebuild.
 CREATE TABLE sentence (
     simp       TEXT NOT NULL,
     zh         TEXT NOT NULL,
     en         TEXT,
-    tatoeba_id INTEGER
+    tatoeba_id INTEGER,
+    quality    INTEGER,
+    shown      INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX idx_sentence_simp ON sentence(simp);
 
@@ -197,7 +201,7 @@ wordsByIds:
 SELECT * FROM word WHERE id IN :ids;
 
 sentencesForWord:
-SELECT zh, en FROM sentence WHERE simp = :simp LIMIT :limit;
+SELECT zh, en FROM sentence WHERE simp = :simp AND shown = 1 LIMIT :limit;
 
 -- Phonetic-series look-alikes: characters that share the phonetic component of any of :ids
 -- (请/清/晴/情 all carry 青), common ones first. Self-exclusion is done by the caller.

@@ -107,11 +107,16 @@ CREATE INDEX idx_word_char_glyph ON word_char(glyph_id);
 -- Example sentences (Tatoeba, CC BY 2.0 FR), keyed by the word's simplified form so any
 -- word entry sharing that form finds them. A handful of short Mandarin sentences per word,
 -- each with an English translation where Tatoeba links one.
+-- Sentences judged unidiomatic are NOT deleted, only marked shown=0. The judgement is a
+-- local model's and can be wrong, so the corpus stays recoverable and the ranking stays
+-- auditable: flipping the filter in sentencesForWord restores everything.
 CREATE TABLE sentence (
     simp       TEXT NOT NULL,   -- word.simp this sentence exemplifies
     zh         TEXT NOT NULL,   -- Mandarin sentence
     en         TEXT,            -- English translation (may be absent)
-    tatoeba_id INTEGER          -- source cmn sentence id (attribution / dedup)
+    tatoeba_id INTEGER,         -- source cmn sentence id (attribution / dedup)
+    quality    INTEGER,         -- 1-5 naturalness, NULL when never scored
+    shown      INTEGER NOT NULL DEFAULT 1   -- 0 = filtered out of the app, still stored
 );
 CREATE INDEX idx_sentence_simp ON sentence(simp);
 
