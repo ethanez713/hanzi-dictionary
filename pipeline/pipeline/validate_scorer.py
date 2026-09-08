@@ -1,30 +1,30 @@
-"""Labelled classification test: 200 defective sentences vs 200 sound ones.
+"""Re-measure the sentence scorer against the 400 hand-labelled sentences.
 
-The corruption experiment measured only whether a damaged sentence scores lower, which a
-model biased toward answering 2 passes while destroying the corpus. This measures the thing
-that actually matters — of the sentences the filter would DELETE, how many deserved it.
+The threshold this defends, and the limits of the measurement, are in
+docs/sentence-quality-filter.md. Run it after any change to the scoring regime — the prompt,
+the model, or the Ollama version — since none of those keep scores comparable.
 
-Both sets are real sentences drawn from the pack (never synthesised), labelled by reading
-them. Selection is documented in REVIEW-400.md, including its limits.
+Corrupting a sentence and checking the score falls measures recall on damage, which a model
+biased toward answering 2 passes while destroying the corpus. This measures the opposite and
+load-bearing question: of the sentences the filter would hide, how many deserved it.
 
-Run:  cd pipeline && PYTHONPATH=. .venv/bin/python experiments/sentence-scorer-2026-09/classify.py
+Run:  cd pipeline && PYTHONPATH=. .venv/bin/python -m pipeline.validate_scorer
 Resumable — scores are cached per sentence and per model.
 """
 from __future__ import annotations
 
 import json
 import sqlite3
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from pipeline import quality  # noqa: E402
+from pipeline import quality
 
-HERE = Path(__file__).resolve().parent
-CACHE_DIR = HERE.parents[1] / "data" / "derived" / "scorer-validation"
+ROOT = Path(__file__).resolve().parents[1]
+CACHE_DIR = ROOT / "data" / "derived" / "scorer-validation"
 LABELS = CACHE_DIR / "labeled.json"
+RESULTS = CACHE_DIR / "classify-results.json"
 WORKERS = 2   # 0.39 s/sentence at two; four is slower — the GPU is already saturated
 
 
@@ -55,7 +55,7 @@ def main() -> None:
     b = [scores[t] for t in bad if t in scores]
     g = [scores[t] for t in good if t in scores]
 
-    con = sqlite3.connect(f"file:{HERE.parents[1] / 'data/build/core.db'}?mode=ro", uri=True)
+    con = sqlite3.connect(f"file:{ROOT / 'data/build/core.db'}?mode=ro", uri=True)
     from_tatoeba = {zh for zh, in con.execute(
         "SELECT DISTINCT zh FROM sentence WHERE tatoeba_id IS NOT NULL")}
 
@@ -96,7 +96,7 @@ def main() -> None:
     at2 = results["thresholds"]["drop_at_2"]
     results["verdict"] = ("SHIP" if (at2["precision"] or 0) >= 0.7 and at2["recall"] >= 0.3
                           else "DO NOT SHIP")
-    (HERE / "classify-results.json").write_text(
+    RESULTS.write_text(
         json.dumps(results, indent=2, ensure_ascii=False) + "\n")
     print(json.dumps(results, indent=2, ensure_ascii=False))
 

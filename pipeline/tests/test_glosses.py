@@ -1,6 +1,5 @@
-"""Component role glosses and the CC-CEDICT gloss/pinyin fixes (audit 2026-09).
-Fast, snapshot-free: hand-built inputs mirror the real data shapes measured in
-docs/audits/gloss-audit-2026-09.md.
+"""Component role glosses and the CC-CEDICT gloss/pinyin fixes.
+Fast, snapshot-free: hand-built inputs mirror the real data shapes they were measured on.
 
 Run: pipeline/.venv/bin/python -m unittest discover -s pipeline/tests   (or plain python3 -m).
 """

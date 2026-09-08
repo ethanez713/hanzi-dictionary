@@ -10,7 +10,7 @@ it 2 while its siblings score 4-5, which is the only signal found that separates
 Scoring is offline and cached rather than part of the build: it is hours of local GPU, and
 the pipeline must still build a valid pack on a machine with no Ollama at all.
 
-See docs/audits/gloss-audit-2026-09.md.
+See docs/sentence-quality-filter.md.
 """
 from __future__ import annotations
 
@@ -36,15 +36,14 @@ MODEL = "qwen3.5:4b"
 # reproduces its own scores 200/200. Upgrading mid-corpus therefore invalidates the cache the
 # same way a model swap does, except load_cache cannot detect it. It also buys nothing: it
 # reports prompt_eval_cached_count=0, i.e. no prefix reuse, at the same 0.9 s/sentence.
-# See experiments/sentence-scorer-2026-09/OLLAMA-0.33-PREFIX-CACHE.md.
+# See docs/sentence-quality-filter.md.
 
 # One sentence per request, and this is not negotiable. Scoring ten at a time was three
 # times faster and destroyed the result: the score depended on which neighbours a sentence
 # was batched with, every one of the 45 sentences that happened to be scored twice disagreed
 # with itself, and precision at the drop threshold measured 17% — five good sentences deleted
-# per bad one. Alone the model is deterministic and precision is 94%. See
-# experiments/sentence-scorer-2026-09/REVIEW-200.md for the failure and REVIEW-400.md for the
-# measurement that replaced it.
+# per bad one. Alone the model is deterministic and precision is 94%.
+# See docs/sentence-quality-filter.md.
 #
 # Two workers is the throughput knob instead: 0.35 s/sentence against 0.50 at one, and four
 # is slower again because the GPU is already saturated.
@@ -54,8 +53,7 @@ WORKERS = 2
 # is far cheaper, because nearly every token the JSON form generated was punctuation.
 #
 # The rules and the sixteen examples are load-bearing, not decoration. Twelve prompts were
-# compared on a held-out split (experiments/sentence-scorer-2026-09/prompt-results.json and
-# confirm-results.json); a plain rubric catches 33% of defects at the strict threshold and
+# compared on a held-out split: a plain rubric catches 33% of defects at the strict threshold and
 # this one catches 51%, at the same ~95% precision, for 7% more time. Three findings from
 # that sweep are worth not rediscovering:
 #

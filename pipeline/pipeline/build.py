@@ -346,7 +346,7 @@ def build_sentences(
 
 # Scores at or below this are defective; a 3 is merely awkward and only worth hiding when
 # the word can spare it. Measured on 400 labelled sentences: ~95% of what lands at <=2
-# deserves it. See experiments/sentence-scorer-2026-09/REVIEW-400.md.
+# deserves it. See docs/sentence-quality-filter.md.
 HIDE_ALWAYS = 2
 HIDE_IF_SPARE = 3
 
@@ -627,7 +627,7 @@ def build_sentences(
 # Scores below this are defective; a 3 is merely awkward and only worth dropping when the
 # word can spare it. Measured on 400 labelled sentences: ~95% of what lands at <=2 deserves
 # it, and ~95% of what lands at <=3 does too, but the 3 band is where the judgement is
-# closest. See experiments/sentence-scorer-2026-09/REVIEW-400.md.
+# closest. See docs/sentence-quality-filter.md.
 DROP_ALWAYS = 2
 DROP_IF_SPARE = 3
 
