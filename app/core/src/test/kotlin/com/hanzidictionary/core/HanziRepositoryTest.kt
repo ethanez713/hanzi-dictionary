@@ -498,13 +498,13 @@ class HanziRepositoryTest {
 
     @Test
     fun anUnencodedPartIsStillReportedRatherThanDropped() {
-        // The honest remainder: 用's lower part (⿻二丨) has no codepoint in ANY source, so
+        // The honest remainder: 两's lower part (⿻冂从) has no codepoint in ANY source, so
         // no choice of decomposition can name it. It must still appear as a positioned part
         // — dropping it would silently misrepresent the character as having one component.
-        val yong = repo.characterPageByChar("用")
-        assertNotNull(yong)
-        assertEquals(2, yong.breakdown.size)
-        val unencoded = yong.breakdown.single { it.displayChar == null }
+        val liang = repo.characterPageByChar("两")
+        assertNotNull(liang)
+        assertEquals(2, liang.breakdown.size)
+        val unencoded = liang.breakdown.single { it.displayChar == null }
         assertTrue(unencoded.componentId.startsWith("ids:"), "expected an ids: pseudo-component")
         assertFalse(unencoded.navigable, "an unencoded shape has no page to open")
     }
@@ -529,9 +529,9 @@ class HanziRepositoryTest {
     fun visualLookAlikesCoverSharedComponents() {
         // Layer 2: characters several strokes apart that share a big, distinctive component in
         // the same place. Shape-code distance can't reach these — its stroke gate is ±1 — and
-        // they are exactly the confusions a learner hits: 斯 with 期 (其) and with 听 (斤).
+        // they are exactly the confusions a learner hits: 斯 with 期 (其) and with 所 (斤).
         assertTrue("期" in lookAlikeChars("斯"), "斯/期 both carry 其, got ${lookAlikeChars("斯")}")
-        assertTrue("听" in lookAlikeChars("斯"), "斯/听 both carry 斤, got ${lookAlikeChars("斯")}")
+        assertTrue("所" in lookAlikeChars("斯"), "斯/所 both carry 斤, got ${lookAlikeChars("斯")}")
         assertTrue("清" in lookAlikeChars("请"), "请/清 both carry 青, got ${lookAlikeChars("请")}")
 
         // The shared part is named, because it's the whole reason the pair is confusable.
