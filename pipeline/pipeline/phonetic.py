@@ -127,6 +127,35 @@ def compute_component_use(
     return rows
 
 
+def evidence_for_asserted_role(
+    parent_cp: int,
+    component_char: str,
+    entities: dict[int, GlyphEntity],
+    function: str,
+    role_confidence: float,
+) -> tuple[str | None, float | None, str, str | None]:
+    """(match_class, confidence, resolution, stratum) for a part whose role a source asserts.
+
+    A component_use row answers two questions, and only one of them is a claim: a source says
+    what the part *does*, and how audible its sound link still *is* is measured here. A source
+    that names roles therefore does not get to assert a match_class — it would be claiming a
+    measurement it never made, and the ~44% of such rows whose readings still match outright
+    (百/白, 们/门) would be telling the reader the sound has drifted beyond recognition.
+
+    So a phonetic role the detector can still hear is corroboration from two independent
+    directions ("agreement"), carrying the tier's own confidence; one it cannot hear is the
+    source's word alone, opaque and weighted low so it drags its series' reliability down
+    rather than up. [role_confidence] is the caller's trust in the assertion itself, used
+    where there is no measurement to make."""
+    if function not in ("phonetic", "both"):
+        return None, role_confidence, "single_source", None
+    match = _detect_phonetic_match(entities.get(parent_cp), ord(component_char), entities)
+    if match:
+        match_class, confidence, stratum = match
+        return match_class, confidence, "agreement", stratum
+    return "opaque", 0.3, "single_source", None
+
+
 @dataclass
 class PhoneticSeriesRow:
     component_id: str

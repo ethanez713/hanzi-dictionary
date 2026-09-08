@@ -8,13 +8,15 @@ import unittest
 
 from pipeline import merge, phonetic
 from pipeline.merge import ResolvedDecomposition
-from pipeline.normalize import GlyphEntity, RawDecomposition
+from pipeline.normalize import GlyphEntity, RawDecomposition, RawReading
 
 
 def glyph(char, *, mmh_phonetic=None, mmh_semantic=None, etymology_text=None,
-          traditional_of=None, simplified_of=None, decomposition=None):
+          traditional_of=None, simplified_of=None, decomposition=None, pinyin=None):
     """Build a minimal GlyphEntity. traditional_of/simplified_of take a single char."""
     e = GlyphEntity(codepoint=ord(char), char=char)
+    for value in pinyin or ():
+        e.readings.append(RawReading("pinyin", value, None, "unihan"))
     if mmh_phonetic or mmh_semantic:
         e.makemeahanzi = {"etymology": {"type": "pictophonetic",
                                         "phonetic": mmh_phonetic, "semantic": mmh_semantic}}
@@ -155,6 +157,57 @@ class DemotionTest(unittest.TestCase):
         dui = next(r for r in rows if r.component_id == "兑")
         self.assertEqual(dui.function, "phonetic")
         self.assertEqual(dui.resolution, "single_source")
+
+
+class AssertedRoleEvidenceTest(unittest.TestCase):
+    """A source that names roles (Dong) must not thereby assert a sound measurement."""
+
+    ROLE_CONFIDENCE = 0.98
+
+    def evidence(self, parent, component, function, *, pinyin_of):
+        ents = world(*(glyph(ch, pinyin=[p]) for ch, p in pinyin_of.items()))
+        return phonetic.evidence_for_asserted_role(
+            ord(parent), component, ents, function, self.ROLE_CONFIDENCE,
+        )
+
+    def test_audible_phonetic_is_agreement_not_opaque(self):
+        # 情 qíng / 青 qīng: the claim and the reading comparison corroborate each other, so
+        # the row must carry the measured tier — calling this "opaque" tells the reader the
+        # sound has drifted beyond recognition when they can hear it.
+        match_class, confidence, resolution, stratum = self.evidence(
+            "情", "青", "phonetic", pinyin_of={"情": "qing2", "青": "qing1"},
+        )
+        self.assertEqual(match_class, "tone")
+        self.assertEqual(resolution, "agreement")
+        self.assertEqual(stratum, "pinyin")
+        self.assertEqual(confidence, phonetic.PINYIN_CONFIDENCE["tone"])
+
+    def test_inaudible_phonetic_stays_opaque_and_weighted_low(self):
+        # 说 shuō / 兑 duì: nothing to hear at any stratum, so the source's word stands alone
+        # and must weigh less than a measured link, not more.
+        match_class, confidence, resolution, stratum = self.evidence(
+            "说", "兑", "phonetic", pinyin_of={"说": "shuo1", "兑": "dui4"},
+        )
+        self.assertEqual(match_class, "opaque")
+        self.assertEqual(resolution, "single_source")
+        self.assertIsNone(stratum)
+        self.assertLess(confidence, self.ROLE_CONFIDENCE)
+
+    def test_semantic_role_carries_no_sound_measurement(self):
+        match_class, confidence, resolution, stratum = self.evidence(
+            "情", "忄", "semantic", pinyin_of={"情": "qing2", "忄": "xin1"},
+        )
+        self.assertIsNone(match_class)
+        self.assertIsNone(stratum)
+        self.assertEqual(resolution, "single_source")
+        self.assertEqual(confidence, self.ROLE_CONFIDENCE)
+
+    def test_both_role_is_measured_like_a_phonetic(self):
+        match_class, _, resolution, _ = self.evidence(
+            "娶", "取", "both", pinyin_of={"娶": "qu3", "取": "qu3"},
+        )
+        self.assertEqual(match_class, "exact")
+        self.assertEqual(resolution, "agreement")
 
 
 if __name__ == "__main__":

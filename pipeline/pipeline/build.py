@@ -792,6 +792,10 @@ def build() -> Path:
     # common characters a learner meets. The detector still governs every character Dong does
     # not cover. (Dong is personal-build-only; see fetch_dong_chinese.py / ATTRIBUTIONS.
     # Optional: a clean checkout without the snapshot builds a detector-only, publishable pack.)
+    # Dong's component functions are human-verified, so its bare assertion outranks
+    # makemeahanzi's 0.6 — but only where nothing can be measured instead.
+    DONG_ROLE_CONFIDENCE = 0.98
+
     try:
         dong_dir = latest_snapshot("dong-chinese-lexicon-PRIVATE")
     except FileNotFoundError:
@@ -812,13 +816,14 @@ def build() -> Path:
     for gid, e in dong_by_gid.items():
         cp = int(gid[2:], 16)
         for pos, (comp_char, fn) in enumerate(e.components):
-            # A phonetic role is asserted by Dong but its sound-match class isn't computed here
-            # → "opaque", the same class the detector uses for an asserted-but-unmeasured sound.
-            match_class = "opaque" if fn in (dong.SOUND, dong.BOTH) else None
-            component_use_rows.append((gid, comp_char, pos, fn, match_class, 0.98, "single_source"))
-            component_use_objects.append(
-                phonetic.ComponentUseRow(cp, comp_char, pos, fn, match_class, 0.98, "single_source")
+            # Dong names the part and its role; the sound link is measured, never asserted.
+            match_class, confidence, resolution, stratum = phonetic.evidence_for_asserted_role(
+                cp, comp_char, entities, fn, DONG_ROLE_CONFIDENCE,
             )
+            component_use_rows.append((gid, comp_char, pos, fn, match_class, confidence, resolution))
+            component_use_objects.append(phonetic.ComponentUseRow(
+                cp, comp_char, pos, fn, match_class, confidence, resolution, stratum,
+            ))
         func_claim = {"formation_type": e.formation_type}
         sem = next((c for c, f in e.components if f == dong.MEANING), None)
         phon = next((c for c, f in e.components if f in (dong.SOUND, dong.BOTH)), None)
