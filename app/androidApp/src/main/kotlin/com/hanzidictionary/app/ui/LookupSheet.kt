@@ -505,7 +505,7 @@ private fun CharacterSheetContent(
                 verticalAlignment = Alignment.Bottom,
             ) {
                 Text(
-                    // A trailing "…" on the collapsed prose signals there's more; the ↓ is the
+                    // A trailing "…" on the collapsed prose signals there's more; the ▼ is the
                     // tap target that reveals it.
                     if (showFull) raw else "$firstSentence …",
                     Modifier.weight(1f, fill = false),
@@ -514,9 +514,8 @@ private fun CharacterSheetContent(
                 )
                 if (hasMore) {
                     Text(
-                        if (showFull) "↑" else "↓",
-                        fontSize = 14.sp, color = eth.textLink, fontFamily = PlexMono,
-                        textDecoration = TextDecoration.Underline,
+                        if (showFull) "▲" else "▼",
+                        fontSize = 11.sp, color = eth.textLink, fontFamily = PlexMono,
                         modifier = Modifier.clickable { expanded = !expanded },
                     )
                 }
