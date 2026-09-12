@@ -382,9 +382,11 @@ private fun CharacterSheetContent(
                             )
                         }
                         if (pinyinReadings.size > 1) {
+                            // Full-strength (not textFaint) so a multi-reading character —
+                            // the thing that makes a word a heteronym — reads at a glance.
                             Text(
                                 "also ${pinyinReadings.drop(1).joinToString(", ") { it.value }}",
-                                fontFamily = PlexMono, fontSize = 11.sp, color = eth.textFaint,
+                                fontFamily = PlexMono, fontSize = 11.sp, color = eth.ink900,
                             )
                         }
                     }
@@ -523,11 +525,12 @@ private fun CharacterSheetContent(
         }
 
         // In words — the most common words this character appears in. wordsForGlyph is already
-        // ordered by corpus frequency; dedup identical simplified forms (CC-CEDICT lists a few
-        // homographs twice) and keep the top handful, not every rare compound.
-        val topWords by produceState(p.words.distinctBy { it.simp }.take(IN_WORDS_LIMIT), glyphId) {
+        // ordered by corpus frequency; key the dedup on simp+reading so a heteronym (便宜
+        // pián yi "cheap" vs biàn yí "convenient") keeps a row for each reading, while
+        // CC-CEDICT's same-reading duplicates still collapse. Top handful, not every compound.
+        val topWords by produceState(p.words.distinctBy { it.simp to it.pinyin }.take(IN_WORDS_LIMIT), glyphId) {
             value = withContext(Dispatchers.IO) {
-                repository.wordsForGlyph(glyphId, limit = 60).distinctBy { it.simp }.take(IN_WORDS_LIMIT)
+                repository.wordsForGlyph(glyphId, limit = 60).distinctBy { it.simp to it.pinyin }.take(IN_WORDS_LIMIT)
             }
         }
         if (topWords.isNotEmpty()) {
