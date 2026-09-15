@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ItemSummary
+import com.hanzidictionary.core.SentenceExample
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.isSoundBearing
 
@@ -47,6 +48,7 @@ internal data class CardBack(
     val components: List<CardComponent>,
     val wordsLabel: String,
     val words: List<BackWord>,
+    val sentences: List<SentenceExample>,
     val speakText: String,
 )
 
@@ -73,6 +75,7 @@ internal suspend fun loadBack(repository: HanziRepository, item: StudyItem): Car
                 components = emptyList(),
                 wordsLabel = "Made of",
                 words = w.chars.map { BackWord(it.char, null, it.definition?.let(::shortGloss)) },
+                sentences = repository.cardSentences(w.simp),
                 speakText = w.simp,
             )
         }
@@ -95,13 +98,19 @@ internal suspend fun loadBack(repository: HanziRepository, item: StudyItem): Car
                     }
                 },
                 wordsLabel = "Used in words",
-                words = c.words.map { BackWord(it.simp, it.pinyin, it.gloss) },
+                words = repository.wordsForGlyph(item.itemId, CARD_WORDS)
+                    .map { BackWord(it.simp, it.pinyin, it.gloss) },
+                sentences = repository.cardSentences(c.char),
                 speakText = c.char,
             )
         }
     }
 
 private const val CARD_COMPONENTS = 4
+
+/** Words to offer on a character card. The revealed side scrolls, so this is a ceiling on
+ * how much a common character (的, 一) can pour out, not a target every card reaches. */
+private const val CARD_WORDS = 24L
 
 /**
  * The flashcard. The glyph lives in a fixed 200dp zone and NEVER moves when the card
@@ -215,6 +224,15 @@ internal fun PracticeCard(
                                 Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(3.dp),
                             ) { words.forEach { BackWordRow(it) } }
+                        }
+
+                        val sentences = back?.sentences.orEmpty()
+                        if (sentences.isNotEmpty()) {
+                            CardRule()
+                            Column(
+                                Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(7.dp),
+                            ) { sentences.forEach { BackSentenceRow(it) } }
                         }
                     }
                 }
@@ -348,6 +366,20 @@ private fun BackWordRow(w: BackWord) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+    }
+}
+
+/** One example sentence: the Mandarin left-aligned, its English gloss beneath in a quieter
+ * tone. Full sentences are the card's tallest content, so they carry most of the burden of
+ * filling the revealed side. */
+@Composable
+private fun BackSentenceRow(s: SentenceExample) {
+    val eth = EthanTheme.colors
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(s.zh, fontFamily = NotoCjk, fontSize = 16.sp, lineHeight = 22.sp, color = eth.textBody)
+        s.en?.let {
+            Text(it, fontFamily = InstrumentSans, fontSize = 12.sp, lineHeight = 16.sp, color = eth.textFaint)
         }
     }
 }

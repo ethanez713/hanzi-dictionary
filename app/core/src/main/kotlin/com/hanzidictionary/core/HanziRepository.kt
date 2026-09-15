@@ -207,6 +207,13 @@ class HanziRepository(
             WordView(w.id, w.simp, w.trad, w.pinyin, firstSenses(w.defs), w.hsk)
         }
 
+    /** Example sentences keyed by simplified form — a word, or a single character standing
+     * as its own form. The practice card asks for more than a word page's aside so the
+     * revealed side fills the screen rather than trailing off into dead space. */
+    fun cardSentences(simp: String, limit: Long = CARD_SENTENCE_LIMIT): List<SentenceExample> =
+        db.hanziQueries.sentencesForWord(simp, limit).executeAsList()
+            .map { SentenceExample(it.zh, it.en) }
+
     private fun firstSenses(defsJson: String?, count: Int = 2): String? =
         parseSenses(defsJson).take(count).joinToString("; ").ifEmpty { null }
 
@@ -469,6 +476,10 @@ class HanziRepository(
     private companion object {
         /** A few examples is plenty on a word page; more would bury the definitions. */
         const val SENTENCE_LIMIT = 5L
+
+        /** The practice card's revealed side scrolls and has a whole screen to fill, so it
+         * pulls more example sentences than the word page's fixed aside. */
+        const val CARD_SENTENCE_LIMIT = 12L
 
         /** The character page's own drawer, which you opened to compare things, so it can
          * afford more rows than a word page's aside — 请 alone has a dozen 青-sharers. */
