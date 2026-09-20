@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -43,26 +42,6 @@ val photoPermission: String =
 fun BackButton(onBack: () -> Unit) {
     IconButton(onClick = onBack) {
         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-    }
-}
-
-/**
- * Jump straight back to the dictionary home, from anywhere.
- *
- * Back walks the hierarchy one step at a time, and this app's browsing is genuinely deep —
- * a character leads to a component, which leads to another character, which leads to its
- * words — so "get me out of here" was costing four or five taps. Every screen but home
- * carries this, always as the **last action before an overflow menu**, so it lands in the
- * same corner everywhere and never moves when a screen has extra actions.
- *
- * It's a top-bar action rather than a bottom nav bar on purpose: bottom nav would cost a
- * permanent strip of vertical space on screens (practice above all) that are budgeted to
- * fit without scrolling, and only two of this app's destinations are top-level at all.
- */
-@Composable
-fun HomeButton(onHome: () -> Unit) {
-    IconButton(onClick = onHome) {
-        Icon(Icons.Filled.Home, contentDescription = "Home")
     }
 }
 

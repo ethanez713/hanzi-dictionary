@@ -4,11 +4,9 @@ import app.cash.sqldelight.db.SqlDriver
 import com.hanzidictionary.core.userdb.UserDatabase
 
 /**
- * The user's own state — which characters they know, lookup/confusion history — in a
- * separate, writable, app-owned database (spec §7). The "known characters" set is what
- * powers the app's core differentiator: connections filtered/ordered by what the user
- * already knows (spec §1). SRS review scheduling is deferred (spec §14); the status
- * column reserves room for it.
+ * The user's own state — archive, lookup history, photo finds — in a separate writable
+ * database (spec §7). The known-characters set is what powers known-first series
+ * ordering (spec §1). Lists and FSRS state live in the same file via StudyRepository.
  */
 class UserRepository(driver: SqlDriver) {
     private val db = UserDatabase(driver)
@@ -45,12 +43,6 @@ class UserRepository(driver: SqlDriver) {
     }
 
     fun logLookup(glyphId: String) = q.logLookup(glyphId, now())
-
-    /** Record that the user mixed up [glyphA] and [glyphB] in a drill — seeds future
-     * confusable review (spec §7 confusion_event, §14). */
-    fun logConfusion(glyphA: String, glyphB: String) = q.logConfusion(glyphA, glyphB, now())
-
-    fun confusionCount(): Long = q.confusionCount().executeAsOne()
 
     fun lastScanTimestamp(): Long = q.getLastScanTimestamp().executeAsOneOrNull() ?: 0L
 

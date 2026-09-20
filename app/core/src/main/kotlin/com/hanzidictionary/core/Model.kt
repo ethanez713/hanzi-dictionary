@@ -69,7 +69,7 @@ data class ConfusableView(
 
 /** A word containing the page's character (CC-CEDICT, spec §9 IA item 6). */
 data class WordView(
-    val id: String,            // word/{id} route target
+    val id: String,
     val simp: String,
     val trad: String,          // may equal simp
     val pinyin: String?,
@@ -165,23 +165,6 @@ data class LookAlike(
 /** A Tatoeba example sentence (spec §9 word page): the Mandarin, and its English gloss
  * where one is linked. */
 data class SentenceExample(val zh: String, val en: String?)
-
-/** A visually-confusable pair (Unihan kSpoofingVariant), for the confusable drill. */
-data class ConfusablePair(
-    val glyphA: String,
-    val glyphB: String,
-    val charA: String,
-    val charB: String,
-)
-
-/** One option in the look-alike drill: a common member of a shared phonetic series
- * (清/情/晴 all carry 青), each with the pinyin+gloss that lets a wrong answer teach. */
-data class DrillChoice(
-    val glyphId: String,
-    val char: String,
-    val pinyin: String,
-    val gloss: String,
-)
 
 /** A study item resolved to display text, whichever kind it is (spec §17). */
 data class ItemSummary(

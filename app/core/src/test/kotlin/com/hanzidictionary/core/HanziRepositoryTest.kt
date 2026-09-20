@@ -309,27 +309,6 @@ class HanziRepositoryTest {
     }
 
     @Test
-    fun confusablePairsAvailableForDrill() {
-        val pairs = repo.confusablePairs()
-        assertTrue(pairs.isNotEmpty(), "pack should carry kSpoofingVariant pairs")
-        assertTrue(
-            pairs.any { setOf(it.charA, it.charB) == setOf("妹", "妺") },
-            "妹/妺 should be a drillable pair",
-        )
-    }
-
-    @Test
-    fun confusionEventsRoundTrip() {
-        val d = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        UserRepository.Schema.create(d)
-        val user = UserRepository(d)
-        assertEquals(0L, user.confusionCount())
-        user.logConfusion("U+59B9", "U+59BA")
-        assertEquals(1L, user.confusionCount())
-        d.close()
-    }
-
-    @Test
     fun practiceQueueHoldsEncounteredUnknownsUntilArchived() {
         val d = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         UserRepository.Schema.create(d)
@@ -410,68 +389,6 @@ class HanziRepositoryTest {
         assertEquals(null, segmentPinyin("qing", syllables))
         // not segmentable → null
         assertEquals(null, segmentPinyin("feeling", syllables))
-    }
-
-    @Test
-    fun drillSeriesServesCommonDistinctLookAlikes() {
-        val groups = repo.drillSeries()
-        assertTrue(groups.isNotEmpty(), "drill needs at least one look-alike group")
-        for (g in groups) {
-            assertTrue(g.size >= 2)
-            assertTrue(g.all { it.pinyin.isNotBlank() && it.gloss.isNotBlank() })
-            assertEquals(g.size, g.map { it.gloss.lowercase() }.distinct().size, "glosses must be distinct")
-        }
-        val qingGroup = groups.firstOrNull { g -> g.any { it.char == "清" } && g.any { it.char == "情" } }
-        assertNotNull(qingGroup, "the 青 series (清/情) should be a drill group")
-    }
-
-    @Test
-    fun myWordsDrillAnchorsEveryRoundOnACharacterIUseAndPairsItPlausibly() {
-        // A tiny "saved list": one character with well-known look-alikes, and one without.
-        val qing = repo.characterPageByChar("请")!!.glyphId
-        val mine = setOf(qing)
-
-        val groups = repo.drillSeriesFor(mine)
-        assertTrue(groups.isNotEmpty(), "请 has look-alikes, so it should yield a group")
-        for (g in groups) {
-            assertTrue(g.size >= 2, "a round needs a target and at least one distractor")
-            // Target-first is the contract the drill screen deals rounds on.
-            assertTrue(g.first().glyphId in mine, "the target must be one of my characters")
-            assertTrue(g.all { it.pinyin.isNotBlank() && it.gloss.isNotBlank() })
-            assertTrue(
-                g.drop(1).none { it.gloss.equals(g.first().gloss, ignoreCase = true) },
-                "a distractor that means the same thing makes the cue unanswerable",
-            )
-        }
-        val qingGroup = groups.single()
-        assertTrue(
-            qingGroup.drop(1).any { it.char == "清" || it.char == "情" || it.char == "晴" },
-            "请's distractors should be its 青 siblings, got ${qingGroup.map { it.char }}",
-        )
-    }
-
-    @Test
-    fun myWordsDrillOnlyOffersDistractorsAUserCouldPlausiblyMeet() {
-        val qing = repo.characterPageByChar("请")!!.glyphId
-        // Every distractor is either one of mine or common enough to actually run into.
-        val distractors = repo.drillSeriesFor(setOf(qing)).flatMap { it.drop(1) }
-        assertTrue(distractors.isNotEmpty())
-        for (d in distractors) {
-            val rank = repo.characterPage(d.glyphId)!!.freqRank
-            assertTrue(
-                rank != null && rank <= 3000L,
-                "${d.char} (rank $rank) is too rare to be a useful confusion",
-            )
-        }
-    }
-
-    @Test
-    fun myWordsDrillIsEmptyWithNothingSavedRatherThanFallingBackSilently() {
-        // The screen decides what to do about an empty result (it drops to the pooled drill
-        // and says so); the repository must not paper over it here.
-        assertTrue(repo.drillSeriesFor(emptySet()).isEmpty())
-        // Word ids aren't glyphs — the drill compares single characters.
-        assertTrue(repo.drillSeriesFor(setOf("w000123")).isEmpty())
     }
 
     @Test

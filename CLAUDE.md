@@ -118,7 +118,7 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   character page — and re-dealing the top card each time made looking a card up lose it. Any
   surface that resumes on a particular card does it by setting the pin; don't add deep-link
   args for it. While a card is suspended, the way back to it is the lookup sheet's return
-  chip and the Dictionary tab's return dock, good for `CARD_RETURN_TTL_MS`.
+  chip.
 - **An arriving intent wins, and a stale return resets.** A widget tap sets the pin *and*
   bumps `studyResumeToken`, which is what `PracticeScreen` keys its deck reload on — without
   the token an already-active list leaves the old card sitting under the correctly-opened
