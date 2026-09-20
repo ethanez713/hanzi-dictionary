@@ -165,7 +165,12 @@ def resolve_variant_edges(entities: dict[int, GlyphEntity]) -> list[VariantEdgeD
 
 
 def etymology_text_claim(e: GlyphEntity) -> str | None:
-    """Wiktextract's free-text etymology (interpretive, stored as-is per §8.4)."""
+    """Wiktextract's free-text etymology (interpretive, stored as-is per §8.4).
+
+    The phonetic veto reads this, not composed_etymology_text: joining the
+    traditional form's origin onto a simplified glyph would make every mapping
+    note look like it already carried a formation verdict.
+    """
     for entry in e.wiktextract_entries:
         text = entry.get("etymology_text")
         if text:
@@ -275,6 +280,94 @@ def _wiktextract_formation(e: GlyphEntity) -> tuple[str | None, str | None]:
         m = _WIKT_PHONETIC_RE.search(text)
         phonetic = m.group(1) if m else None
     return phonetic, formation
+
+
+_SIMPLIFIED_FROM_RE = re.compile(r"^Simplified from\s+", re.IGNORECASE)
+
+
+def _is_encoded_han(ch: str) -> bool:
+    if len(ch) != 1 or ch in _IDS_OPERATORS:
+        return False
+    o = ord(ch)
+    return (
+        0x3400 <= o <= 0x9FFF
+        or 0xF900 <= o <= 0xFAFF
+        or 0x20000 <= o <= 0x323AF
+    )
+
+
+def _named_simplified_source(text: str) -> str | None:
+    stripped = text.lstrip()
+    m = _SIMPLIFIED_FROM_RE.match(stripped)
+    if not m:
+        return None
+    rest = stripped[m.end():]
+    if rest and _is_encoded_han(rest[0]):
+        return rest[0]
+    return None
+
+
+def _bare_simplified_from(text: str) -> bool:
+    """True when the text is only a mapping note, with no glyph-origin verdict."""
+    stripped = text.lstrip()
+    if not _SIMPLIFIED_FROM_RE.match(stripped):
+        return False
+    lowered = stripped.lower()
+    return not any(
+        any(kw.lower() in lowered for kw in kws)
+        for _, kws in _FORMATION_KEYWORDS
+    )
+
+
+def _traditional_etymology_to_append(
+    e: GlyphEntity, entities: dict[int, GlyphEntity], own: str,
+) -> str | None:
+    named = _named_simplified_source(own)
+    candidates: list[int] = []
+    if named:
+        candidates.append(ord(named))
+    for cp in e.opencc_traditional_of + e.traditional_variants:
+        if cp != e.codepoint:
+            candidates.append(cp)
+    seen: set[int] = set()
+    for cp in candidates:
+        if cp in seen:
+            continue
+        seen.add(cp)
+        te = entities.get(cp)
+        if te is None:
+            continue
+        ttext = etymology_text_claim(te)
+        if not ttext or ttext.strip() in own:
+            continue
+        if _bare_simplified_from(ttext):
+            continue
+        return ttext
+    return None
+
+
+def composed_etymology_text(e: GlyphEntity, entities: dict[int, GlyphEntity]) -> str | None:
+    """Pack-facing etymology: a simplified glyph's Wiktionary text is often only
+    a mapping note ('Simplified from 續 (糹 → 纟 and 賣 → 卖).'). Store that note
+    followed by the source character's own etymology so the sheet has the
+    glyph-origin to expand into.
+
+    Does not recurse — 為 names 爲, and 爲 points back. If the named form has
+    no etymology (说 names 説), fall through to OpenCC / Unihan traditional
+    forms that do (說).
+    """
+    text = etymology_text_claim(e)
+    if not text:
+        return None
+    if not _SIMPLIFIED_FROM_RE.match(text.lstrip()):
+        return text
+    trad = _traditional_etymology_to_append(e, entities, text)
+    if not trad:
+        return text
+    own = text.rstrip()
+    if not own.endswith("."):
+        own += "."
+    return f"{own}\n{trad}"
 
 
 def _traditional_origin(e: GlyphEntity, entities: dict[int, GlyphEntity]) -> GlyphEntity | None:

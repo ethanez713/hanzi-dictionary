@@ -187,6 +187,26 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun simplifiedEtymologyCarriesTraditionalFormation() {
+        // Wiktionary's 续 entry is only a mapping note; the pack joins 續's glyph-origin
+        // so expanding the sheet shows the phonetic, not just 糹 → 纟.
+        val xu = repo.characterPageByChar("续")
+        assertNotNull(xu)
+        val xuEty = xu.claims.firstOrNull { it.predicate == "etymology_text" }?.value
+        assertNotNull(xuEty, "续 should carry an etymology_text claim")
+        assertTrue("Simplified from 續" in xuEty, "mapping note should lead, got: $xuEty")
+        assertTrue("𧶠" in xuEty, "traditional phonetic should follow the mapping, got: $xuEty")
+
+        // 说 names 説, which has no etymology; the join must fall through to 說.
+        val shuo = repo.characterPageByChar("说")
+        assertNotNull(shuo)
+        val shuoEty = shuo.claims.firstOrNull { it.predicate == "etymology_text" }?.value
+        assertNotNull(shuoEty, "说 should carry an etymology_text claim")
+        assertTrue("Simplified from 説" in shuoEty, "mapping note should lead, got: $shuoEty")
+        assertTrue("兌" in shuoEty, "說's phonetic should follow the mapping, got: $shuoEty")
+    }
+
+    @Test
     fun claimedPhoneticSurvivesTotalSoundDrift() {
         // 说's 兑 (duì vs shuō) has no computable sound link at any stratum, but
         // makemeahanzi's etymology asserts the phonetic role — the detector must keep

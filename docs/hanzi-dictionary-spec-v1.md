@@ -146,7 +146,7 @@ A component chip opens the component's *character* entry, not its component page
 **Character entry** (lookup sheet):
 1. Header — glyph, all pinyin readings (frequency order; extras as "also …"), TTS on the character, CC-CEDICT senses leading with Unihan `kDefinition` as fallback, freq/HSK/stroke line, **Add to list** + Archive.
 2. Breakdown chips — components color-coded by function, spoken names or readings, role gloss on meaning parts; tap → that component's character entry.
-3. Formation / etymology claims, first sentence then expandable.
+3. Formation / etymology claims, first sentence then expandable. A Wiktionary etymology that is a "Simplified from X" note is stored with X's etymology after it (or another traditional form's, if X has none).
 4. In words — containing words, corpus-frequency first; tap → word entry. Heteronyms keep a row per reading.
 5. Footer links — phonetic series of the sound part, and "X as a component".
 

@@ -775,7 +775,7 @@ def build() -> Path:
                 gid, "component_function", json.dumps(func_claim, ensure_ascii=False),
                 "makemeahanzi", None, 0.6, manifests["makemeahanzi"]["retrieved_at"],
             ))
-        etymology_text = merge.etymology_text_claim(e)
+        etymology_text = merge.composed_etymology_text(e, entities)
         if etymology_text:
             claim_rows.append((
                 gid, "etymology_text", json.dumps(etymology_text, ensure_ascii=False),
