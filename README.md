@@ -11,7 +11,7 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
 - `pipeline/` — data ingestion, normalization, merge, and compute pipeline (Python). Produces
   the SQLite data packs the app consumes. Intended to be split out into its own publicly
   published repo once the dataset is ready to release (spec §5, §8.7).
-- `app/` — Kotlin/Compose Android app (added later, per milestone order in spec §12).
+- `app/` — Kotlin/Compose Android app.
 - `docs/ATTRIBUTIONS.md` — per-source license/attribution, read this before publishing anything.
 - `LICENSES/` — full text of every license the bundled data carries.
 
@@ -67,8 +67,7 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   and the middle **flips** the card to reveal pinyin+definition, then opens it in Practice.
   Spec §17.
 - **Learning features (beyond spec)** — practice deck sources (encountered / HSK band /
-  component series), reverse (production-recall) cards, confusable drills writing
-  confusion_event, per-HSK progress bars on the Archive.
+  component series), reverse (production-recall) cards, per-HSK progress bars on the Archive.
 - **M3.55 (practice & archive)** — done: flashcard Practice screen over characters
   encountered (lookups/photo finds) but not yet known; "I knew it" archives them, and
   My Characters is reframed as the Archive (spec §16). No SRS scheduling (v2).
@@ -77,6 +76,6 @@ Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
   sources disagree), function distribution + positional-variant links (水/氵/氺) on
   component pages. Remaining: GlyphWiki script forms + scholarly tier, spoken names,
   Wikimedia syllable recordings.
-- **M3.8–M3.9** — not started (app polish: fonts subsetting, strokes, confusable
-  compare, series browser, settings, strings; pack updates — blocked on the public
-  dataset repo decision). Spec §12 remains the complete work plan.
+- **M3.8–M3.9** — not started (app polish: fonts subsetting, strokes, strings;
+  pack updates — blocked on the public dataset repo decision). Spec §12 lists
+  remaining v1 work.

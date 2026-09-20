@@ -1,61 +1,65 @@
-# Hanzi Component Dictionary — Product Spec v1.3 (reviewed)
+# Hanzi Component Dictionary — Product Spec
 
 ## 1. Overview
 
-A free, offline-first Android dictionary that explains **how Chinese characters work**: per-script semantic/phonetic/empty component breakdowns, computed phonetic-reliability scores, drift explanations grounded in historical phonology, simplified↔traditional mapping types, confusable disambiguation, and component-series navigation — all with per-claim provenance from open data sources.
+A free, offline-first Android dictionary that explains **how Chinese characters work**: per-script semantic/phonetic/empty component breakdowns, computed phonetic-reliability scores, drift explanations grounded in historical phonology, simplified↔traditional mapping types, confusable pairs in the data pack, and component-series navigation — all with per-claim provenance from open data sources.
 
-**Positioning:** the open, personalized alternative to Pleco+Outlier. Differentiation is not data volume but (a) friction-free capture, (b) connections filtered by *the user's own known characters*, (c) computed (not copied) component-function labels with honest sourcing, (d) a fully open published dataset.
+**Positioning:** the open, personalized alternative to Pleco+Outlier. Differentiation is not data volume but (a) friction-free capture from the photo library, (b) connections filtered by *the user's own known characters*, (c) computed (not copied) component-function labels with honest sourcing, (d) a fully open dataset, when publication is decided.
 
-**Precise gap claim (verified July 2026):** free component *breakdowns* already exist (Dong Chinese wiki — human-verified top ~1000 with open dumps; Hanly; ArchChinese). No product, free or paid, combines computed phonetic-reliability scores + per-stratum drift explanations + per-claim provenance + known-vocab-filtered series + offline native both-script + a 20k-scale open dataset. Marketing must claim that combination, never "first free breakdown app."
+**Gap claim:** free component *breakdowns* already exist (Dong Chinese wiki — human-verified top ~1000 with open dumps; Hanly; ArchChinese). No product, free or paid, combines computed phonetic-reliability scores + per-stratum drift explanations + per-claim provenance + known-vocab-filtered series + offline native both-script + a 20k-scale open dataset. Marketing must claim that combination, never "first free breakdown app."
 
 ## 2. Goals & Non-Goals
 
-**Goals (v1)**
+**Goals**
 - Sub-10-second path from "saw a character" to full component breakdown.
 - Component pages as first-class citizens (series, reliability, names, variants).
 - Both scripts treated equally, with mapping-type explanations and merger warnings.
-- "Known characters" model from day one (imports + one-tap marking).
-- Published open dataset with per-record attribution (CC BY-SA compliance).
+- Known-characters model (imports + archive) feeding known-first series ordering.
+- FSRS-6 scheduled practice over named study lists of characters and words.
+- Published open dataset with per-record attribution (CC BY-SA compliance), when that call is made.
 
-**Non-Goals (v1)** — explicitly deferred: SRS/review scheduling, quizzes, mnemonics layer, sentence reader, handwriting engine (system IME suffices), Cantonese/topolect UI surfacing (data is stored), word-level audio recordings, iOS app, web app, backend/accounts.
+**Non-Goals** — explicitly deferred: confusable quizzes and a look-alike drill, mnemonics layer, sentence reader, handwriting engine (system IME suffices), live camera OCR, Cantonese/topolect UI surfacing (data is stored), word-level audio recordings, iOS app, web app, backend/accounts.
 
 ## 3. Target User
 
 Intermediate self-learners (≈300–2,000 known characters) who already own Pleco. Default explanation depth: learner tier; scholarly tier (script forms, OC/MC readings) behind expansion. Component spoken names (三点水, 提手旁) shown throughout.
 
-## 4. Decision Log
+## 4. Decisions
 
 | Decision | Choice |
 |---|---|
-| Product core | Dictionary first; SRS later (data model SRS-ready) |
+| Product core | Dictionary first; FSRS-6 practice is the consumption loop, not a quiz app |
 | Audience | Intermediate self-learner |
 | Scripts | Simplified & Traditional, equal priority |
-| Platform | Native: Kotlin/Compose Android first; Swift/SwiftUI iOS later; web later |
-| Business | Free; no monetization at launch; ads permissible later (BY-SA allows commercial use) |
+| Platform | Native: Kotlin/Compose Android; Swift/SwiftUI iOS later; web later |
+| Business | Free; no monetization; ads permissible later (BY-SA allows commercial use) |
 | Data strategy | Open sources only; no human/LLM etymology review; cross-reference + computed validation; provenance-first display |
-| Dataset | Published openly (GitHub); community corrections via issues/PRs |
-| Infra | None. Offline-first; data packs via GitHub Releases |
-| Distribution | Google Play only |
-| Telemetry | Opt-in (default off): Firebase Analytics + Crashlytics, single toggle |
+| Dataset | Built for public release (layered licenses); the repo stays private until that call is made |
+| Infra | None. Offline-first; data packs via GitHub Releases when updates ship |
+| Distribution | Sideloaded; Google Play for a public launch |
+| Telemetry | None until a Play listing. Then opt-in (default off): Firebase Analytics + Crashlytics, single toggle |
 
 ## 5. Data Sources & Licenses
 
-| Source | Provides | License / status |
+Canonical per-source table: `docs/ATTRIBUTIONS.md`. In brief:
+
+| Source | Provides | License |
 |---|---|---|
 | Wiktionary via Wiktextract (kaikki.org) | glyph origins, definitions, readings, embedded Baxter-Sagart & Zhengzhang reconstructions | CC BY-SA 4.0 |
-| Unihan | multi-language readings, S↔T variants, radicals | permissive (Unicode) |
-| CC-CEDICT | word definitions | CC BY-SA |
-| makemeahanzi | decomposition, semantic/phonetic etymology fields, stroke SVGs/medians | dictionary data derived from Unihan+CJKlib; graphics under Arphic PL |
+| Unihan | multi-language readings, S↔T variants, radicals, kSpoofingVariant, shape codes | Unicode License v3 |
+| CC-CEDICT | word definitions | CC BY-SA 4.0 |
+| makemeahanzi | decomposition, semantic/phonetic etymology fields; graphics under Arphic PL | dictionary data derived from Unihan+CJKlib; **LGPL-3.0-or-later** |
 | cjkvi-ids (CHISE) | region-tagged IDS decompositions | GPL |
 | OpenCC | S↔T conversion tables | Apache 2.0 |
 | Guangyun-derived repos (rime, poem/guangyun) | Middle Chinese readings | per-repo, mostly permissive |
-| GlyphWiki | ancient/variant glyph images | free |
-| wordfreq | frequency ranks | MIT |
-| Dong Chinese wiki dumps / chinese-lexicon (optional) | human-verified component functions + etymology for top ~1000 chars, per-script (simp/trad) etymologies, 多音字 pinyin frequencies | monthly dumps "free to download" — **confirm license before ingesting**; usable privately for validation regardless |
+| FrequencyWords (OpenSubtitles) | word frequency ranks | CC BY-SA 4.0 |
+| complete-hsk-vocabulary | HSK 3.0 levels | MIT |
+| Tatoeba | example sentences | CC BY 2.0 FR |
+| Dong Chinese wiki dumps | private QA of component functions for the top ~1000; not for the published dump until license is confirmed | unconfirmed |
 
 **Excluded:** 小學堂 & hanziyuan.net images (rights unclear), SUBTLEX-CH (research license), Baxter-Sagart's own distribution files (possible NC terms — reconstructions ingested via Wiktionary instead; confirm with counsel).
 
-**Dataset publication:** layered per-source files each retaining upstream license; computed/derived layer under CC BY-SA 4.0. Legal check on merged-form licensing (note: CC BY-SA 4.0 is one-way compatible into GPLv3).
+**Dataset publication:** layered per-source files each retaining upstream license; computed/derived layer under CC BY-SA 4.0. Legal check on merged-form licensing (note: CC BY-SA 4.0 is one-way compatible into GPLv3). makemeahanzi is LGPL-3.0, which the original source table missed — `docs/ATTRIBUTIONS.md` is the authority.
 
 ## 6. Coverage Tiers (shown honestly in UI)
 
@@ -65,120 +69,127 @@ Intermediate self-learners (≈300–2,000 known characters) who already own Ple
 
 ## 7. Schema (canonical)
 
-Design principles: **codepoint = primary entity** (S/T are `variant_edge`s, so mergers and per-script analysis fall out naturally); **hybrid provenance** (typed tables for mechanical facts, `claim` table for interpretive ones); unencoded components use `ids:` pseudo-IDs; every computed field carries `resolution` for honesty badges.
+Design principles: **codepoint = primary entity** (S/T are `variant_edge`s, so mergers and per-script analysis fall out naturally); **hybrid provenance** (typed tables for mechanical facts, `claim` table for interpretive ones); unencoded components use `ids:` pseudo-IDs; every computed field carries `resolution` for honesty badges. The pack schema lives in `pipeline/pipeline/schema.sql`; this section is the contract, not a second copy of every column.
 
 ```sql
-glyph(id PK, char, scripts, stroke_count, freq_rank, hsk)
-
-reading(glyph_id, system, value, sense_hint, source_id)
+glyph(id PK, char, scripts, stroke_count, freq_rank, hsk, definition, cedict_defs)
+reading(glyph_id, system, value, sense_hint, freq, source_id)
   -- system: pinyin|jyutping|mc_baxter|oc_bs|oc_zz|jp_on…
-
-decomposition(glyph_id, ids TEXT, region, source_id)  -- IDS tree; region G/T/J
-
-component_use(glyph_id, component_id, position,
-  function,       -- semantic|phonetic|both|empty|unknown
-  match_class,    -- exact|tone|initial|rime|oc_only|opaque (computed)
-  confidence, resolution)  -- computed|agreement|single_source|conflict
-
-claim(subject_id, predicate, value JSON, source_id, source_ref,
-  confidence, retrieved_at)
-  -- interpretive only: component_function, original_meaning,
-  -- formation_type, etymology_text, simplification_note
-
-variant_edge(from_glyph, to_glyph, relation,
-  mapping_type,   -- systematic|cursive|merger|new_coinage
-  sense_condition, source_id)
-
+decomposition(glyph_id, ids TEXT, region, source_id)
+component_use(glyph_id, component_id, position, function, match_class, confidence, resolution)
+claim(subject_id, predicate, value JSON, source_id, source_ref, confidence, retrieved_at)
+variant_edge(from_glyph, to_glyph, relation, mapping_type, sense_condition, source_id)
 phonetic_series(component_id PK, member_count, reliability, best_stratum)
-
 word(id PK, simp, trad, pinyin, defs JSON, freq_rank, hsk)
 word_char(word_id, glyph_id, position)
-
-script_form(glyph_id, era, image_ref, source_id)
-confusable(glyph_a, glyph_b, kind, diff)          -- computed
-audio(reading_id, file, source)                    -- tts|recorded
+sentence(simp, zh, en, tatoeba_id, quality, shown)
+component_gloss(component_id PK, gloss, source_id, support, agreement)
+script_form(glyph_id, era, image_ref, source_id)   -- declared; unused
+confusable(glyph_a, glyph_b, kind, diff)
+audio(reading_id, file, source)                    -- declared; unused (device TTS)
 source(id PK, name, license, url, version, ingest_date)
 ```
 
-**On-device user DB (separate):**
+**On-device user DB** (`user.db`, migrates in place; `app/core/.../User.sq`):
 
 ```sql
-known_item(item_id, kind, status, added_at)   -- SRS columns reserved
+known_item(item_id PK, kind, status, added_at)          -- the archive; global
+study_list(id PK, name, created_at)
+list_item(list_id, item_id, kind, added_at)
+card_state(item_id PK, kind, state, step, stability, difficulty, due, last_review, reviews, lapses)
+review_log(item_id, rating, ts, elapsed_days, stability, difficulty, origin)
 lookup_event(item_id, ts)
-confusion_event(glyph_a, glyph_b, ts)
+confusion_event(glyph_a, glyph_b, ts)                   -- reserved for v2 quizzes
+photo_find(glyph_id, photo_id, found_at, dismissed_at)
+scan_state(id, last_photo_timestamp)
+app_pref(key PK, value)
 ```
 
-Known-item imports: HSK level picker, Anki .apkg, Pleco export.
+Known-item imports: HSK level picker and paste. Anki `.apkg` / Pleco export are deferred.
 
 ## 8. Merge / Validation Pipeline (CI only; no server)
 
 1. **Ingest** — per-source fetchers → immutable versioned snapshots + license metadata.
 2. **Normalize** — NFC, IDS operator unification, canonical predicates.
 3. **Resolve entities** — codepoint keys; unification table for makemeahanzi ↔ cjkvi-ids component tokens.
-4. **Merge** — *mechanical* fields: agreement → accept; conflict → fixed priority (Unihan for readings; cjkvi-ids over makemeahanzi for decomposition, esp. traditional) → else conflict queue. *Interpretive* fields: never vote; all stored as claims and displayed with disagreements.
+4. **Merge** — *mechanical* fields: agreement → accept; conflict → fixed priority (Unihan for readings; cjkvi-ids over makemeahanzi for decomposition, esp. traditional, except when a decomposition's parts are not navigable characters) → else conflict queue. *Interpretive* fields: never vote; all stored as claims and displayed with disagreements.
 5. **Compute**
-   - *Phonetic detector:* compare component vs. character readings at pinyin / Middle Chinese / Old Chinese strata → `function`, `match_class`, `best_stratum` (the last stratum where the link held **is** the drift explanation).
+   - *Phonetic detector:* compare component vs. character readings at pinyin / Middle Chinese / Old Chinese strata → `function`, `match_class`, `best_stratum` (the last stratum where the link held **is** the drift explanation). Compares against *all* readings of a component and takes the best match.
    - *Series reliability:* frequency-weighted rollup of member match_classes.
-   - *Simplification classifier:* OpenCC + systematic-substitution rules + merger detection (one simp → multiple trad); everything unmatched auto-labels `irregular (unclassified)` — a computable residual category, so **no curation is required to ship**. Optional quality upgrade later: a ~500-row curated table splitting irregulars into cursive-derived vs. new-coinage.
-   - *Confusables:* stroke-median distance (makemeahanzi) + IDS-differs-by-one.
-6. **QA gates** — referential integrity, IDS parse validity, S↔T round-trip, **license lint** (blocks NC-tagged data from publishable set), diff vs. previous build.
-7. **Publish** — versioned SQLite+FTS5 app pack; open JSONL dump with attributions. Conflict queue → GitHub issues on the dataset repo (community review loop).
+   - *Simplification classifier:* OpenCC + systematic-substitution rules + merger detection (one simp → multiple trad); everything unmatched auto-labels `irregular (unclassified)` — a computable residual category, so **no curation is required to ship**.
+   - *Confusables:* Unihan kSpoofingVariant + shape-code neighbours (Cangjie/Four-Corner) + pairs that share a big distinctive component. See `pipeline/lookalike.py`.
+6. **QA gates** — referential integrity, IDS parse validity, S↔T round-trip, **license lint** (blocks NC-tagged data from the publishable set), diff vs. previous build.
+7. **Publish** — versioned SQLite+FTS5 app pack (`core.db` + `ids.db`); open JSONL dump with attributions when the dataset is public. Conflict queue → GitHub issues on the dataset repo.
+
+**IDS region rule:** prefer G-tagged IDS for simplified glyphs and T-tagged for traditional; fall back to untagged.
+
+**GPL layering in the shipped pack:** two SQLite files — `core.db` (BY-SA-side sources + computed layer) and `ids.db` (cjkvi-ids-derived decompositions, GPL) — opened as two SQLDelight drivers, never ATTACHed. The app never migrates a pack; a new pack fully replaces the old one.
 
 ## 9. App
 
-**Stack:** Kotlin, Jetpack Compose, min SDK 26. Non-UI core (data access, search, pack reader) as a **pure-Kotlin KMP-ready module** for iOS reuse. SQLDelight (+FTS5). Bundled subsetted Noto Sans SC + TC with explicit per-script typefaces. Stroke rendering from makemeahanzi medians via Compose Canvas.
+**Stack:** Kotlin, Jetpack Compose, min SDK 26. Non-UI core (data access, search, pack reader, FSRS, widget/practice state machines) as a **pure-Kotlin JVM module** (`:core`) for testability and later iOS reuse. SQLDelight (+FTS5 via requery). Bundled Noto Sans CJK SC.
 
-**Capture:** ML Kit Text Recognition v2 Chinese (unbundled, on-device) behind a `CaptureProvider` interface; camera → tap-any-character → entry; Hans+Hant recognition with script post-detection; single-character crop mode with N-best. Plus: SEND-intent share target, paste-on-open, system handwriting IME, component-compose search off the IDS index.
+**Navigation.** Three tabs, and a lookup is a layer over one of them — never a destination. There is no nav graph and no back stack.
 
-**Search ranking:** exact char > word > pinyin (tone-optional) > English FTS > fuzzy; compose-search as mode chip; camera button inline.
+- **Study** — the FSRS deck for the active list (or Everything). The practice card is the surface; looking a character up does not leave it.
+- **Dictionary** — search, the photo-library feed, and recently viewed. This is also the capture surface.
+- **Library** — named lists, HSK/encountered pools, archive, session progress.
 
-**Character page IA:**
-1. Header — both script forms side by side, pinyin + audio, top glosses, freq/HSK chips, "I know this" toggle.
-2. Breakdown strip — components color-coded by function, spoken names, tap → component page.
-3. Sound line — reliability badge + drift sentence from `best_stratum`.
-4. Formation — type + etymology claims with source chips; expandable scholarly tier (oracle→seal forms, OC/MC).
-5. Script mapping card — mapping_type + merger warnings.
-6. In your words — containing words, known-first then frequency.
-7. Series — phonetic siblings grouped by match_class; semantic siblings.
-8. Confusables — side-by-side diff highlighting.
-9. Provenance footer — sources + prefilled GitHub-issue report link.
+Tapping a component chip, word row, search result, or photo tile **pushes a level onto that tab's lookup sheet**. The sheet carries its own trail (好 › 女 › 妈) and, when a practice card is suspended under it, a chip back to that card. System back pops a trail level, then dismisses the sheet — it never leaves the tab. Settings, Archive, and the list editor are **overlays** above the tabs, not a fourth tab.
 
-**Component page:** names + own readings, function distribution across characters, series grouped by function (known-first), reliability meter, positional variants (水/氵/氺).
+A component chip opens the component's *character* entry, not its component page. The component page (what else shares this part) is reached from the plain footer links at the foot of an entry. Only a combining form with no character of its own (氵) opens the component page directly.
 
-**Other screens:** word page, series browser, confusables compare, My Characters (known list + imports), Settings (script preference, depth default, telemetry toggle, pack updates).
+**Capture:** photo-library scanning — ML Kit Text Recognition v2 Chinese (unbundled, on-device) OCRs recent camera-roll photos (watermark-deduped, `READ_MEDIA_IMAGES` / `READ_EXTERNAL_STORAGE`) and surfaces found characters in the Dictionary tab's feed. Swipe right files a find into the active list; swipe left dismisses it. Plus: SEND-intent share target (one hanzi opens its entry, more prefills search), paste-on-open, system handwriting IME, component-compose search off the IDS index as a mode chip.
 
-**Audio:** syllable bank (~1,800 clips ≈ 20 MB, all syllable×tone combos incl. neutral tone) covers every character in isolation. **Generate with an open-source TTS model (MIT-licensed, e.g., Piper/MeloTTS)** — fully redistributable, avoiding cloud-TTS output-redistribution ambiguity; prefer Wikimedia Commons recordings (CC, surfaced in kaikki data) where they exist. On-device Android TTS for words (tone sandhi makes syllable concatenation wrong); word audio deferred.
+**Search ranking:** exact char > word > pinyin (tone-optional, including run-together syllables) > English FTS > fuzzy (typos and zh/z, ch/c, sh/s, l/n). Traditional hits fold into the simplified row. Results whose glyph the bundled face cannot draw are dropped (no tofu). Compose-search is a mode chip, not a separate screen.
 
-**Updates:** semver data packs from GitHub Releases; delta downloads; app fully offline afterward.
+**Character entry** (lookup sheet):
+1. Header — glyph, all pinyin readings (frequency order; extras as "also …"), TTS on the character, CC-CEDICT senses leading with Unihan `kDefinition` as fallback, freq/HSK/stroke line, **Add to list** + Archive.
+2. Breakdown chips — components color-coded by function, spoken names or readings, role gloss on meaning parts; tap → that component's character entry.
+3. Formation / etymology claims, first sentence then expandable.
+4. In words — containing words, corpus-frequency first; tap → word entry. Heteronyms keep a row per reading.
+5. Footer links — phonetic series of the sound part, and "X as a component".
+
+**Word entry:** simp (and trad when it differs), pinyin, TTS, senses, Add to list / Archive, one chip per constituent character, Tatoeba/TED example sentences with in-sheet credit.
+
+**Component entry:** names + own readings, phonetic members ("sound series"), semantic members ("shares this meaning part"), link through to the component's own character entry when it has one. Positional variants (水/氵/氺) resolve in compose-search and on the breakdown.
+
+**Practice card:** structure, not headings. Front is the glyph; revealed side is bands split by hairlines — answer, components, words, sentences. The glyph sits in a fixed zone and must not move when the card flips: revealed content only ever grows *below* it. That side scrolls and is meant to fill.
+
+**Audio:** the device's Mandarin TTS (`android.speech.tts`, zh-CN) on the primary reading of a character and on words/sentences. A device without an installed Mandarin voice shows no audio. Only the primary 多音字 reading is spoken (an engine reads a bare character with its most common pronunciation). Readings without a Wiktionary sense pairing are listed unpaired.
+
+**Gestures, app-wide:** right = affirm (knew it / add / archive), left = negative (didn't know / remove), up = skip. Grading is swipe-only and only two grades (Again / Good); Hard/Easy exist in FSRS arithmetic and are never offered. Every swipe also exposes a TalkBack `CustomAccessibilityAction`.
+
+**Settings overlay:** theme (auto/light/dark), swipe-hint toggle, pack version, attributions listing every `source` row.
+
+**UI language:** English-only.
+
+**Updates:** the app ships a bundled pack and copies it on first run / version bump.
 
 ## 10. Telemetry & Privacy
 
-Default **off**; single onboarding toggle enables Firebase Analytics + Crashlytics. No ad ID. Events: search type used, entry views, component-section expansion, known-toggles, capture success/failure. Play Data Safety disclosure required. User data never leaves device otherwise.
+No telemetry ships. A Play listing requires a Data Safety disclosure and, if analytics are added, a single onboarding toggle defaulting **off** for Firebase Analytics + Crashlytics. No ad ID. User data never leaves the device otherwise.
 
 ## 11. Success Metrics
 
 - Activation: first successful lookup < 60 s from install.
-- Depth: % of lookups that open a component page or series.
-- Habit: weekly returning users; known-list adoption rate.
-- Capture: camera-lookup success rate.
-- Ecosystem: dataset repo issues/PRs from non-maintainers.
+- Depth: share of lookups that open a component or series.
+- Habit: returning use; list and archive adoption.
+- Capture: photo-scan yield that gets filed rather than dismissed.
 
-## 12. Milestones
+## 12. Remaining v1
 
-**Milestones are the complete work plan.** Every v1 requirement in this spec belongs to exactly one milestone below, so an implementer can work through the milestones without re-reading every section hunting for stragglers. If you find a spec requirement no milestone names, add it to a milestone before implementing — that drift is how definitions were missed the first time.
+Still in scope for v1:
 
-- **M0 — Pipeline PoC:** ingest 5 core sources; SQLite for 1,000 chars; phonetic detector validated by **automated agreement check against Dong Chinese's human-verified top-1000** (private QA use — no license needed), with manual review only of disagreements.
-- **M1 — Data pack v0.1:** full T1/T2 coverage, QA gates green, dataset repo public.
-- **M2 — App alpha:** search + character/component pages, offline pack install.
-- **M3 — Beta:** photo-library scanning (revised from live camera OCR, §16), HSK/paste imports, confusables, syllable audio bank, merger cards.
-- **M3.5 — Definitions & attributions:** CC-CEDICT ingested — character-page glosses, `word`/`word_char` populated, "In words" on character pages, word search + word pages (§15), English FTS in the search ranking (§9), sense↔reading pairing shown where present (§15); in-app ⓘ attributions element (§16).
-- **M3.55 — Practice & archive:** flashcard deck of encountered-but-unknown characters (lookups + photo finds); "I knew it" archives; My Characters reframed as Archive (§16). No SRS scheduling (v2, §14).
-- **M3.56 — Study system (lists, scheduling, widget):** named study lists holding characters *and* words, with membership and archiving edited from one sheet reachable everywhere; archiving stays global (§17); FSRS-6 scheduling over an on-device `card_state`/`review_log` (§17), replacing M3.55's unscheduled deck; swipe interaction on capture rows and practice cards; the intro screen's photo feed as a full detailed list with rescan; a home-screen widget serving one card from the active list with tap-to-grade (§17).
-- **M3.6 — Scholarly & component depth:** GlyphWiki script forms ingested (`script_form`) + the expandable scholarly tier on the character page (oracle→seal forms, OC/MC readings display, §9 IA item 4); component spoken names (~200 rows, §15) on breakdown strips and component pages; component-page positional variants (水/氵/氺) and function distribution (§9); coverage-tier / `resolution` honesty badges surfaced in the UI (§6, §7); prefer Wikimedia Commons syllable recordings where kaikki surfaces them (§9 Audio).
-- **M3.7 — Capture & search completion:** SEND-intent share target; paste-on-open; component-compose search off the IDS index as a search mode chip; fuzzy-search fallback (§9).
-- **M3.8 — App polish:** bundled subsetted Noto Sans SC + TC with explicit per-script typefaces (§9); stroke rendering from makemeahanzi medians via Compose Canvas (§9); confusables side-by-side diff highlighting + compare screen (§9); series browser (§9); Settings screen — script preference, explanation-depth default, pack updates (telemetry toggle lands with M4) (§9); TalkBack labels on breakdown strips and audio buttons + remaining defined empty/error states (§15); strings externalized (§15); provenance footer's prefilled GitHub-issue report link (§9); Anki `.apkg` and Pleco-export imports (§7).
-- **M3.9 — Pack updates:** semver data packs on GitHub Releases; delta downloads; manifest with SHA-256 + signature verified before install (§15); pack-download-failure state (§15); app fully offline afterward (§9).
-- **M4 — Launch:** Play listing + Data Safety disclosure (§10); dataset docs + contribution templates; conflict queue → GitHub issues loop on the dataset repo (§8); licensing/counsel review of the published merged dump and Baxter-Sagart ingestion path (§5, §13); opt-in telemetry (Firebase Analytics + Crashlytics, single toggle) live (§10).
+- Scholarly tier: GlyphWiki `script_form` ingest + oracle→seal / OC/MC display on the character entry.
+- Coverage-tier and `resolution` badges on the sheet (the fields are already computed).
+- Look-alikes listed on character and word entries (the pack already stores them).
+- Stroke playback from makemeahanzi medians; subsetted SC+TC typefaces with explicit per-script faces.
+- Sense↔reading pairing from Wiktionary's per-pronunciation senses.
+- Pack updates from GitHub Releases (semver, delta, SHA-256 + signature, failure state).
+- Strings externalized; provenance footer's prefilled GitHub-issue report link.
+- Play listing + Data Safety; counsel review of the published merged dump and the Baxter-Sagart ingestion path.
+- Dataset repo public, with contribution templates and the conflict-queue → issues loop — only after the publication call.
 
 ## 13. Risks & Mitigations
 
@@ -186,84 +197,44 @@ Default **off**; single onboarding toggle enables Firebase Analytics + Crashlyti
 |---|---|
 | Correlated sources echo folk etymology (Shuowen lineage) | Never vote on interpretive claims; computed function labels; provenance UI; gold-set spot checks |
 | Baxter-Sagart licensing ambiguity | Ingest via Wiktionary (BY-SA); counsel review pre-launch |
-| GPL (cjkvi-ids) × BY-SA in one dump | Layered per-source publication; counsel review of merged form |
-| ML Kit accuracy on stylized signage/handwriting | Crop mode + N-best candidates; provider abstraction allows swap |
-| Scope creep toward learning app | Non-goals enforced; SRS-ready schema means no rework later |
-| Bundle size | Font subsetting, opus audio, unbundled ML Kit; target < 150 MB installed |
+| GPL (cjkvi-ids) × BY-SA × LGPL (makemeahanzi) in one dump | Layered per-source publication; two-file pack split; counsel review of merged form |
+| ML Kit accuracy on stylized signage/handwriting | Photo-library scan rather than live viewfinder; share/paste/IME as backups |
+| Bundle size | Font subsetting, unbundled ML Kit; target < 150 MB installed |
 
 ## 14. Deferred (v2+)
 
-SRS reviews with "component reunion" sessions, confusable quizzes seeded by `confusion_event`s, mnemonics layer (clearly labeled non-etymology), Cantonese/topolect readings surfaced as drift evidence, recorded word audio, in-app suggest-edit, iOS (SwiftUI over KMP core), web app.
+Confusable quizzes seeded by `confusion_event`s, a look-alike drill, mnemonics layer (clearly labeled non-etymology), Cantonese/topolect readings surfaced as drift evidence, recorded word audio, in-app suggest-edit, Anki `.apkg` and Pleco-export imports, on-device FSRS parameter optimisation, iOS (SwiftUI over KMP core), web app, live camera OCR.
 
-## 15. v1.1 Review Addenda (all decided — no open questions)
+## 15. Cross-cutting rules
 
-- **多音字:** header enumerates *all* readings, each with its own audio; order by Unihan `kHanyuPinlu` frequency. Sense↔reading pairing taken from Wiktionary's per-pronunciation sense structure where present, else shown unpaired.
-- **GPL layering in the shipped pack:** two attached SQLite files — `core.db` (BY-SA-side sources + computed layer) and `ids.db` (cjkvi-ids-derived decompositions, GPL) — so license layers stay separate in the app exactly as in the published dump. Bundle ARPHICPL license text + an in-app attributions screen listing all sources.
-- **Component spoken names (三点水 etc.):** extracted from zh.wikipedia / Wiktionary radical & 偏旁 name tables (CC BY-SA); ~200 rows, mechanical extraction.
-- **IDS region rule:** prefer G-tagged IDS for simplified glyphs and T-tagged for traditional; fall back to untagged.
-- **Word page IA:** header (simp/trad, pinyin, audio via TTS, defs, freq/HSK) + one breakdown strip per constituent character linking to character pages.
-- **HSK lists:** community MIT-licensed repos (word lists as facts; low risk).
-- **Data pack integrity:** manifest with SHA-256 + signature verified before install.
-- **UI language:** English-only v1; strings externalized for later localization.
-- **Accessibility & states:** TalkBack labels on breakdown strips and audio buttons; defined empty/error states for search-no-result, OCR-no-text, pack-download-failure.
-- **Remaining work that is engineering, not design:** deterministic parsers for Baxter MC notation and B-S OC notation (onset/rime extraction); phonetic detector compares against *all* readings of a component and takes the best match.
+- **多音字:** the header enumerates *all* readings, ordered by Unihan `kHanyuPinlu` frequency. Sense↔reading pairing is taken from Wiktionary where present, else shown unpaired. TTS plays the primary reading only.
+- **Component spoken names (三点水 etc.):** extracted from zh.wikipedia / Wiktionary radical & 偏旁 name tables (CC BY-SA); a combining form's name displaces its Unihan reading.
+- **Word entry:** header (simp/trad, pinyin, TTS, defs, freq/HSK) + one chip per constituent character linking to character entries + example sentences.
+- **HSK lists:** community MIT-licensed repos (word lists as facts). `glyph.hsk` is the lowest HSK 3.0 level of any word *containing* the character.
+- **Data pack integrity (when updates exist):** manifest with SHA-256 + signature verified before install.
+- **Accessibility & states:** TalkBack labels on breakdown chips, audio buttons, and swipe actions; defined empty/error states for search-no-result, OCR-no-text, and (when built) pack-download-failure.
+- **Attributions:** Settings lists every `source` row (name, license, version) with access to the texts in `LICENSES/`.
 
-## 16. v1.2 Addenda
+## 16. Capture & audio
 
-- **Definitions are an explicit v1 requirement, not implied.** M2/M3 shipped with `word`/`word_char` empty, so the app had no English glosses anywhere — unacceptable for a dictionary. Required: ingest CC-CEDICT; the character-page header's "top glosses" (§9 IA item 1) come from the character's own CC-CEDICT entries; populated `word`/`word_char` power "In your words" (§9 IA item 6), word-level search ranking (§9), and word pages (§15). Tracked as milestone M3.5.
-- **Attributions UI element.** The §15 "in-app attributions screen" is satisfied by a lightweight ⓘ info button (e.g. in the search screen's top bar) opening a dialog or simple screen that lists every `source` row — name, license, version, URL (`HanziRepository.sources()` already returns exactly this) — with access to the full license texts already collected in `LICENSES/`. Required before any public/Play release; the sideloaded alpha may ship without it, but M3.5 includes it so it isn't forgotten.
-- **Capture revision (decided during M3).** Live camera OCR — viewfinder, single-character crop mode, N-best candidates — is replaced by **photo-library scanning**: the app OCRs the most recent camera-roll photos (watermark-deduped, READ_MEDIA_IMAGES) and surfaces found characters in a "From your photos" feed. §9's Capture paragraph is superseded to that extent; the SEND-intent share target, paste-on-open, system handwriting IME, and component-compose search entries remain (M3.7).
-- **Audio revision (decided after the smoke test).** The generated syllable bank (§9 Audio) failed the ear-check — the open-source voice's tones weren't accurate — so character audio now uses the **device's own Mandarin TTS** (`android.speech.tts`, zh-CN), which §9 already trusted for words. Accepted tradeoffs: only the primary reading of a 多音字 gets a play affordance (an engine reads a bare character with its most common pronunciation), and devices without an installed Mandarin voice show no audio. The Wikimedia-Commons-recordings preference (M3.6) and word audio (§14) are unaffected.
-- **Practice & archive (decided post-smoke-test; supersedes part of §2's SRS deferral).** The known-characters model gains its missing consumer loop: characters the user *encounters* (lookups, photo finds) but hasn't marked known form a **practice deck** of simple flashcards (front: character; back: readings + gloss + a sample word + audio). "I knew it" archives the character into the known list — which keeps powering known-first series ordering (§1's differentiator) — and "My Characters" is reframed as that **Archive** (HSK/paste import = bulk-archiving what you already know). Deliberately *not* an SRS: no scheduling, no intervals — that remains v2 (§14); this is a self-check pass over the current deck. Tracked as milestone M3.55.
-- **Smoke-test UI decisions (v0.1 alpha).** (a) Character-page glosses ship early via Unihan `kDefinition` (`glyph.definition`), shown directly under the header; CC-CEDICT (M3.5) remains the plan for full word data and richer glosses. (b) Reference metadata — frequency rank, HSK band, script, stroke count — collapses behind a "Details" toggle instead of a permanent chip row. (c) The breakdown strip suppresses the "unknown"/"empty" function labels (an associative compound like 好 showed a distracting "unknown" under every part). (d) Search results are filtered to characters the bundled Noto Sans CJK SC face can draw, so ultra-rare Ext-B+ glyphs never render as tofu; the font is bundled unsubsetted for now (§9's subsetting lands with M3.8).
+**Capture is photo-library scanning**, not a live viewfinder. The Dictionary tab's "From your photos" feed is the full scrollable list of finds with a rescan control; there is no separate Photos screen. A find stays in the feed, greyed under an on-tile Undo, until the feed settles or the user leaves it.
 
-## 17. v1.3 Addenda — the study system
+**Audio is the device's Mandarin TTS.** A generated syllable bank is not shipped — tones failed an ear-check. Wikimedia Commons recordings remain a preference for a later audio pass.
 
-- **SRS is now v1, and this supersedes §16's "deliberately not an SRS" and §14's deferral.**
-  M3.55's deck had no notion of *when* to review anything: a character was either in the deck
-  or archived. Practice cards are now scheduled by **FSRS-6** (Free Spaced Repetition
-  Scheduler, Open Spaced Repetition, MIT) — the DSR model Anki has defaulted to since 23.10,
-  which needs ~20-30% fewer reviews than SM-2 for the same retention. Implemented as pure
-  arithmetic in `core/Fsrs.kt` (no dependency; the community Kotlin port carries no license
-  file), with default parameters, desired retention 0.90, learning steps 1 min/10 min,
-  relearning step 10 min, and interval fuzz. Verified against py-fsrs's own golden interval
-  sequence in `FsrsTest`. On-device parameter optimisation stays v2 — `review_log` records
-  every grading so it stays possible.
-- **Deck selection: new first, then due, then practice ahead.** Never-graded cards lead and
-  get a reserved slice of the deck — a first exposure is the only way to gain any signal on a
-  word, so a brand-new card is never crowded out by a pile of due reviews — capped per day so
-  a large import can't bury tomorrow (that cap is what keeps leading with new cards from
-  becoming review debt). Then cards due now, ordered by *ascending predicted recall* (least
-  likely to be remembered first); then, when nothing is due, a top-up of not-yet-due cards in
-  the same least-recalled-first order, so Practice and the widget are never empty. The moment
-  a new card is graded once it has a memory state and rejoins the recall-sorted order. Within
-  a session a missed card returns to the back of the queue; a skip (swipe up) does the same
-  without grading.
-- **Study lists.** Multiple named lists (`study_list`/`list_item`), holding characters *and*
-  words. Membership is per list; **memory is not** — `card_state` is keyed by item alone, so
-  an item in three lists has one schedule. **Archiving is global**: "I know this" writes
-  `known_item`, which every deck filters on, so archiving in one list archives in all of them
-  (and discards the schedule). Archived items stay *in* their lists as a record.
-- **One editing surface.** Membership checkboxes plus the archive action live in a single
-  bottom sheet opened from any screen showing an item. On character and word pages the
-  primary button is **"Add to list"**, not "I know this" — filing something to study is the
-  common act; archiving is the rare one, and it now says on the control that it applies
-  everywhere.
-- **Active list.** One list is active at a time. It is where swipe-right files things and
-  what the home-screen widget follows; "Everything" (all lists pooled) is a valid choice.
-- **Gestures.** One grammar app-wide: **right = affirm** (save it / knew it / archive it),
-  **left = negative** (didn't know it / remove it). Capture rows swipe; the practice card
-  swipes and reveals on tap. Both directions are also TalkBack custom actions (§15 a11y).
-- **Intro screen as capture surface.** The "From your photos" feed is the full scrollable
-  list of detailed rows with a **Scan again** control; the separate Photos screen it
-  duplicated is removed.
-- **Home-screen widget.** One card from the active list. Launchers give widgets taps and no
-  gestures, so the swipe grammar becomes three tap zones: left = didn't know, right = knew
-  it, middle flips the card and then opens **that character's detail page** — the fullest
-  answer the app has, which is what the flip was asking for — and makes it the pinned card, so
-  the home card and Practice resume on it too. Grading only — archiving needs the full page. Feedback arrives one card late (the answer to the card just graded is echoed under
-  the next one), because a widget cannot reveal-then-advance without a timer. Built on
-  `RemoteViews` rather than Glance: no new dependency, and Glance compiles to RemoteViews
-  anyway.
-- **Counter names.** The "didn't know"/"knew this" tallies are stored as `lapses` and
-  `reviews` (Anki's vocabulary) and shown as "missed"/"recalled".
+## 17. Study system
+
+**FSRS-6** schedules practice cards (Free Spaced Repetition Scheduler, Open Spaced Repetition, MIT). Implemented as pure arithmetic in `core/Fsrs.kt` (the community Kotlin port carries no LICENSE), with default parameters, desired retention 0.90, learning steps 1 min/10 min, relearning step 10 min, and interval fuzz. Verified against py-fsrs's golden interval sequence. On-device parameter optimisation stays v2 — `review_log` records every grading so it stays possible.
+
+**Deck order:** never-graded cards lead, capped per day (`NEW_PER_DAY=15`) so a large import cannot bury reviews; then cards due now, ordered by *ascending predicted recall*; then, when nothing is due, a top-up of not-yet-due cards in the same order, so Practice and the widget are never empty. New-card *presentation* order is shuffled per session; due/ahead stay recall-sorted. Within a session a missed card returns to the back of the queue; a skip (swipe up) does the same without grading.
+
+**Study lists.** Multiple named lists (`study_list`/`list_item`), holding characters *and* words. Membership is per list; **memory is not** — `card_state` is keyed by item alone, so an item in three lists has one schedule. **Archiving is global**: "I know this" writes `known_item`, which every deck filters on, so archiving in one list archives in all of them (and discards the schedule). Archived items stay *in* their lists as a record.
+
+**One editing surface.** Membership checkboxes plus the archive action live in a single sheet opened from an item. On character and word entries the primary button is **"Add to list"** — filing something to study is the common act; archiving is the rare one, and it says on the control that it applies everywhere.
+
+**Active list.** One list is active at a time. It is where swipe-right files things and what the home-screen widget follows; "Everything" (all lists pooled) is a valid choice.
+
+**Which flashcard is on screen is a pin**, not composable state (`CardPin` + `deckOpenedAt` in `:core`). Decks get rebuilt constantly; re-dealing the top card each time would lose the card you just looked up. A widget tap sets the pin *and* bumps a resume token so an already-open deck repositions. After 30 minutes idle (`isStaleSession`) the pin, query, lookup stacks and overlay reset and the app lands on Study; an arriving intent still wins.
+
+**Home-screen widget.** One card from the active list. Launchers give widgets taps and no gestures, so the swipe grammar becomes three tap zones: left = Again, right = Good, middle flips the card and then opens **that item in a lookup sheet over Study**, pinning it so Practice resumes on it too. Grading only — archiving needs the full entry. Feedback arrives one card late (the answer to the card just graded is echoed under the next one), because a widget cannot reveal-then-advance without a timer. Built on `RemoteViews` (whitelist view classes only; a bare `<View>` makes the launcher refuse the widget).
+
+**Counter names.** The "didn't know"/"knew this" tallies are stored as `lapses` and `reviews` (Anki's vocabulary) and shown as "missed"/"recalled".
