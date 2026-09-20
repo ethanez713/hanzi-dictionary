@@ -99,41 +99,42 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   (`Fsrs.kt` still implements all four ratings; the UI only ever emits `AGAIN` and `GOOD`).
   The widget's two gutters mirror exactly this. Don't reintroduce a tappable grade — a screen
   offering both input systems teaches neither.
-- **Every screen but home carries a `HomeButton` in its top-bar `actions`**, last before any
-  overflow `⋮`. Browsing here goes character → component → character and gets deep, so Back
-  alone isn't enough. It pops to `HOME_ROUTE` rather than navigating (see `goHome` in
-  `AppRoot.kt`). It's a top-bar action, not a bottom nav bar, because Practice is budgeted to
-  fit one screen without scrolling and a nav bar would spend that budget.
-- **The practice card uses structure, not headings.** Its revealed side is three bands split
-  by hairlines (`CardRule`) — answer / components / words. Don't add section labels back;
-  vertical space on that card is the scarce resource.
+- **Three tabs, and a lookup is a layer over one of them — never a destination.** `AppRoot`
+  holds `Tab.STUDY/DICTIONARY/LIBRARY`, a `LookupStack` per tab, and one `AppOverlay`
+  (Settings / Archive / ListEdit) above them all; there is no nav graph and no back stack.
+  Tapping a component chip, word row, search result or photo tile pushes a level onto that
+  tab's lookup sheet, which carries its own trail and a chip back to the suspended card.
+  System back pops a trail level, then dismisses the sheet — it never leaves the tab. A
+  surface that needs the whole screen is an `AppOverlay`, not a fourth tab.
+- **The practice card uses structure, not headings.** Its revealed side is bands split by
+  hairlines (`CardRule`) — answer, components, words, sentences. Don't add section labels
+  back. The glyph sits in a fixed 200dp zone and must not move when the card flips: revealed
+  content only ever grows *below* it. That side scrolls and is meant to fill —
+  `CARD_WORDS`/`CARD_SENTENCE_LIMIT` cap what a dense character can pour out rather than
+  setting a target, and dead space under a truncated card is a bug.
 - **Which flashcard is on screen is a *pin*, not composable state** (`CardPin` +
   `deckOpenedAt` in `:core`, held on `HanziApp` for the life of the process). Decks get rebuilt
   constantly — a photo find filed, a list switched, the screen disposed when you open a
   character page — and re-dealing the top card each time made looking a card up lose it. Any
-  surface that resumes on a particular card does it by setting the pin; don't add route args
-  for it (the widget's `&item=&reveal=` deep link was removed in favour of the pin).
-  While a card is suspended, `CardReturn`/`ReturnToCardFab` puts a `↩ 好` **floating button in
-  the bottom-right** of every dictionary screen (character/word/component, and home above the
-  Practice FAB); it clears on arrival, after 10 min, on restart, or on a stale-session reset.
-  It was a top-bar text action first and went unseen — don't move it back up there.
-- **Entering from outside rebuilds the back stack; a stale return resets it.** A widget tap
-  pushes Practice (over the widget's own deck) *under* the character page it opens, so Back
-  lands on that card instead of on some earlier browse trail; a share does the same via
-  `popBackStack(HOME_ROUTE)`. And `isStaleSession` in `:core` (30 min, checked in
-  `MainActivity.onStart`) sends a return-after-a-long-gap back to home with the pins, the
-  marker and the query cleared. Intent handlers are declared *after* the reset effect in
-  `AppRoot` so an arriving intent always has the last word about where you land.
+  surface that resumes on a particular card does it by setting the pin; don't add deep-link
+  args for it. While a card is suspended, the way back to it is the lookup sheet's return
+  chip and the Dictionary tab's return dock, good for `CARD_RETURN_TTL_MS`.
+- **An arriving intent wins, and a stale return resets.** A widget tap sets the pin *and*
+  bumps `studyResumeToken`, which is what `PracticeScreen` keys its deck reload on — without
+  the token an already-active list leaves the old card sitting under the correctly-opened
+  sheet. `isStaleSession` in `:core` (30 min, checked in `MainActivity.onStart`) clears the
+  pin, the query, both lookup stacks and the overlay, and lands on Study. Intent handlers are
+  declared *after* that reset effect in `AppRoot` so an arriving intent has the last word.
 - **A component card opens the component's *character* page, not its component page.** That's
-  what tapping 青 nearly always means. The component page (what else shares this part) lives
-  in the character screen's top-bar overflow `⋮` — one entry per navigable part, plus the page's
-  own character as a part. Only a combining form with no character of its own (氵) still opens
-  the component page directly. `ComponentBreakdown.glyphId` is what makes the distinction.
+  what tapping 青 nearly always means. The component page (what else shares this part) is
+  reached from the plain footer links at the foot of an entry in the lookup sheet. Only a
+  combining form with no character of its own (氵) opens the component page directly.
+  `ComponentBreakdown.glyphId` is what makes the distinction.
 - **Comments justify _why_, not _what_.** The codebase is heavily commented in this style;
   match it. Keep it that way.
-- **Route args are percent-encoded with `android.net.Uri.encode`, not `URLEncoder`**
+- **A `DeckSource` is serialised with `android.net.Uri.encode`, not `URLEncoder`**
   (URLEncoder corrupts `+` in glyph ids like `U+597D`). See `enc`/`dec` in `AppRoot.kt`.
-- **The home feed keeps its scroll position in its own anchor**, not in `LazyListState`'s
+- **The Dictionary tab's inbox feed keeps its scroll position in its own anchor**, not in `LazyListState`'s
   saved state: returning re-runs the photo scan, so the list is empty when the state restores
   and the index clamps to 0. `SearchScreen` re-applies a saved index/offset once `photoFinds`
   is non-null, and only records the position after that — don't "simplify" it back.
