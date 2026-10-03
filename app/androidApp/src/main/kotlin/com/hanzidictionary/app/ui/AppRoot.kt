@@ -86,6 +86,9 @@ private sealed interface AppOverlay {
     data object Settings : AppOverlay
     data object Archive : AppOverlay
     data class ListEdit(val listId: Long) : AppOverlay
+
+    /** Suggested HSK words to sort into "know / don't know" — offered only when the deck is thin. */
+    data object Triage : AppOverlay
 }
 
 @Composable
@@ -270,6 +273,7 @@ fun AppRoot(
                         lookupStack = studyLookupStack,
                         onSwitchToDictionary = { selectedTab = Tab.DICTIONARY },
                         onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
+                        onAddNewWords = { overlay = AppOverlay.Triage },
                     )
                     if (studyLookupStack.isOpen) {
                         LookupSheet(
@@ -333,6 +337,16 @@ fun AppRoot(
                     selectedTab = Tab.DICTIONARY
                 },
                 onBack = { overlay = null },
+            )
+        AppOverlay.Triage ->
+            TriageScreen(
+                repository = repository,
+                // The deck changed under the Study tab; bumping the token reloads it (the
+                // pinned card, if any, stays put) so the new words are there on return.
+                onDone = {
+                    studyResumeToken++
+                    overlay = null
+                },
             )
         is AppOverlay.ListEdit ->
             ListDetailScreen(

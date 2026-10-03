@@ -192,6 +192,14 @@ ORDER BY (w.freq_rank IS NULL), w.freq_rank, (w.hsk IS NULL), w.hsk,
          LENGTH(w.simp), w.pinyin
 LIMIT :limit;
 
+-- HSK-graded words in teaching order — easiest level first, then most common in the corpus.
+-- Paged so the caller can stop as soon as it has enough words it hasn't seen yet.
+hskWordsPage:
+SELECT id FROM word
+WHERE hsk IS NOT NULL
+ORDER BY hsk, (freq_rank IS NULL), freq_rank, id
+LIMIT :limit OFFSET :offset;
+
 wordsByIds:
 SELECT * FROM word WHERE id IN :ids;
 

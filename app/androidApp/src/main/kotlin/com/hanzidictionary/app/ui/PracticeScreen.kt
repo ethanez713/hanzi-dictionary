@@ -31,6 +31,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +81,7 @@ fun PracticeScreen(
     lookupStack: LookupStack,
     onSwitchToDictionary: () -> Unit,
     onEditList: (Long) -> Unit = {},
+    onAddNewWords: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
@@ -91,6 +93,10 @@ fun PracticeScreen(
     var summaries by remember { mutableStateOf<Map<String, ItemSummary>>(emptyMap()) }
     var loaded by remember { mutableStateOf(false) }
     var back by remember { mutableStateOf<CardBack?>(null) }
+    // How many new words the thin-deck rule would offer right now (0 hides the prompt). Judged
+    // against all your lists, not just the one on screen: the question is whether the whole
+    // deck is running dry.
+    var newWordsWanted by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(source, resumeToken) {
         loaded = false
@@ -100,6 +106,7 @@ fun PracticeScreen(
             val sums = repository.itemSummaries(deck.map { it.item }).associateBy { it.item.itemId }
             deck.filter { it.item.itemId in sums } to sums
         }
+        newWordsWanted = withContext(Dispatchers.IO) { app.studyRepository.newWordsWanted() }
         state = deckOpenedAt(deck = entries, pin = app.practiceCardPin)
         summaries = found
         loaded = true
@@ -225,6 +232,8 @@ fun PracticeScreen(
                     deck = state.deck,
                     eth = eth,
                     onClick = editableListId?.let { { onEditList(it) } },
+                    newWordsWanted = if (loaded) newWordsWanted else 0,
+                    onAddNewWords = onAddNewWords,
                 )
 
                 val entry = state.current
@@ -316,7 +325,13 @@ fun PracticeScreen(
 private const val REVEAL_MS_CAP = 120_000L
 
 @Composable
-private fun DeckStrip(deck: List<DeckEntry>, eth: EthanColors, onClick: (() -> Unit)? = null) {
+private fun DeckStrip(
+    deck: List<DeckEntry>,
+    eth: EthanColors,
+    onClick: (() -> Unit)? = null,
+    newWordsWanted: Int = 0,
+    onAddNewWords: () -> Unit = {},
+) {
     val newCount = deck.count { it.bucket == DeckBucket.NEW }
     val dueCount = deck.count { it.bucket == DeckBucket.DUE }
     val aheadCount = deck.count { it.bucket == DeckBucket.AHEAD }
@@ -359,6 +374,17 @@ private fun DeckStrip(deck: List<DeckEntry>, eth: EthanColors, onClick: (() -> U
                     )
                 }
             }
+        }
+        // The only place the app ever suggests more vocabulary, and only while the thin-deck
+        // rule says the next sitting would run short — with the reason, not just the nudge.
+        if (newWordsWanted > 0) {
+            Text(
+                "Not much coming up — add up to $newWordsWanted new words ›",
+                fontFamily = PlexMono,
+                fontSize = 11.sp,
+                color = eth.textLink,
+                modifier = Modifier.clickable(onClick = onAddNewWords).padding(top = 2.dp),
+            )
         }
     }
     HorizontalDivider(color = eth.inkRule)

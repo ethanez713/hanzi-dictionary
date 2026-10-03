@@ -474,6 +474,7 @@ class HanziRepository(
     }
 
     private companion object {
+        const val HSK_PAGE = 200
         /** A few examples is plenty on a word page; more would bury the definitions. */
         const val SENTENCE_LIMIT = 5L
 
@@ -611,6 +612,27 @@ class HanziRepository(
             }
         }
         return ids.filter { it in rank }.sortedBy { rank[it] }
+    }
+
+    /**
+     * The next HSK words to offer for new-word triage: [limit] words not in [exclude], easiest
+     * HSK level first and most common first within a level. The study state lives in the other
+     * database (the two are never ATTACHed), so the caller passes what it has already seen and
+     * this filters in Kotlin, paging so a mostly-seen catalogue doesn't load all of it.
+     */
+    fun hskWordCandidates(exclude: Set<String>, limit: Int): List<StudyItem> {
+        val out = mutableListOf<StudyItem>()
+        var offset = 0L
+        while (out.size < limit) {
+            val page = db.hanziQueries.hskWordsPage(HSK_PAGE.toLong(), offset).executeAsList()
+            if (page.isEmpty()) break
+            for (id in page) {
+                if (id !in exclude) out += StudyItem.word(id)
+                if (out.size >= limit) break
+            }
+            offset += page.size
+        }
+        return out
     }
 
     /**

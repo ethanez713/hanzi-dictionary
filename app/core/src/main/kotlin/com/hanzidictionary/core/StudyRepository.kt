@@ -42,6 +42,18 @@ data class ReviewStats(val knew: Int, val missed: Int) {
     val accuracy: Double? get() = if (total == 0) null else knew.toDouble() / total
 }
 
+/** What a new-word triage swipe means (see [StudyRepository.triage]). */
+enum class TriageVerdict {
+    /** "I confidently know this": filed, with a first rating that schedules a real check soon. */
+    KNOW,
+
+    /** "I don't know this": filed as an ordinary new card. */
+    DONT_KNOW,
+
+    /** "Not now": not filed, and not offered again for a while. */
+    SKIP,
+}
+
 /** Why a card made it into the deck — drives the "12 due · 3 ahead" header. */
 enum class DeckBucket { DUE, NEW, AHEAD }
 
@@ -320,6 +332,80 @@ class StudyRepository(
         return itemIds.count { it !in known && (cards[it]?.due ?: Long.MAX_VALUE) <= now }
     }
 
+    // ---- new-word triage ----
+
+    /**
+     * What the deck looks like to the thin-deck rule ([newWordGap]): upcoming work in the next
+     * [DECK_LOOKAHEAD_DAYS] days (due, or never seen — an unseen card is a sitting's worth of
+     * work too), the overdue backlog, and how well the last few real reviews went.
+     */
+    fun deckLoad(now: Long = System.currentTimeMillis()): DeckLoad {
+        val known = q.allKnownIds().executeAsList().toSet()
+        val itemIds = allListItems().map { it.itemId }.filter { it !in known }.toSet()
+        val cards = cardStates(itemIds)
+        val horizon = now + DECK_LOOKAHEAD_DAYS * DAY_MS
+        var upcoming = 0
+        var backlog = 0
+        for (id in itemIds) {
+            val card = cards[id]
+            if (card == null) {
+                upcoming++
+                continue
+            }
+            if (card.due <= horizon) upcoming++
+            if (card.due <= now) backlog++
+        }
+        val ratings = q.recentRatings(RECENT_SUCCESS_WINDOW.toLong()).executeAsList().map { it.toInt() }
+        return DeckLoad(upcoming, backlog, recentSuccessRate(ratings))
+    }
+
+    /** How many new words the app may suggest right now; 0 unless the deck is thin. */
+    fun newWordsWanted(now: Long = System.currentTimeMillis()): Int = newWordGap(deckLoad(now))
+
+    /** Everything the user has already placed somewhere — in a list, archived, or scheduled —
+     * and so should never be offered as "new". */
+    fun everSeenIds(): Set<String> =
+        allListItems().mapTo(HashSet()) { it.itemId } +
+            q.allKnownIds().executeAsList() +
+            q.allCardItemIds().executeAsList()
+
+    /** Words swiped past recently ("not now"); they drop out of the offer for
+     * [TRIAGE_SKIP_TTL_DAYS] so one skipped word can't block every later session. */
+    fun recentlySkippedIds(now: Long = System.currentTimeMillis()): Set<String> {
+        val cutoff = now - TRIAGE_SKIP_TTL_DAYS * DAY_MS
+        return q.triageSkips().executeAsList()
+            .filter { (it.value_.toLongOrNull() ?: 0L) >= cutoff }
+            .mapTo(HashSet()) { it.key.removePrefix(PREF_TRIAGE_SKIP) }
+    }
+
+    /**
+     * Applies a swipe on a suggested new word. Nothing here decides whether the user *really*
+     * knows it — they say so, the app takes their word, and keeps the claim honest by how it
+     * schedules it:
+     *
+     *  - [TriageVerdict.KNOW] files the word and records an Easy first rating. FSRS-6 reads that
+     *    as a high initial stability (~8 days), so the word comes back for a genuine recall
+     *    check in about a week instead of being trusted outright; self-rated knowledge runs high
+     *    (yes/no vocabulary tests see 5-25% false alarms), and recognising a word is easier than
+     *    recalling it. The grade is logged with [ORIGIN_TRIAGE], which mastery ignores.
+     *  - [TriageVerdict.DONT_KNOW] files it as an ordinary never-seen card.
+     *  - [TriageVerdict.SKIP] files nothing and hides it for a while.
+     */
+    fun triage(
+        item: StudyItem,
+        verdict: TriageVerdict,
+        now: Long = System.currentTimeMillis(),
+    ) {
+        when (verdict) {
+            TriageVerdict.SKIP -> q.setPref("$PREF_TRIAGE_SKIP${item.itemId}", now.toString())
+            TriageVerdict.DONT_KNOW -> addToList(ensureActiveList(now).id, item, now)
+            TriageVerdict.KNOW -> {
+                addToList(ensureActiveList(now).id, item, now)
+                grade(item, Rating.EASY, ORIGIN_TRIAGE, now)
+            }
+        }
+    }
+
     /** Local midnight. Computed from the raw offset rather than java.time so this module
      * stays as close to plain Kotlin as the rest of `core`. */
     private fun startOfDay(now: Long): Long {
@@ -354,6 +440,10 @@ class StudyRepository(
          * gate both ignore it. */
         const val ORIGIN_TRIAGE = "triage"
         private const val HISTORY_CHUNK = 500
+        private const val PREF_TRIAGE_SKIP = "triage_skip:"
+
+        /** How long a skipped suggestion stays out of the offer. */
+        const val TRIAGE_SKIP_TTL_DAYS = 14L
         private const val PREF_ACTIVE_LIST = "active_list"
         private const val ACTIVE_EVERYTHING = "everything"
     }

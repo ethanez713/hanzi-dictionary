@@ -254,6 +254,90 @@ class StudyRepositoryTest {
         old.close()
     }
 
+    // ---- new-word triage ----
+
+    private val day = 86_400_000L
+
+    @Test
+    fun knowFilesTheWordAndSchedulesARealCheckAboutAWeekOut() {
+        study.triage(nihao, TriageVerdict.KNOW, now)
+
+        val list = study.ensureActiveList(now)
+        assertEquals(listOf(nihao), study.itemsInList(list.id))
+        val card = study.cardState(nihao.itemId)!!
+        assertEquals(CardPhase.REVIEW, card.phase, "an Easy first rating skips the learning steps")
+        val days = (card.due - now) / day
+        assertTrue(days in 6..10, "expected a check in about a week, got $days days")
+    }
+
+    @Test
+    fun knowIsLoggedAsATriageClaimNotAReview() {
+        study.triage(nihao, TriageVerdict.KNOW, now)
+        assertEquals(1L, study.reviewsToday(now))
+        assertEquals(null, study.deckLoad(now).recentSuccess, "a claim must not feed the accuracy gate")
+        assertEquals(0, study.masteryFor(listOf(nihao.itemId)).getValue(nihao.itemId).spacedStreak)
+    }
+
+    @Test
+    fun dontKnowFilesAnOrdinaryNewCard() {
+        study.triage(nihao, TriageVerdict.DONT_KNOW, now)
+
+        val list = study.ensureActiveList(now)
+        assertEquals(listOf(nihao), study.itemsInList(list.id))
+        assertNull(study.cardState(nihao.itemId), "no schedule until it is first practised")
+        assertEquals(DeckBucket.NEW, study.deckFor(DeckSource.UserList(list.id), now = now).single().bucket)
+    }
+
+    @Test
+    fun skipFilesNothingAndHidesTheWordOnlyForAWhile() {
+        study.triage(nihao, TriageVerdict.SKIP, now)
+
+        assertTrue(study.allListItems().isEmpty())
+        assertEquals(setOf(nihao.itemId), study.recentlySkippedIds(now + day))
+        val after = now + (StudyRepository.TRIAGE_SKIP_TTL_DAYS + 1) * day
+        assertTrue(study.recentlySkippedIds(after).isEmpty(), "a skipped word comes back after the TTL")
+    }
+
+    @Test
+    fun everSeenCoversListedArchivedAndScheduledItems() {
+        val list = study.createList("A", now)
+        study.addToList(list, hao, now)
+        user.setKnown(ni.itemId, true, ni.kind)
+        study.grade(nihao, Rating.GOOD, now = now)
+
+        assertEquals(setOf(hao.itemId, ni.itemId, nihao.itemId), study.everSeenIds())
+    }
+
+    @Test
+    fun anEmptyDeckIsThinSoNewWordsAreWanted() {
+        assertEquals(NEW_WORD_SESSION, study.newWordsWanted(now))
+    }
+
+    @Test
+    fun unseenAndSoonDueCardsCountAsUpcomingWork() {
+        val list = study.createList("A", now)
+        val unseen = (1..3).map { StudyItem.character("U+4E0$it") }
+        unseen.forEach { study.addToList(list, it, now) }          // 3 never-seen cards
+        study.addToList(list, hao, now)
+        study.grade(hao, Rating.GOOD, now = now - 3 * day)         // due within the window
+        study.addToList(list, ni, now)
+        study.grade(ni, Rating.GOOD, now = now - 3 * day)
+        study.grade(ni, Rating.GOOD, now = now)                    // pushed well beyond it
+
+        val load = study.deckLoad(now)
+        assertEquals(4, load.upcoming, "3 unseen + 1 due soon; the other card is far off")
+        assertEquals(1, study.newWordsWanted(now), "5 - 4 upcoming")
+    }
+
+    @Test
+    fun archivedItemsAreNotUpcomingWork() {
+        val list = study.createList("A", now)
+        study.addToList(list, hao, now)
+        assertEquals(1, study.deckLoad(now).upcoming)
+        user.setKnown(hao.itemId, true, hao.kind)
+        assertEquals(0, study.deckLoad(now).upcoming)
+    }
+
     @Test
     fun reviewStatsWrapsRecalledAndLapsesFromCardState() {
         study.grade(hao, Rating.GOOD, now = now)

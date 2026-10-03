@@ -257,6 +257,19 @@ WHERE ts >= :since
 reviewCountSince:
 SELECT COUNT(*) FROM review_log WHERE ts >= :since;
 
+-- The latest real reviews' ratings, newest first — the "is the current deck manageable?" gate
+-- on suggesting new words. Triage self-reports are claims, not reviews, so they don't count.
+recentRatings:
+SELECT rating FROM review_log WHERE origin <> 'triage' ORDER BY ts DESC LIMIT :limit;
+
+allCardItemIds:
+SELECT item_id FROM card_state;
+
+-- Words the user swiped past during new-word triage ("not now"), kept in app_pref so no new
+-- table is needed; the key carries the item id and the value the time it was skipped.
+triageSkips:
+SELECT key, value FROM app_pref WHERE key LIKE 'triage_skip:%';
+
 -- Newest grading from any origin (null before the first), for the reminder's "have they
 -- already studied today / how long since" rules.
 lastReviewTs:
