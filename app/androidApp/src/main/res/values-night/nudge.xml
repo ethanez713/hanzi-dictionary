@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DarkColors from ui/Theme.kt; see values/nudge.xml. -->
+    <color name="nudge_paper">#232019</color>
+    <color name="nudge_border">#423D34</color>
+    <color name="nudge_ink">#F7F4ED</color>
+    <color name="nudge_text_muted">#B4AEA2</color>
+    <color name="nudge_text_faint">#9A9385</color>
+    <color name="nudge_amber_bg">#3E2D07</color>
+    <color name="nudge_amber_ink">#FFD98A</color>
+    <color name="nudge_jade_bg">#123A2C</color>
+    <color name="nudge_jade_ink">#8FE9C4</color>
+    <color name="nudge_accent">#DD7A32</color>
+</resources>

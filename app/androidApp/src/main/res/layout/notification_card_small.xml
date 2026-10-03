@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Collapsed study-reminder card: the same three zones in a one-row-high strip, so the ✗/✓
-     are reachable without expanding the notification. IDs match notification_card.xml so one
-     bind routine fills both. 48dp: under DecoratedCustomViewStyle the system header takes part
-     of the collapsed height, so a taller strip risks clipping. -->
+<!-- Collapsed study notification: the same three zones as notification_card.xml in a one-row
+     strip, so ✗ and ✓ are reachable without expanding it. Marks only (the practice gutters'
+     "hints off" look) and the glyph alone — no room for labels at this height. IDs match the
+     expanded layout so one bind routine fills both. 48dp: under DecoratedCustomViewStyle the
+     system header takes part of the collapsed height, so a taller strip risks clipping. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="48dp"
@@ -14,49 +15,34 @@
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:background="@drawable/notif_zone_miss"
+        android:contentDescription="Didn't know it"
         android:gravity="center"
         android:orientation="vertical">
 
-        <TextView
+        <ImageView
+            android:id="@+id/zone_miss_mark"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:contentDescription="Didn't know it"
-            android:text="✗"
-            android:textColor="@color/widget_icon_miss"
-            android:textSize="24sp" />
+            android:importantForAccessibility="no" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/zone_card"
         android:layout_width="0dp"
         android:layout_height="match_parent"
+        android:layout_marginStart="6dp"
+        android:layout_marginEnd="6dp"
         android:layout_weight="3"
+        android:background="@drawable/notif_card"
         android:gravity="center"
         android:orientation="vertical"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp">
+        android:padding="4dp">
 
-        <TextView
+        <ImageView
             android:id="@+id/nudge_glyph"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:autoSizeMaxTextSize="28sp"
-            android:autoSizeMinTextSize="16sp"
-            android:autoSizeTextType="uniform"
-            android:gravity="center"
-            android:maxLines="1"
-            android:textColor="@color/widget_text" />
-
-        <TextView
-            android:id="@+id/nudge_echo"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:gravity="center"
-            android:maxLines="1"
-            android:textColor="@color/widget_text_muted"
-            android:textSize="11sp" />
+            android:layout_height="match_parent"
+            android:scaleType="centerInside" />
     </LinearLayout>
 
     <LinearLayout
@@ -65,15 +51,14 @@
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:background="@drawable/notif_zone_knew"
+        android:contentDescription="Knew it"
         android:gravity="center"
         android:orientation="vertical">
 
-        <TextView
+        <ImageView
+            android:id="@+id/zone_knew_mark"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:contentDescription="Knew it"
-            android:text="✓"
-            android:textColor="@color/widget_icon_knew"
-            android:textSize="24sp" />
+            android:importantForAccessibility="no" />
     </LinearLayout>
 </LinearLayout>

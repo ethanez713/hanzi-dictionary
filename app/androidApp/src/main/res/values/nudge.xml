@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The study notification's palette: the Ethan tokens from ui/Theme.kt (LightColors),
+         copied because RemoteViews can't read Compose state. Keep in step with Theme.kt;
+         values-night/nudge.xml carries DarkColors. The gutters are the practice screen's
+         amber (again) and jade (knew), not the widget's red/green. -->
+    <color name="nudge_paper">#FDFCF9</color>        <!-- paper0: the card -->
+    <color name="nudge_border">#D8D1C5</color>       <!-- borderDefault -->
+    <color name="nudge_ink">#211D18</color>          <!-- ink900: the glyph, the title -->
+    <color name="nudge_text_muted">#574F45</color>   <!-- textMuted: the last answer -->
+    <color name="nudge_text_faint">#70685B</color>   <!-- textFaint: "Tap to reveal" -->
+    <color name="nudge_amber_bg">#FDF4CB</color>     <!-- amber100: the Again gutter -->
+    <color name="nudge_amber_ink">#8A6403</color>    <!-- amber600 -->
+    <color name="nudge_jade_bg">#DCF0EB</color>      <!-- jade100: the Knew gutter -->
+    <color name="nudge_jade_ink">#0B6E5D</color>     <!-- jade600 -->
+    <color name="nudge_accent">#DD7A32</color>       <!-- accent: tints the shade header -->
+</resources>

@@ -7,18 +7,22 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.view.View
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.hanzidictionary.app.MainActivity
 import com.hanzidictionary.app.R
 import com.hanzidictionary.app.widget.PracticeWidgetProvider
+import com.hanzidictionary.core.NudgeGraded
 import com.hanzidictionary.core.NudgeSession
 import com.hanzidictionary.core.Rating
 import com.hanzidictionary.core.StudyItem
 
 /**
- * Builds and posts the study-reminder notification — the home-screen widget, larger.
+ * Builds and posts the study-reminder notification — the practice screen in miniature, in its
+ * own palette and type (see [NudgeArt] for why the text is drawn rather than set).
  *
  * Same verbs as the widget and the practice swipes, for the same reason: a notification (like
  * a widget) gets taps and no gestures, so Again and Good become two gutters either side of the
@@ -67,6 +71,8 @@ internal object NudgeNotifier {
         val card = session.card
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_study)
+            // The app's accent on the shade header (icon and app name), as on its own chrome.
+            .setColor(ContextCompat.getColor(context, R.color.nudge_accent))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setOnlyAlertOnce(quiet)
             .setAutoCancel(false)
@@ -81,39 +87,86 @@ internal object NudgeNotifier {
                 .setAutoCancel(true)
                 .setTimeoutAfter(DONE_TIMEOUT_MS)
         } else {
-            val previousLine = session.previous?.let { "${it.front}  ${it.answer}  ${if (it.knew) "✓" else "✗"}" }
+            val art = NudgeArt(context)
             builder
                 .setContentTitle(title)
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-                .setCustomContentView(body(context, R.layout.notification_card_small, card.item, card.front, null, null))
-                .setCustomBigContentView(body(context, R.layout.notification_card, card.item, card.front, title, previousLine))
+                .setCustomContentView(collapsed(context, art, card.item, card.front))
+                .setCustomBigContentView(expanded(context, art, card.item, card.front, title, session.previous))
                 .setContentIntent(openIntent(context, card.item))
         }
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
     }
 
-    private fun body(
+    /** The one-row strip: marks only, glyph alone — the practice gutters with hints off. */
+    private fun collapsed(context: Context, art: NudgeArt, item: StudyItem, front: String): RemoteViews {
+        val views = RemoteViews(context.packageName, R.layout.notification_card_small)
+        val cardWidth = cardWidthDp(art) - 8f
+        views.setArt(context, R.id.nudge_glyph, art.glyph(front, cardWidth, 40f, maxSp = 30f), R.color.nudge_ink, front)
+        views.setArt(context, R.id.zone_miss_mark, art.line("✗", R.font.ibm_plex_mono_regular, 16f, 40f), R.color.nudge_amber_ink)
+        views.setArt(context, R.id.zone_knew_mark, art.line("✓", R.font.ibm_plex_mono_regular, 16f, 40f), R.color.nudge_jade_ink)
+        bindTaps(context, views, item)
+        return views
+    }
+
+    /**
+     * The practice screen in miniature (see notification_card.xml). Type follows the theme's
+     * roles: Piazzolla for the headline, Noto CJK for anything Chinese, Plex Mono for the gutter
+     * marks and their tracked labels, Instrument Sans for prose.
+     */
+    private fun expanded(
         context: Context,
-        layout: Int,
+        art: NudgeArt,
         item: StudyItem,
         front: String,
-        title: String?,
-        previousLine: String?,
+        title: String,
+        previous: NudgeGraded?,
     ): RemoteViews {
-        val views = RemoteViews(context.packageName, layout)
-        views.setTextViewText(R.id.nudge_glyph, front)
-        // The card stays face-down: its answer lives behind the open-the-app tap, as a widget
-        // card's does. Only the card you just graded is shown answered (previousLine).
-        views.setTextViewText(R.id.nudge_echo, "Tap card for answer")
-        if (title != null) views.setTextViewText(R.id.nudge_title, title)
-        if (previousLine != null) {
-            views.setTextViewText(R.id.nudge_previous, previousLine)
-            views.setViewVisibility(R.id.nudge_previous, android.view.View.VISIBLE)
+        val views = RemoteViews(context.packageName, R.layout.notification_card)
+        val width = art.contentWidthDp
+        views.setArt(context, R.id.nudge_title, art.line(title, R.font.piazzolla_semibold, 16f, width), R.color.nudge_ink, title)
+
+        if (previous != null) {
+            views.setViewVisibility(R.id.nudge_previous, View.VISIBLE)
+            views.setArt(
+                context, R.id.nudge_previous_front,
+                art.line(previous.front, R.font.noto_sans_cjk_sc, 15f, width * 0.25f), R.color.nudge_ink, previous.front,
+            )
+            views.setArt(
+                context, R.id.nudge_previous_answer,
+                art.line(previous.answer, R.font.instrument_sans_regular, 13f, width * 0.55f), R.color.nudge_text_muted, previous.answer,
+            )
+            views.setArt(
+                context, R.id.nudge_previous_mark,
+                art.line(if (previous.knew) "✓" else "✗", R.font.ibm_plex_mono_regular, 13f, 24f),
+                if (previous.knew) R.color.nudge_jade_ink else R.color.nudge_amber_ink,
+                if (previous.knew) "knew it" else "didn't know it",
+            )
         }
+
+        // The card stays face-down, as the practice card's front does: "Tap to reveal" opens it
+        // in the app with the answer showing. Only the card just graded is shown answered.
+        val cardWidth = cardWidthDp(art) - 16f
+        views.setArt(context, R.id.nudge_glyph, art.glyph(front, cardWidth, 94f, maxSp = 72f), R.color.nudge_ink, front)
+        views.setArt(context, R.id.nudge_hint, art.line("Tap to reveal", R.font.instrument_sans_regular, 12f, cardWidth), R.color.nudge_text_faint)
+
+        val gutter = width / 5f
+        views.setArt(context, R.id.zone_miss_mark, art.line("✗", R.font.ibm_plex_mono_regular, 18f, gutter), R.color.nudge_amber_ink)
+        views.setArt(context, R.id.zone_miss_label, art.line("AGAIN", R.font.ibm_plex_mono_regular, 10f, gutter, 0.075f), R.color.nudge_amber_ink)
+        views.setArt(context, R.id.zone_knew_mark, art.line("✓", R.font.ibm_plex_mono_regular, 18f, gutter), R.color.nudge_jade_ink)
+        views.setArt(context, R.id.zone_knew_label, art.line("KNEW", R.font.ibm_plex_mono_regular, 10f, gutter, 0.075f), R.color.nudge_jade_ink)
+
+        bindTaps(context, views, item)
+        return views
+    }
+
+    /** The card's share of the row: gutters 1 : card 3 : gutter 1, less the card's margins. */
+    private fun cardWidthDp(art: NudgeArt) = (art.contentWidthDp - 12f) * 3f / 5f
+
+    private fun bindTaps(context: Context, views: RemoteViews, item: StudyItem) {
         views.setOnClickPendingIntent(R.id.zone_miss, gradeIntent(context, Rating.AGAIN, item))
         views.setOnClickPendingIntent(R.id.zone_knew, gradeIntent(context, Rating.GOOD, item))
         views.setOnClickPendingIntent(R.id.zone_card, openIntent(context, item))
-        return views
     }
 
     private fun gradeIntent(context: Context, rating: Rating, item: StudyItem): PendingIntent {

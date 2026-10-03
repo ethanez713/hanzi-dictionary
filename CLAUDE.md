@@ -148,6 +148,11 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   their own. It must be a direct activity PendingIntent — Android 12+ blocks trampolines. Whether
   to post is the pure `shouldNudge` (`Nudge.kt`); the hourly `NudgeWorker` only gathers inputs. A
   notification layout is `RemoteViews`, so the widget's whitelist-of-view-classes rule applies.
+  **It wears the app's design language, not the widget's:** amber/jade gutters, a paper0 card,
+  colours from `res/values{,-night}/nudge.xml` (a copy of the `Theme.kt` tokens — change both
+  together), and every text run drawn by `NudgeArt` as a tinted alpha-mask bitmap in the bundled
+  fonts (Noto CJK / Piazzolla / Plex Mono / Instrument Sans), since RemoteViews TextViews only get
+  system fonts. Keep those bitmaps small — they ride the ~1 MB binder parcel of every notify().
 - **Never treat one correct answer as "learned".** Readiness to archive lives in `Mastery.kt` and
   is built from the graded history (streak on *distinct days*, gap before the latest success, FSRS
   stability, lapses); its constants are documented judgement calls anchored to

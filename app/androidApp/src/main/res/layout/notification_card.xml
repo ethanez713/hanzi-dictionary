@@ -1,45 +1,72 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Expanded study-reminder card: the home-screen widget, larger (see widget_practice.xml for
-     why the verbs are two full-height gutters). ✗ on the left, ✓ on the right, the card in
-     the middle; tapping the card opens it in the app. Notifications can't flip a card in
-     place without re-posting, so the *previous* card's answer rides in the line above — a
-     miss still teaches you the word. The glyph auto-sizes to fill the middle zone, which is
-     the whole point of this layout over the collapsed one.
-     RemoteViews inflates a whitelist of view classes only: TextView/LinearLayout here. -->
+<!-- Expanded study notification: the practice screen in miniature. Amber ✗ AGAIN gutter on
+     the left, jade ✓ KNEW gutter on the right, the face-down card between them on paper0 with
+     its glyph in Noto CJK and "Tap to reveal" beneath, exactly as the practice card's front
+     reads. Tapping the card opens it in the app (revealed); the gutters grade in place.
+
+     Every piece of text is an ImageView holding a bitmap drawn in the app's own typefaces
+     (NudgeArt): RemoteViews TextViews can't use the bundled fonts, and a system-font glyph
+     next to the app's Noto one is exactly the mismatch this layout exists to avoid. The
+     bitmaps are alpha masks tinted from @color/nudge_*, the Ethan tokens.
+
+     Notifications can't flip a card in place without re-posting, so the *previous* card's
+     answer rides in the line above the row — a miss still teaches you the word.
+     RemoteViews inflates a whitelist of view classes only: ImageView/LinearLayout here. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="4dp"
+    android:paddingTop="2dp"
     android:paddingBottom="8dp">
 
-    <!-- The rotating headline. A custom body replaces the system title area, so it is drawn
-         here; the wording changes daily because a repeated template stops working. -->
-    <TextView
+    <!-- The rotating headline, in Piazzolla like every screen title. -->
+    <ImageView
         android:id="@+id/nudge_title"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="2dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="@color/widget_text"
-        android:textSize="14sp"
-        android:textStyle="bold" />
+        android:adjustViewBounds="true"
+        android:scaleType="fitStart" />
 
-    <TextView
+    <!-- The card just graded: glyph (Noto), its answer (Instrument Sans, muted), and the
+         verdict in the gutter colour it was graded with. -->
+    <LinearLayout
         android:id="@+id/nudge_previous"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="@color/widget_text_muted"
-        android:textSize="12sp"
-        android:visibility="gone" />
+        android:layout_marginTop="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/nudge_previous_front"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="fitStart" />
+
+        <!-- wrap_content, not a weight: a stretched ImageView with adjustViewBounds would scale
+             the text *up*; the bitmap is already ellipsized to its share of the row. -->
+        <ImageView
+            android:id="@+id/nudge_previous_answer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:adjustViewBounds="true"
+            android:scaleType="fitStart" />
+
+        <ImageView
+            android:id="@+id/nudge_previous_mark"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:adjustViewBounds="true" />
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="132dp"
+        android:layout_marginTop="8dp"
         android:orientation="horizontal">
 
         <!-- LEFT gutter: you didn't know it. -->
@@ -49,55 +76,51 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="@drawable/notif_zone_miss"
+            android:contentDescription="Didn't know it"
             android:gravity="center"
             android:orientation="vertical">
 
-            <TextView
+            <ImageView
+                android:id="@+id/zone_miss_mark"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Didn't know it"
-                android:text="✗"
-                android:textColor="@color/widget_icon_miss"
-                android:textSize="34sp" />
+                android:importantForAccessibility="no" />
 
-            <TextView
+            <ImageView
+                android:id="@+id/zone_miss_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="again"
-                android:textColor="@color/widget_icon_miss"
-                android:textSize="11sp" />
+                android:layout_marginTop="4dp"
+                android:importantForAccessibility="no" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/zone_card"
             android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
             android:layout_weight="3"
+            android:background="@drawable/notif_card"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp">
+            android:padding="8dp">
 
-            <TextView
+            <!-- centerInside: shrink if the shade is narrower than estimated, never enlarge
+                 past the size the glyph was drawn at. -->
+            <ImageView
                 android:id="@+id/nudge_glyph"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:autoSizeMaxTextSize="96sp"
-                android:autoSizeMinTextSize="32sp"
-                android:autoSizeTextType="uniform"
-                android:gravity="center"
-                android:maxLines="1"
-                android:textColor="@color/widget_text" />
+                android:scaleType="centerInside" />
 
-            <TextView
-                android:id="@+id/nudge_echo"
-                android:layout_width="match_parent"
+            <ImageView
+                android:id="@+id/nudge_hint"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center"
-                android:text="Tap to open"
-                android:textColor="@color/widget_text_muted"
-                android:textSize="12sp" />
+                android:layout_marginTop="2dp"
+                android:importantForAccessibility="no" />
         </LinearLayout>
 
         <!-- RIGHT gutter: you recalled it. -->
@@ -107,23 +130,22 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="@drawable/notif_zone_knew"
+            android:contentDescription="Knew it"
             android:gravity="center"
             android:orientation="vertical">
 
-            <TextView
+            <ImageView
+                android:id="@+id/zone_knew_mark"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Knew it"
-                android:text="✓"
-                android:textColor="@color/widget_icon_knew"
-                android:textSize="34sp" />
+                android:importantForAccessibility="no" />
 
-            <TextView
+            <ImageView
+                android:id="@+id/zone_knew_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="knew"
-                android:textColor="@color/widget_icon_knew"
-                android:textSize="11sp" />
+                android:layout_marginTop="4dp"
+                android:importantForAccessibility="no" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>
