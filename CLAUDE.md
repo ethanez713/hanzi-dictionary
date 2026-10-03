@@ -18,10 +18,10 @@ Authoritative spec: `docs/hanzi-dictionary-spec-v1.md`. Data provenance/licensin
 - **`app/`** — Gradle, two modules:
   - **`:core`** — **pure Kotlin, no Android deps, JVM-unit-tested.** Repositories
     (`HanziRepository` over the content pack, `StudyRepository`/`UserRepository` over user
-    state), `Fsrs.kt` (hand-written FSRS-6), and **pure state machines** (`WidgetState.kt`,
-    `PracticeState.kt`, `PhotoScan.kt`). **Put logic here, not in the UI/provider**, so it can
+    state), `Fsrs.kt` (hand-written FSRS-6), and **pure state machines / rules** (`WidgetState.kt`,
+    `PracticeState.kt`, `PhotoScan.kt`, `Nudge.kt`, `Mastery.kt`, `DeckHealth.kt`). **Put logic here, not in the UI/provider**, so it can
     be tested without a device. SQLDelight schemas live under `src/main/sqldelight/`.
-  - **`:androidApp`** — Jetpack Compose UI (`ui/`), the home-screen widget (`widget/`), and
+  - **`:androidApp`** — Jetpack Compose UI (`ui/`), the home-screen widget (`widget/`), the reminder notification (`nudge/`), and
     thin Android adapters (`photo/`, `audio/`). Depends on `:core`.
 
 ## Build / test / run
@@ -140,6 +140,25 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   is non-null, and only records the position after that — don't "simplify" it back.
 - **After any user-state mutation that changes what's due, poke the widget**
   (`PracticeWidgetUpdater.refresh(context)`) — otherwise a placed widget goes stale.
+
+- **The study-reminder notification is the widget, enlarged — same verbs, same hand-off.** Two
+  grade gutters (Again/Good, no Hard/Easy) either side of the card, graded in place by
+  `NudgeReceiver` (`origin = 'notification'`); tapping the card opens it through the *widget's*
+  intent extras (`EXTRA_PRACTICE_ITEM`/`_KIND`), so `MainActivity`/`AppRoot` need no routing of
+  their own. It must be a direct activity PendingIntent — Android 12+ blocks trampolines. Whether
+  to post is the pure `shouldNudge` (`Nudge.kt`); the hourly `NudgeWorker` only gathers inputs. A
+  notification layout is `RemoteViews`, so the widget's whitelist-of-view-classes rule applies.
+- **Never treat one correct answer as "learned".** Readiness to archive lives in `Mastery.kt` and
+  is built from the graded history (streak on *distinct days*, gap before the latest success, FSRS
+  stability, lapses); its constants are documented judgement calls anchored to
+  `docs/research/flashcard-retirement.md` — change them there, with a reason. The app only
+  *suggests* (tags, a filter, an evidence line); archiving stays the user's swipe. Rows with
+  `origin = 'triage'` are self-reports, not retrievals: mastery and the recent-accuracy gate both
+  exclude them.
+- **New words are suggested only through the thin-deck rule** (`newWordGap` in `DeckHealth.kt`),
+  and only from the Study deck strip. Don't add a second entry point that bypasses it — the user
+  asked for suggestions to be metric-gated. Triage "know" files a word with an Easy first rating
+  (a real recall check ~a week out), never straight to the archive.
 
 ### Home-screen widget — platform constraints that bite
 
