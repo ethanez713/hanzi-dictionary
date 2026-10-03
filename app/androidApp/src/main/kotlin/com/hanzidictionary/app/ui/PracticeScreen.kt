@@ -1,5 +1,6 @@
 package com.hanzidictionary.app.ui
 
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +31,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -114,10 +116,22 @@ fun PracticeScreen(
         app.practiceCardPin = CardPin(entry.item.itemId, state.revealed)
     }
 
+    // How long this card sat face-down before the reveal tap. Recorded with the grade as
+    // reveal_ms (see 3.sqm) for later analysis; null when the card was resumed already
+    // revealed or the reveal was never tapped, since neither measures recall effort.
+    var shownAt by remember { mutableLongStateOf(0L) }
+    var revealMs by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(current?.item?.itemId, state.dealt) {
+        shownAt = SystemClock.elapsedRealtime()
+        revealMs = null
+    }
+
     fun grade(rating: Rating) {
         val entry = state.current ?: return
+        // A gap this long means the app was backgrounded mid-card, not that recall took minutes.
+        val reveal = revealMs?.takeIf { it <= REVEAL_MS_CAP }
         scope.launch {
-            withContext(Dispatchers.IO) { app.studyRepository.grade(entry.item, rating) }
+            withContext(Dispatchers.IO) { app.studyRepository.grade(entry.item, rating, revealMs = reveal) }
             PracticeWidgetUpdater.refresh(context)
         }
         state = state.advance(requeue = rating == Rating.AGAIN)
@@ -265,7 +279,10 @@ fun PracticeScreen(
                                         back = back,
                                         showAnswer = state.revealed,
                                         tts = tts,
-                                        onReveal = { state = state.reveal() },
+                                        onReveal = {
+                                            if (!state.revealed) revealMs = SystemClock.elapsedRealtime() - shownAt
+                                            state = state.reveal()
+                                        },
                                         onOpenFull = {
                                             val label = summary?.text ?: entry.item.itemId
                                             lookupStack.suspendedCardText = label
@@ -294,6 +311,9 @@ fun PracticeScreen(
         }
     }
 }
+
+/** Longest face-down time worth recording; beyond it the app was almost certainly backgrounded. */
+private const val REVEAL_MS_CAP = 120_000L
 
 @Composable
 private fun DeckStrip(deck: List<DeckEntry>, eth: EthanColors, onClick: (() -> Unit)? = null) {

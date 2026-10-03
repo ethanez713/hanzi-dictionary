@@ -209,6 +209,52 @@ class StudyRepositoryTest {
     }
 
     @Test
+    fun revealTimeIsRecordedOnAGradingAndMayBeAbsent() {
+        study.grade(hao, Rating.GOOD, now = now, revealMs = 1_234L)
+        study.grade(hao, Rating.GOOD, StudyRepository.ORIGIN_WIDGET, now + 5_000)
+        assertEquals(listOf<Long?>(1_234L, null), driver.longs("SELECT reveal_ms FROM review_log ORDER BY ts"))
+    }
+
+    @Test
+    fun masteryIsReadFromTheGradingHistoryAndSkipsUnscheduledItems() {
+        val day = 86_400_000L
+        study.grade(hao, Rating.GOOD, now = now)
+        study.grade(hao, Rating.GOOD, now = now + 7 * day)
+        study.grade(hao, Rating.GOOD, now = now + 30 * day)
+        // A self-reported "I know it" seeds a schedule but is no retrieval.
+        study.grade(ni, Rating.EASY, StudyRepository.ORIGIN_TRIAGE, now)
+
+        val mastery = study.masteryFor(listOf(hao.itemId, ni.itemId, nihao.itemId))
+
+        assertEquals(setOf(hao.itemId, ni.itemId), mastery.keys, "an item with no schedule has no mastery")
+        assertEquals(3, mastery.getValue(hao.itemId).spacedStreak)
+        assertEquals(MasteryLevel.LEARNED, mastery.getValue(hao.itemId).level, "30 days away before the last success")
+        assertEquals(0, mastery.getValue(ni.itemId).spacedStreak)
+    }
+
+    @Test
+    fun migrationFromV3KeepsReviewHistoryAndAddsRevealTime() {
+        val old = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        // v3's review_log verbatim (no reveal_ms, no index) with one past grading in it.
+        old.execute(
+            null,
+            """CREATE TABLE review_log (item_id TEXT NOT NULL, rating INTEGER NOT NULL, ts INTEGER NOT NULL,
+               elapsed_days REAL, stability REAL, difficulty REAL, origin TEXT NOT NULL)""",
+            0,
+        )
+        old.execute(null, "INSERT INTO review_log VALUES ('U+597D', 3, 10, 2.0, 5.0, 4.0, 'app')", 0)
+
+        UserDatabase.Schema.migrate(old, 3, UserDatabase.Schema.version)
+
+        assertEquals(listOf<Long?>(null), old.longs("SELECT reveal_ms FROM review_log"), "old rows get NULL")
+        old.execute(null, "INSERT INTO review_log VALUES ('U+597D', 3, 20, 2.0, 5.0, 4.0, 'app', 900)", 0)
+        assertEquals(listOf<Long?>(null, 900L), old.longs("SELECT reveal_ms FROM review_log ORDER BY ts"))
+        val history = StudyRepository(old).reviewHistory(listOf("U+597D")).getValue("U+597D")
+        assertEquals(listOf(10L, 20L), history.map { it.ts }, "history survives and reads back in time order")
+        old.close()
+    }
+
+    @Test
     fun reviewStatsWrapsRecalledAndLapsesFromCardState() {
         study.grade(hao, Rating.GOOD, now = now)
         study.grade(hao, Rating.AGAIN, now = now + 60_000)
@@ -291,6 +337,20 @@ class StudyRepositoryTest {
         )
     }
 }
+
+/** First column of every row of [sql], as nullable longs — for asserting on columns the
+ * repository API doesn't expose. */
+private fun app.cash.sqldelight.db.SqlDriver.longs(sql: String): List<Long?> =
+    executeQuery(
+        null,
+        sql,
+        { cursor ->
+            val out = mutableListOf<Long?>()
+            while (cursor.next().value) out += cursor.getLong(0)
+            QueryResult.Value(out)
+        },
+        0,
+    ).value
 
 private fun app.cash.sqldelight.db.SqlDriver.execute(
     identifier: Int?,

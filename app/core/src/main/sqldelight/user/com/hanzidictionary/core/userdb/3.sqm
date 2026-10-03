@@ -1,0 +1,16 @@
+-- v3 -> v4: the evidence behind "is this card ready to retire?".
+--
+-- reveal_ms is how long a card sat face-down before it was revealed (the app's practice
+-- screen only; the widget and notification can't know how long a card sat unseen, so they
+-- leave it NULL). It is recorded, not yet used: response time is a real strength signal in
+-- the literature but also one learners misjudge, so it earns a role only once there is data.
+--
+-- The (item_id, ts) index serves the per-item history read that mastery is computed from;
+-- review_log had no index at all, and that read is by item in time order.
+--
+-- Additive: the new column defaults to NULL on existing rows and nothing is dropped, so the
+-- archive, lists and every past grading survive the upgrade.
+
+ALTER TABLE review_log ADD COLUMN reveal_ms INTEGER;
+
+CREATE INDEX IF NOT EXISTS review_log_item_ts ON review_log(item_id, ts);

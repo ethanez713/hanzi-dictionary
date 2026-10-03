@@ -57,6 +57,7 @@ import com.hanzidictionary.core.CharacterPage
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
+import com.hanzidictionary.core.masterySummary
 import com.hanzidictionary.core.WordPage
 import com.hanzidictionary.core.isSoundBearing
 import kotlinx.coroutines.Dispatchers
@@ -192,6 +193,22 @@ private fun rememberSheetActions(snackbar: SnackbarHostState): SheetActions {
             },
         )
     }
+}
+
+/**
+ * What your own history says about this item, right above the Archive button: the evidence
+ * for "do I really know this?" at the moment you'd claim it. Absent for an item you haven't
+ * started. Loaded off the main thread and keyed on the item so a trail hop refreshes it.
+ */
+@Composable
+private fun MasteryLine(item: StudyItem, eth: EthanColors) {
+    val app = LocalContext.current.applicationContext as HanziApp
+    val line by produceState<String?>(null, item.itemId) {
+        value = withContext(Dispatchers.IO) {
+            app.studyRepository.masteryFor(listOf(item.itemId))[item.itemId]?.let(::masterySummary)
+        }
+    }
+    line?.let { Text(it, fontFamily = PlexMono, fontSize = 10.5.sp, color = eth.textFaint) }
 }
 
 private class SheetActions(
@@ -416,6 +433,7 @@ private fun CharacterSheetContent(
                 }
                 // Study actions
                 val charItem = StudyItem.character(glyphId)
+                MasteryLine(charItem, eth)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { actions.addToList(charItem, p.char) },
@@ -622,6 +640,7 @@ private fun WordSheetContent(
                     Text("${i + 1}. $sense", fontSize = 14.5.sp, color = eth.ink700, fontFamily = InstrumentSans)
                 }
                 val wordItem = StudyItem.word(wordId)
+                MasteryLine(wordItem, eth)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { actions.addToList(wordItem, p.simp) },

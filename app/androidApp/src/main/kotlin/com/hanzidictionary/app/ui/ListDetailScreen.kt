@@ -47,6 +47,8 @@ import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.CardState
 import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.ItemSummary
+import com.hanzidictionary.core.Mastery
+import com.hanzidictionary.core.MasteryLevel
 import com.hanzidictionary.core.StudyItem
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -75,6 +77,8 @@ private data class Loaded(
     val archived: List<ItemSummary>,
     /** Keyed by item id — the per-word knew/missed trailing each row in "Studying". */
     val cardStates: Map<String, CardState>,
+    /** Keyed by item id; only items with a schedule appear. Drives the learned/ready tags. */
+    val mastery: Map<String, Mastery>,
     /** Item id -> when it was filed into the list, for the "date added" sort. */
     val addedAt: Map<String, Long>,
 )
@@ -105,7 +109,9 @@ fun ListDetailScreen(
     var learning by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var archived by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var cardStates by remember { mutableStateOf<Map<String, CardState>>(emptyMap()) }
+    var mastery by remember { mutableStateOf<Map<String, Mastery>>(emptyMap()) }
     var addedAt by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var readyOnly by remember { mutableStateOf(false) }
     // Default to most-recently-added: building a list, the thing you just filed is what you
     // want to see. Missed-rate sorts stay available for deciding what's shaky.
     var sort by remember { mutableStateOf(ListSort.RECENT) }
@@ -126,6 +132,7 @@ fun ListDetailScreen(
                 learning = summaries.filter { it.item.itemId !in known },
                 archived = summaries.filter { it.item.itemId in known },
                 cardStates = app.studyRepository.cardStates(items.map { it.itemId }),
+                mastery = app.studyRepository.masteryFor(items.map { it.itemId }),
                 addedAt = app.studyRepository.addedAtInList(listId),
             )
         }
@@ -133,6 +140,7 @@ fun ListDetailScreen(
         learning = loaded.learning
         archived = loaded.archived
         cardStates = loaded.cardStates
+        mastery = loaded.mastery
         addedAt = loaded.addedAt
     }
 
@@ -175,6 +183,16 @@ fun ListDetailScreen(
         ListSort.OLDEST -> learning.sortedBy { addedAt[it.item.itemId] ?: 0L }
         ListSort.MISSED_PCT -> learning.sortedByDescending { missedPercent(cardStates[it.item.itemId]) }
         ListSort.MISSED_COUNT -> learning.sortedByDescending { cardStates[it.item.itemId]?.lapses ?: 0 }
+    }
+
+    // Suggestions only: archiving stays the user's own swipe (see Mastery.kt for what "ready"
+    // has to mean, and why one correct answer never gets a card here).
+    val readyCount = learning.count { mastery[it.item.itemId]?.level == MasteryLevel.RETIRE_READY }
+    val showReadyOnly = readyOnly && readyCount > 0
+    val shownLearning = if (showReadyOnly) {
+        sortedLearning.filter { mastery[it.item.itemId]?.level == MasteryLevel.RETIRE_READY }
+    } else {
+        sortedLearning
     }
 
     Scaffold(
@@ -245,7 +263,19 @@ fun ListDetailScreen(
                     }
                 }
             }
-            items(sortedLearning, key = { it.item.itemId }) { summary ->
+            if (readyCount > 0) {
+                item {
+                    TextButton(onClick = { readyOnly = !readyOnly }) {
+                        Text(
+                            if (showReadyOnly) "Ready to archive · $readyCount — show all"
+                            else "Ready to archive · $readyCount",
+                            fontSize = 13.sp,
+                            color = KnewAction.color,
+                        )
+                    }
+                }
+            }
+            items(shownLearning, key = { it.item.itemId }) { summary ->
                 SwipeRow(
                     rightAction = ArchiveAction,
                     leftAction = RemoveAction,
@@ -259,7 +289,15 @@ fun ListDetailScreen(
                         gloss = summary.gloss,
                         glossLines = 1,
                         onClick = { onOpenItem(summary.item) },
-                        trailing = { KnewMissedTrailing(cardStates[summary.item.itemId]) },
+                        trailing = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                MasteryTag(mastery[summary.item.itemId])
+                                KnewMissedTrailing(cardStates[summary.item.itemId])
+                            }
+                        },
                     )
                 }
                 HorizontalDivider()
@@ -359,6 +397,20 @@ fun ListDetailScreen(
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
     }
+}
+
+/** A one-word verdict from [masteryOf]: ready to archive, merely learned, or a card that
+ * keeps getting missed. Silent for everything still unremarkable. */
+@Composable
+private fun MasteryTag(m: Mastery?) {
+    val (label, color) = when {
+        m == null -> return
+        m.level == MasteryLevel.RETIRE_READY -> "ready" to KnewAction.color
+        m.level == MasteryLevel.LEARNED -> "learned" to MaterialTheme.colorScheme.onSurfaceVariant
+        m.struggling -> "struggling" to MissedAction.color
+        else -> return
+    }
+    Text(label, fontSize = 11.sp, color = color)
 }
 
 /**

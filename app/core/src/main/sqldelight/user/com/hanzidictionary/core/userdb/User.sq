@@ -53,8 +53,11 @@ CREATE TABLE review_log (
     elapsed_days REAL,
     stability    REAL,
     difficulty   REAL,
-    origin       TEXT NOT NULL            -- app | widget | notification
+    origin       TEXT NOT NULL,           -- app | widget | notification | triage
+    reveal_ms    INTEGER                  -- face-down time before reveal; app only, else NULL
 );
+
+CREATE INDEX review_log_item_ts ON review_log(item_id, ts);
 
 CREATE TABLE app_pref (
     key   TEXT NOT NULL PRIMARY KEY,
@@ -234,8 +237,15 @@ deleteCardState:
 DELETE FROM card_state WHERE item_id = :itemId;
 
 logReview:
-INSERT INTO review_log(item_id, rating, ts, elapsed_days, stability, difficulty, origin)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO review_log(item_id, rating, ts, elapsed_days, stability, difficulty, origin, reveal_ms)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- The full grading history of the given items, in time order — what mastery is derived from.
+reviewHistory:
+SELECT item_id, rating, ts, elapsed_days, origin
+FROM review_log
+WHERE item_id IN :itemIds
+ORDER BY item_id, ts;
 
 -- How many items were introduced (first ever graded) since :since — the new-cards-per-day
 -- budget, so adding a 600-character HSK list doesn't dump 600 new cards in one session.

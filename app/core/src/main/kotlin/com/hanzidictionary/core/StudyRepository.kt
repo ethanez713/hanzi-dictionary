@@ -175,13 +175,16 @@ class StudyRepository(
     /**
      * Records a grading and reschedules the item. [origin] distinguishes app reviews from
      * widget taps in `review_log`, which is the raw material for optimising the FSRS
-     * parameters against this user's own history later.
+     * parameters against this user's own history later. [revealMs] is how long the card sat
+     * face-down before the reveal, passed only by the practice screen — a widget or
+     * notification card may have sat unseen for hours, so those leave it null.
      */
     fun grade(
         item: StudyItem,
         rating: Rating,
         origin: String = ORIGIN_APP,
         now: Long = System.currentTimeMillis(),
+        revealMs: Long? = null,
     ): CardState {
         val before = cardState(item.itemId) ?: CardState(item.itemId, item.kind, due = now)
         val elapsedDays = before.lastReview?.let { ((now - it) / DAY_MS).toDouble() }
@@ -207,9 +210,32 @@ class StudyRepository(
                 after.stability,
                 after.difficulty,
                 origin,
+                revealMs,
             )
         }
         return after
+    }
+
+    /** Past gradings of [itemIds], oldest first, for [masteryOf]. */
+    fun reviewHistory(itemIds: Collection<String>): Map<String, List<ReviewEntry>> {
+        if (itemIds.isEmpty()) return emptyMap()
+        val out = HashMap<String, MutableList<ReviewEntry>>()
+        // Chunked: SQLite caps bound variables, and a big list holds hundreds of items.
+        for (chunk in itemIds.distinct().chunked(HISTORY_CHUNK)) {
+            for (row in q.reviewHistory(chunk).executeAsList()) {
+                out.getOrPut(row.item_id) { mutableListOf() } +=
+                    ReviewEntry(row.ts, row.rating.toInt(), row.elapsed_days, row.origin)
+            }
+        }
+        return out
+    }
+
+    /** [Mastery] for each item that has a schedule; items without one are simply absent. */
+    fun masteryFor(itemIds: Collection<String>): Map<String, Mastery> {
+        val cards = cardStates(itemIds)
+        if (cards.isEmpty()) return emptyMap()
+        val history = reviewHistory(cards.keys)
+        return cards.mapValues { (id, card) -> masteryOf(card, history[id].orEmpty()) }
     }
 
     /**
@@ -322,6 +348,12 @@ class StudyRepository(
         const val ORIGIN_APP = "app"
         const val ORIGIN_WIDGET = "widget"
         const val ORIGIN_NOTIFICATION = "notification"
+
+        /** A self-reported "I already know this" when meeting a suggested new word. It seeds
+         * the schedule but is a claim, not a retrieval, so mastery and the recent-accuracy
+         * gate both ignore it. */
+        const val ORIGIN_TRIAGE = "triage"
+        private const val HISTORY_CHUNK = 500
         private const val PREF_ACTIVE_LIST = "active_list"
         private const val ACTIVE_EVERYTHING = "everything"
     }
