@@ -85,8 +85,8 @@ internal object NudgeNotifier {
             builder
                 .setContentTitle(title)
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-                .setCustomContentView(body(context, R.layout.notification_card_small, card.item, card.front, null))
-                .setCustomBigContentView(body(context, R.layout.notification_card, card.item, card.front, previousLine))
+                .setCustomContentView(body(context, R.layout.notification_card_small, card.item, card.front, null, null))
+                .setCustomBigContentView(body(context, R.layout.notification_card, card.item, card.front, title, previousLine))
                 .setContentIntent(openIntent(context, card.item))
         }
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
@@ -97,6 +97,7 @@ internal object NudgeNotifier {
         layout: Int,
         item: StudyItem,
         front: String,
+        title: String?,
         previousLine: String?,
     ): RemoteViews {
         val views = RemoteViews(context.packageName, layout)
@@ -104,6 +105,7 @@ internal object NudgeNotifier {
         // The card stays face-down: its answer lives behind the open-the-app tap, as a widget
         // card's does. Only the card you just graded is shown answered (previousLine).
         views.setTextViewText(R.id.nudge_echo, "Tap card for answer")
+        if (title != null) views.setTextViewText(R.id.nudge_title, title)
         if (previousLine != null) {
             views.setTextViewText(R.id.nudge_previous, previousLine)
             views.setViewVisibility(R.id.nudge_previous, android.view.View.VISIBLE)

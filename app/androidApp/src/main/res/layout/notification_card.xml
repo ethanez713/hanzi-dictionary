@@ -13,6 +13,19 @@
     android:paddingTop="4dp"
     android:paddingBottom="8dp">
 
+    <!-- The rotating headline. A custom body replaces the system title area, so it is drawn
+         here; the wording changes daily because a repeated template stops working. -->
+    <TextView
+        android:id="@+id/nudge_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/widget_text"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
     <TextView
         android:id="@+id/nudge_previous"
         android:layout_width="match_parent"

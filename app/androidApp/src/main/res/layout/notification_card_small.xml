@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Collapsed study-reminder card: the same three zones in a one-row-high strip, so the ✗/✓
      are reachable without expanding the notification. IDs match notification_card.xml so one
-     bind routine fills both. -->
+     bind routine fills both. 48dp: under DecoratedCustomViewStyle the system header takes part
+     of the collapsed height, so a taller strip risks clipping. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="64dp"
+    android:layout_height="48dp"
     android:orientation="horizontal">
 
     <LinearLayout
@@ -40,8 +41,8 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:autoSizeMaxTextSize="40sp"
-            android:autoSizeMinTextSize="20sp"
+            android:autoSizeMaxTextSize="28sp"
+            android:autoSizeMinTextSize="16sp"
             android:autoSizeTextType="uniform"
             android:gravity="center"
             android:maxLines="1"
