@@ -67,6 +67,11 @@ dependencies {
 
     implementation("app.cash.sqldelight:android-driver:2.0.2")
 
+    // Hourly tick behind the study reminder. WorkManager (not AlarmManager) because the
+    // reminder is deliberately inexact, and it re-arms itself across reboots with no
+    // BOOT_COMPLETED receiver to maintain.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
     // Android's framework SQLite is not built with SQLITE_ENABLE_FTS5 (confirmed absent
     // even on the S25 / Android 16), so the pack's glyph_fts MATCH query throws
     // "no such module: fts5". requery ships a modern SQLite .so compiled with FTS5

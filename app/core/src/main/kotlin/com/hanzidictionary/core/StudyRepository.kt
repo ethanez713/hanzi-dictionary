@@ -282,6 +282,9 @@ class StudyRepository(
     fun reviewsToday(now: Long = System.currentTimeMillis()): Long =
         q.reviewCountSince(startOfDay(now)).executeAsOne()
 
+    /** When the newest grading happened, whatever surface it came from; null if never. */
+    fun lastReviewAt(): Long? = q.lastReviewTs().executeAsOne().MAX
+
     /** Distinct list items whose card is due now and not archived — the "M due" pulse on
      * the Study screen. Counts each item once even if it's filed in several lists. */
     fun dueNow(now: Long = System.currentTimeMillis()): Int {
@@ -318,6 +321,7 @@ class StudyRepository(
         const val DEFAULT_LIST_NAME = "Saved"
         const val ORIGIN_APP = "app"
         const val ORIGIN_WIDGET = "widget"
+        const val ORIGIN_NOTIFICATION = "notification"
         private const val PREF_ACTIVE_LIST = "active_list"
         private const val ACTIVE_EVERYTHING = "everything"
     }

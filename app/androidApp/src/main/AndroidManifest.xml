@@ -9,6 +9,10 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <!-- Study reminder notification. API 33+ makes this a runtime permission, requested from
+         Settings when the reminder is switched on (targetSdk 34, so it is enforced). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Package-visibility exemption for the device's TTS engine: without this, apps
          targeting API 30+ can't bind any TTS service (AppsFilter blocks it silently and
          MandarinTts never becomes available). -->
@@ -59,6 +63,12 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/practice_widget_info" />
         </receiver>
+
+        <!-- Grade taps on the study notification. Not exported, and no intent-filter: the
+             notification's PendingIntents address it by component. -->
+        <receiver
+            android:name=".nudge.NudgeReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

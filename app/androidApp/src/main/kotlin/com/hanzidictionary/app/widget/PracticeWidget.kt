@@ -104,7 +104,7 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                 val activeId = app.studyRepository.activeListId()
                 val source = if (activeId != null) DeckSource.UserList(activeId) else DeckSource.Everything
                 val deck = app.studyRepository.deckFor(source, limit = 12)
-                val next = nextWidgetState(prev, event, deck, { summarize(app, it) })
+                val next = nextWidgetState(prev, event, deck, { cardInfo(app, it) })
 
                 val editor = prefs.edit()
                 saveState(editor, widgetId, next)
@@ -160,15 +160,6 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                 editor.putString(key(widgetId, "answer"), card.answer)
                 editor.putBoolean(key(widgetId, "revealed"), state.revealed)
             }
-        }
-
-        /** Resolves an item to its widget lines (front glyph/word, pinyin · gloss answer). */
-        private fun summarize(app: HanziApp, item: StudyItem): WidgetCardInfo? {
-            val summary = app.repository.itemSummaries(listOf(item)).firstOrNull() ?: return null
-            val answer = listOfNotNull(summary.pinyin, summary.gloss?.take(48))
-                .joinToString(" · ")
-                .ifBlank { summary.text }
-            return WidgetCardInfo(item, summary.text, answer)
         }
 
         private fun render(context: Context, widgetId: Int, state: WidgetState) {

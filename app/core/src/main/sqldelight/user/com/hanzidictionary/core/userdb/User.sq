@@ -53,7 +53,7 @@ CREATE TABLE review_log (
     elapsed_days REAL,
     stability    REAL,
     difficulty   REAL,
-    origin       TEXT NOT NULL            -- app | widget
+    origin       TEXT NOT NULL            -- app | widget | notification
 );
 
 CREATE TABLE app_pref (
@@ -246,6 +246,11 @@ WHERE ts >= :since
 
 reviewCountSince:
 SELECT COUNT(*) FROM review_log WHERE ts >= :since;
+
+-- Newest grading from any origin (null before the first), for the reminder's "have they
+-- already studied today / how long since" rules.
+lastReviewTs:
+SELECT MAX(ts) FROM review_log;
 
 -- ---- preferences ----
 

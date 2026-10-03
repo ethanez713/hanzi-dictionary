@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Left tap zone of the study notification: the widget's tint, with small rounded corners
+     since it sits on the notification shade's own surface rather than a card of its own. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/widget_zone_miss" />
+    <corners android:radius="12dp" />
+</shape>

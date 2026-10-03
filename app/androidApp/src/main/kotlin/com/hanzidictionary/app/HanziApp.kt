@@ -3,6 +3,8 @@ package com.hanzidictionary.app
 import android.app.Application
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import com.hanzidictionary.app.audio.MandarinTts
+import com.hanzidictionary.app.nudge.NudgeNotifier
+import com.hanzidictionary.app.nudge.NudgeScheduler
 import com.hanzidictionary.app.photo.MediaStorePhotoSource
 import com.hanzidictionary.app.photo.MlKitTextRecognizer
 import com.hanzidictionary.core.CardPin
@@ -13,6 +15,14 @@ import com.hanzidictionary.core.UserRepository
 import org.json.JSONObject
 
 class HanziApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        // The channel must exist before the first post, and re-arming the hourly job here
+        // (KEEP, so a healthy one isn't reset) revives it after a force-stop wiped the queue.
+        NudgeNotifier.ensureChannel(this)
+        if (settings.nudgeEnabled) NudgeScheduler.sync(this, enabled = true)
+    }
+
     val repository: HanziRepository by lazy { PackManager.openRepository(this) }
 
     /**

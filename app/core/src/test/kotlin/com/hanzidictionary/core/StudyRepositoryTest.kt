@@ -201,6 +201,14 @@ class StudyRepositoryTest {
     }
 
     @Test
+    fun lastReviewAtIsTheNewestGradingFromAnyOrigin() {
+        assertNull(study.lastReviewAt(), "nothing graded yet")
+        study.grade(hao, Rating.GOOD, now = now)
+        study.grade(ni, Rating.GOOD, StudyRepository.ORIGIN_NOTIFICATION, now + 5_000)
+        assertEquals(now + 5_000, study.lastReviewAt())
+    }
+
+    @Test
     fun reviewStatsWrapsRecalledAndLapsesFromCardState() {
         study.grade(hao, Rating.GOOD, now = now)
         study.grade(hao, Rating.AGAIN, now = now + 60_000)

@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import com.hanzidictionary.app.nudge.NudgeScheduler
 import com.hanzidictionary.app.ui.AppRoot
 import com.hanzidictionary.app.ui.AppTheme
 import com.hanzidictionary.app.ui.isDark
@@ -85,6 +86,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         val app = application as HanziApp
+        NudgeScheduler.dismissForOpenApp(this)
         val arriving = sharedText.value != null || widgetItem.value != null
         if (!arriving && isStaleSession(app.lastActiveAt, System.currentTimeMillis())) {
             staleSessionKey.intValue++

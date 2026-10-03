@@ -1,6 +1,12 @@
 package com.hanzidictionary.app.ui
 
+import android.Manifest
+import android.app.TimePickerDialog
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,13 +39,17 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.AppSettings
 import com.hanzidictionary.app.PackManager
 import com.hanzidictionary.app.ThemeMode
+import com.hanzidictionary.app.nudge.NudgeScheduler
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.NudgeMode
 import com.hanzidictionary.core.SourceInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -120,6 +130,9 @@ fun SettingsScreen(
             }
             HorizontalDivider(color = eth.inkRule)
 
+            RemindersSection(settings, eth)
+            HorizontalDivider(color = eth.inkRule)
+
             SettingsSectionHeader("Data & attributions")
             Text(
                 "Content pack v${PackManager.BUNDLED_PACK_VERSION}",
@@ -131,6 +144,106 @@ fun SettingsScreen(
             Spacer(Modifier.height(32.dp))
         }
     }
+}
+
+/**
+ * The study-reminder notification: a flashcard you can grade from the shade. Off by default
+ * (it's a notification), and switching it on is what asks for the notification permission on
+ * Android 13+ — a denial leaves the switch off rather than pretending it worked.
+ */
+@Composable
+private fun RemindersSection(settings: AppSettings, eth: EthanColors) {
+    val context = LocalContext.current
+    fun enable() {
+        settings.updateNudgeEnabled(true)
+        NudgeScheduler.sync(context, enabled = true)
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) enable()
+    }
+
+    SettingsSectionHeader("Reminders")
+    SettingsRow(
+        title = "Flashcard reminders",
+        subtitle = "A notification with a card you can mark ✗ or ✓ without opening the app.",
+    ) {
+        Switch(
+            checked = settings.nudgeEnabled,
+            onCheckedChange = { on ->
+                when {
+                    !on -> {
+                        settings.updateNudgeEnabled(false)
+                        NudgeScheduler.sync(context, enabled = false)
+                    }
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                        PackageManager.PERMISSION_GRANTED ->
+                        permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    else -> enable()
+                }
+            },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = eth.knob,
+                checkedTrackColor = eth.accent,
+                uncheckedThumbColor = eth.knob,
+                uncheckedTrackColor = eth.ink200,
+                uncheckedBorderColor = eth.borderDefault,
+            ),
+        )
+    }
+    if (!settings.nudgeEnabled) return
+
+    SettingsRow(
+        title = "When",
+        subtitle = if (settings.nudgeMode == NudgeMode.ADAPTIVE) {
+            "Once a day, around when you usually study. Skipped if you already did, and it backs off if ignored."
+        } else {
+            "Every few hours inside the window below, whenever something is due."
+        },
+    ) {
+        SegmentedChoice(
+            options = listOf(NudgeMode.ADAPTIVE to "Daily", NudgeMode.INTERVAL to "Interval"),
+            selected = settings.nudgeMode,
+            onSelect = { settings.updateNudgeMode(it) },
+            eth = eth,
+        )
+    }
+    if (settings.nudgeMode == NudgeMode.INTERVAL) {
+        SettingsRow(title = "Every", subtitle = "Gap between reminders.") {
+            SegmentedChoice(
+                options = listOf(2 to "2h", 4 to "4h", 8 to "8h"),
+                selected = settings.nudgeIntervalHours,
+                onSelect = { settings.updateNudgeIntervalHours(it) },
+                eth = eth,
+            )
+        }
+    }
+    SettingsRow(title = "Only between", subtitle = "Nothing is sent outside these hours.") {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TimePill(settings.nudgeWindowStartMin, eth) { settings.updateNudgeWindowStart(it) }
+            TimePill(settings.nudgeWindowEndMin, eth) { settings.updateNudgeWindowEnd(it) }
+        }
+    }
+}
+
+/** A time-of-day chip (minutes after midnight) that opens the platform time picker. */
+@Composable
+private fun TimePill(minutes: Int, eth: EthanColors, onPick: (Int) -> Unit) {
+    val context = LocalContext.current
+    Text(
+        "%02d:%02d".format(minutes / 60, minutes % 60),
+        fontFamily = PlexMono,
+        fontSize = 12.sp,
+        color = eth.textMuted,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(eth.paper1)
+            .border(1.dp, eth.borderDefault, RoundedCornerShape(50))
+            .clickable {
+                TimePickerDialog(context, { _, h, m -> onPick(h * 60 + m) }, minutes / 60, minutes % 60, true).show()
+            }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
 }
 
 @Composable
