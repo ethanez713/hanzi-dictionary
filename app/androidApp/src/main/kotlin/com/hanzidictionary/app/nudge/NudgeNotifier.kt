@@ -36,6 +36,7 @@ import com.hanzidictionary.core.StudyItem
 internal object NudgeNotifier {
     const val CHANNEL_ID = "study_reminders"
     const val ACTION_GRADE = "com.hanzidictionary.app.nudge.GRADE"
+    const val ACTION_DISMISS = "com.hanzidictionary.app.nudge.DISMISS"
     const val EXTRA_RATING = "rating"
 
     /** The card the gutter tap was drawn for. A tap on a stale notification (a second tap
@@ -60,6 +61,9 @@ internal object NudgeNotifier {
 
     fun cancel(context: Context) = NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
 
+    fun isShowing(context: Context): Boolean =
+        context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == NOTIFICATION_ID }
+
     /**
      * Posts (or replaces) the reminder for [session]. [quiet] suppresses the sound and
      * vibration on a re-post after a grade — the user is already looking at it.
@@ -81,7 +85,7 @@ internal object NudgeNotifier {
             // Session over: say how it went, keep the last answer, then get out of the way.
             val last = session.previous
             builder
-                .setContentTitle(if (session.graded == 1) "1 card reviewed" else "${session.graded} cards reviewed")
+                .setContentTitle(if (session.graded == 1) "All caught up · 1 reviewed" else "All caught up · ${session.graded} reviewed")
                 .setContentText(last?.let { "${it.front}  ${it.answer}" })
                 .setContentIntent(openIntent(context, null))
                 .setAutoCancel(true)
@@ -94,6 +98,7 @@ internal object NudgeNotifier {
                 .setCustomContentView(collapsed(context, art, card.item, card.front))
                 .setCustomBigContentView(expanded(context, art, card.item, card.front, title, session.previous))
                 .setContentIntent(openIntent(context, card.item))
+                .setDeleteIntent(dismissIntent(context))
         }
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
     }
@@ -167,6 +172,16 @@ internal object NudgeNotifier {
         views.setOnClickPendingIntent(R.id.zone_miss, gradeIntent(context, Rating.AGAIN, item))
         views.setOnClickPendingIntent(R.id.zone_knew, gradeIntent(context, Rating.GOOD, item))
         views.setOnClickPendingIntent(R.id.zone_card, openIntent(context, item))
+    }
+
+    /** Fired when the user swipes the reminder away, so [NudgeReceiver] can time its return.
+     * Deliberately absent from the closing card, whose own timeout would otherwise count. */
+    private fun dismissIntent(context: Context): PendingIntent {
+        val intent = Intent(context, NudgeReceiver::class.java).apply {
+            action = ACTION_DISMISS
+            data = Uri.parse("hanzi://nudge/dismiss")
+        }
+        return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
     private fun gradeIntent(context: Context, rating: Rating, item: StudyItem): PendingIntent {

@@ -196,9 +196,9 @@ private fun RemindersSection(settings: AppSettings, eth: EthanColors) {
     SettingsRow(
         title = "When",
         subtitle = if (settings.nudgeMode == NudgeMode.ADAPTIVE) {
-            "Once a day, around when you usually study. Skipped if you already did, and it backs off if ignored."
+            "First one around when you usually study. It stays until today's cards are done."
         } else {
-            "Every few hours inside the window below, whenever something is due."
+            "A reminder every few hours inside the window below, whenever something is due. It stays until the cards are done."
         },
     ) {
         SegmentedChoice(
@@ -208,15 +208,20 @@ private fun RemindersSection(settings: AppSettings, eth: EthanColors) {
             eth = eth,
         )
     }
-    if (settings.nudgeMode == NudgeMode.INTERVAL) {
-        SettingsRow(title = "Every", subtitle = "Gap between reminders.") {
-            SegmentedChoice(
-                options = listOf(2 to "2h", 4 to "4h", 8 to "8h"),
-                selected = settings.nudgeIntervalHours,
-                onSelect = { settings.updateNudgeIntervalHours(it) },
-                eth = eth,
-            )
-        }
+    SettingsRow(
+        title = "Every",
+        subtitle = if (settings.nudgeMode == NudgeMode.ADAPTIVE) {
+            "How soon it comes back after you swipe it away or stop partway."
+        } else {
+            "Gap between reminders, and how soon one you swiped away comes back."
+        },
+    ) {
+        SegmentedChoice(
+            options = listOf(2 to "2h", 4 to "4h", 8 to "8h"),
+            selected = settings.nudgeIntervalHours,
+            onSelect = { settings.updateNudgeIntervalHours(it) },
+            eth = eth,
+        )
     }
     SettingsRow(title = "Only between", subtitle = "Nothing is sent outside these hours.") {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

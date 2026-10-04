@@ -9,24 +9,27 @@ import kotlin.random.Random
  * same split as [WidgetState]. The Android side owns the NotificationManager, the prefs and
  * the FSRS write; this file owns *whether to nudge* and *which card comes next*.
  *
- * The cadence rules follow the one large-scale study of recurring practice reminders
- * (Yancey & Settles, KDD 2020, Duolingo): send around the hour the learner last studied,
- * at most once a day, and stop repeating yourself — frequent ignored nudges drive people to
- * mute the app, which is worse than no nudge. The exact back-off numbers are a heuristic,
- * not a measured optimum.
+ * A reminder is **open** from its first post until nothing is owed. [shouldNudge] decides when
+ * one opens; [shouldReshow] decides when an open one that is no longer on screen (swiped away)
+ * comes back. The opening cadence follows Yancey & Settles (KDD 2020, Duolingo): send around the
+ * hour the learner last studied. Persisting until the deck is clear is a deliberate choice of
+ * this app's user over that study's caution about repeated nudges.
  */
 
 enum class NudgeMode {
-    /** One a day, ~a day after the last review, skipped if you already studied today. */
+    /** Opens ~a day after the last review; after studying today, only if cards are still owed
+     * an interval later. */
     ADAPTIVE,
 
-    /** Every [NudgeSettings.intervalHours] hours inside the waking window. */
+    /** Opens once [NudgeSettings.intervalHours] hours have passed since the last nudge and review. */
     INTERVAL,
 }
 
 data class NudgeSettings(
     val enabled: Boolean = false,
     val mode: NudgeMode = NudgeMode.ADAPTIVE,
+    /** Gap between opening nudges (interval mode) and how soon a swiped-away reminder returns
+     * (both modes). */
     val intervalHours: Int = 4,
     /** Waking window, minutes after local midnight. Nothing is posted outside it. */
     val windowStartMin: Int = 9 * 60,
@@ -39,29 +42,17 @@ private const val HOUR_MS = 3_600_000L
  * you habitually study rather than at a fixed clock time (Duolingo uses ~23.5h). */
 internal const val ADAPTIVE_GAP_HOURS = 23L
 
-/** After this many nudges in a row with no review between them, back off. */
-internal const val IGNORED_BACKOFF_AFTER = 4
-
-/** Backed-off adaptive cadence: once every two days instead of daily. */
-internal const val BACKOFF_GAP_HOURS = 48L
-
-/** Cards a single notification session walks before it stops by itself. A notification is a
- * micro-session (Dingler et al., MobileHCI 2017), not a place to spend twenty minutes. */
-const val NUDGE_SESSION_MAX = 5
-
 /**
- * Should the hourly job post a notification right now?
+ * Should the hourly job open a reminder right now?
  *
  * [lastReviewAt] is the newest `review_log` row from *any* origin (app, widget,
- * notification); [lastNudgeAt] is when the previous notification was posted. [ignoredStreak]
- * is how many consecutive nudges went unanswered — see [nextIgnoredStreak].
+ * notification); [lastNudgeAt] is when the previous reminder opened.
  */
 fun shouldNudge(
     now: Long,
     settings: NudgeSettings,
     lastReviewAt: Long?,
     lastNudgeAt: Long?,
-    ignoredStreak: Int,
     hasDue: Boolean,
     tz: TimeZone = TimeZone.getDefault(),
 ): Boolean {
@@ -70,31 +61,31 @@ fun shouldNudge(
 
     val sinceReview = lastReviewAt?.let { now - it }
     val sinceNudge = lastNudgeAt?.let { now - it }
+    val interval = settings.intervalHours.coerceAtLeast(1) * HOUR_MS
 
     return when (settings.mode) {
         NudgeMode.ADAPTIVE -> {
-            // Already studied today → the habit worked, don't spend a nudge on it.
-            if (lastReviewAt != null && sameLocalDay(lastReviewAt, now, tz)) return false
-            val gapHours = if (ignoredStreak >= IGNORED_BACKOFF_AFTER) BACKOFF_GAP_HOURS else ADAPTIVE_GAP_HOURS
-            (sinceReview == null || sinceReview >= gapHours * HOUR_MS) &&
-                (sinceNudge == null || sinceNudge >= gapHours * HOUR_MS)
-        }
-        NudgeMode.INTERVAL -> {
-            val gap = settings.intervalHours.coerceAtLeast(1) * HOUR_MS
+            // Studied today with cards still owed: the habit happened, but the work didn't finish.
+            val gap = if (lastReviewAt != null && sameLocalDay(lastReviewAt, now, tz)) interval else ADAPTIVE_GAP_HOURS * HOUR_MS
             (sinceReview == null || sinceReview >= gap) && (sinceNudge == null || sinceNudge >= gap)
         }
+        NudgeMode.INTERVAL ->
+            (sinceReview == null || sinceReview >= interval) && (sinceNudge == null || sinceNudge >= interval)
     }
 }
 
 /**
- * Whether the nudge posted at [lastNudgeAt] went unanswered, folded into the running streak.
- * Computed when the *next* nudge is about to post, so no dismiss intent is needed: if there
- * is no review newer than the previous nudge, it was ignored. Any review resets the streak.
+ * Should an already-open reminder that isn't on screen be posted again? [dismissedAt] is when
+ * the user swiped it away, or null if it was only hidden (the app came to the foreground).
  */
-fun nextIgnoredStreak(streak: Int, lastNudgeAt: Long?, lastReviewAt: Long?): Int = when {
-    lastNudgeAt == null -> 0
-    lastReviewAt != null && lastReviewAt >= lastNudgeAt -> 0
-    else -> streak + 1
+fun shouldReshow(
+    now: Long,
+    settings: NudgeSettings,
+    dismissedAt: Long?,
+    tz: TimeZone = TimeZone.getDefault(),
+): Boolean {
+    if (!settings.enabled || !inWindow(now, settings, tz)) return false
+    return dismissedAt == null || now - dismissedAt >= settings.intervalHours.coerceAtLeast(1) * HOUR_MS
 }
 
 internal fun inWindow(now: Long, settings: NudgeSettings, tz: TimeZone): Boolean {
@@ -115,7 +106,7 @@ data class NudgeGraded(val front: String, val answer: String, val knew: Boolean)
 
 /**
  * A notification session: the card on screen, the one just graded, and how many were done.
- * `card == null` means the session is over (nothing left due, or [NUDGE_SESSION_MAX] reached).
+ * `card == null` means the session is over: nothing is owed any more.
  */
 data class NudgeSession(
     val card: WidgetCardInfo?,
@@ -124,18 +115,17 @@ data class NudgeSession(
 )
 
 /** Picks the opening card of a session. Reuses the widget's picker so the notification and
- * the widget draw from the same pool by the same rule. */
+ * the widget draw from the same pool by the same rule, minus "ahead" top-ups nobody is owed. */
 fun startNudgeSession(
     deck: List<DeckEntry>,
     summarize: (StudyItem) -> WidgetCardInfo?,
     random: Random = Random.Default,
 ): NudgeSession =
-    NudgeSession(selectWidgetCard(deck, random = random)?.let { summarize(it.item) })
+    NudgeSession(selectWidgetCard(deck.filter { it.bucket != DeckBucket.AHEAD }, random = random)?.let { summarize(it.item) })
 
 /**
  * Advances [prev] after the card on screen was graded with [rating]. The graded card is kept
- * off the next draw, and the session ends at [NUDGE_SESSION_MAX] or when the deck has
- * nothing left. The caller has already written the FSRS grade and rebuilt [deck] afterwards,
+ * off the next draw, and the session ends when the deck has nothing owed left. The caller has already written the FSRS grade and rebuilt [deck] afterwards,
  * so a card that just became due again in ten minutes won't be redealt.
  */
 fun nextNudgeSession(
@@ -148,7 +138,6 @@ fun nextNudgeSession(
     val done = prev.card ?: return prev
     val graded = prev.graded + 1
     val previous = NudgeGraded(done.front, done.answer, knew = rating != Rating.AGAIN)
-    if (graded >= NUDGE_SESSION_MAX) return NudgeSession(null, previous, graded)
     // Only cards that actually need a look: a notification that dealt "ahead" cards would
     // pad the session with reviews nobody was owed.
     val live = deck.filter { it.bucket != DeckBucket.AHEAD }

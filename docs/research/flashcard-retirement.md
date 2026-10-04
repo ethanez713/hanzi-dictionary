@@ -95,14 +95,15 @@ stays the user's swipe. Self-reported "I know it" from new-word triage never cou
 
 - Yancey & Settles 2020 (KDD) — Duolingo sends ~23.5 h after the last session (about the habitual
   hour), and templates lose effect when repeated (novelty effect). Gains are real but small
-  (+0.5% DAU, +2% new-user retention). Hence adaptive mode: ~23 h after the last review, at most one
-  a day, skipped if you already studied today, titles rotated daily.
+  (+0.5% DAU, +2% new-user retention). Hence adaptive mode opens a reminder ~23 h after the last
+  review, and titles rotate daily.
 - Wohllebe et al. 2021 — more frequent notifications meant more uninstalls and fewer opens (retail
-  app, not learning). Hence the back-off after 4 ignored nudges in a row (to every 48 h) — a
-  heuristic, no study gives the number.
+  app, not learning). The app's user chose persistence over this caution: an open reminder stays
+  until nothing is owed and returns one interval (default 4 h) after a swipe-away, with no
+  back-off for ignored nudges.
 - Dingler et al. 2017 (QuickLearn, MobileHCI) — answering vocabulary inside the notification added
   many short sessions; Cai et al. 2015 (Wait-Learning, CHI) — ~57 new words in 2 weeks (n = 20).
-  Hence a grade-in-the-notification micro-session capped at 5 cards.
+  Hence grading inside the notification, so a few cards cost no app launch.
 - Evidence quality: large effects come from proprietary A/B tests with small deltas; HCI studies are
   small and short. Nothing sets an optimal frequency for a single learner.
 

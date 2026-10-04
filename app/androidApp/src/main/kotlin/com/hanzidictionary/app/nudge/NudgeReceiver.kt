@@ -17,7 +17,8 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * Handles a ✗ / ✓ tap on the study notification: writes the FSRS grade (origin
- * `notification`), deals the next card with the pure [nextNudgeSession], and re-posts.
+ * `notification`), deals the next card with the pure [nextNudgeSession], and re-posts. Also
+ * notes a swipe-away so the worker knows when to bring the reminder back.
  *
  * Same shape as the widget's grade path — `goAsync()` plus IO, since the content pack is
  * already unpacked and a cold process only has to open SQLite. Not exported: the only sender
@@ -26,7 +27,31 @@ import kotlinx.coroutines.sync.withLock
 class NudgeReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != NudgeNotifier.ACTION_GRADE) return
+        when (intent.action) {
+            NudgeNotifier.ACTION_GRADE -> onGrade(context, intent)
+            NudgeNotifier.ACTION_DISMISS -> onDismiss(context)
+        }
+    }
+
+    private fun onDismiss(context: Context) {
+        val pending = goAsync()
+        val appContext = context.applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                lock.withLock {
+                    val store = NudgeStore(appContext)
+                    if (store.open) {
+                        store.dismissedAt = System.currentTimeMillis()
+                        store.clearSession()
+                    }
+                }
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    private fun onGrade(context: Context, intent: Intent) {
         val rating = intent.getStringExtra(NudgeNotifier.EXTRA_RATING)
             ?.let { runCatching { Rating.valueOf(it) }.getOrNull() }
             ?: return
@@ -54,6 +79,8 @@ class NudgeReceiver : BroadcastReceiver() {
 
         app.studyRepository.grade(card.item, rating, StudyRepository.ORIGIN_NOTIFICATION)
         val next = nextNudgeSession(session, rating, nudgeDeck(app), { cardInfo(app, it) })
+        // Nothing owed any more: the reminder is finished, not merely between cards.
+        if (next.card == null) store.closeReminder()
         store.saveSession(next)
         PracticeWidgetUpdater.refresh(context)
         NudgeNotifier.post(context, store.title, next, quiet = true)

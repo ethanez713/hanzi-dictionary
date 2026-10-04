@@ -44,6 +44,10 @@ class HanziApp : Application() {
      * pins, and for the same reason: a cold start already has nothing to restore. */
     var lastActiveAt: Long? = null
 
+    /** True while an activity of the app is started; the reminder hides itself while it is. */
+    @Volatile
+    var inForeground: Boolean = false
+
     val tts: MandarinTts by lazy { MandarinTts(this) }
 
     /** User-facing preferences (theme, swipe-hint visibility). Observable Compose state. */

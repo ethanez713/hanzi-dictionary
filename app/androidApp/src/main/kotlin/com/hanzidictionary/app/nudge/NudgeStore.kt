@@ -11,8 +11,8 @@ import com.hanzidictionary.core.WidgetCardInfo
 
 /**
  * What the reminder remembers between its hourly job and the taps on the notification: when it
- * last fired, how many in a row went unanswered, and the in-notification session (the card on
- * screen and the one just graded).
+ * last opened, whether it is still open (cards owed), when the user last swiped it away, and the
+ * in-notification session (the card on screen and the one just graded).
  *
  * SharedPreferences rather than user.db, same as the widget: this is throwaway UI state that
  * must survive the process being killed between two taps, not study history. The history
@@ -28,9 +28,27 @@ internal class NudgeStore(context: Context) {
             prefs.edit().apply { if (value == null) remove(KEY_LAST_NUDGE) else putLong(KEY_LAST_NUDGE, value) }.apply()
         }
 
-    var ignoredStreak: Int
-        get() = prefs.getInt(KEY_IGNORED, 0)
-        set(value) = prefs.edit().putInt(KEY_IGNORED, value).apply()
+    /** True from the moment a reminder first posts until nothing is owed. */
+    var open: Boolean
+        get() = prefs.getBoolean(KEY_OPEN, false)
+        set(value) = prefs.edit().putBoolean(KEY_OPEN, value).apply()
+
+    var dismissedAt: Long?
+        get() = prefs.getLong(KEY_DISMISSED, -1L).takeIf { it >= 0 }
+        set(value) {
+            prefs.edit().apply { if (value == null) remove(KEY_DISMISSED) else putLong(KEY_DISMISSED, value) }.apply()
+        }
+
+    fun openReminder(now: Long) {
+        prefs.edit().putBoolean(KEY_OPEN, true).putLong(KEY_LAST_NUDGE, now).remove(KEY_DISMISSED).commit()
+    }
+
+    /** Nothing is owed: forget the reminder and its session. */
+    fun closeReminder() {
+        val editor = prefs.edit().putBoolean(KEY_OPEN, false).remove(KEY_DISMISSED)
+        for (key in CARD_KEYS + PREV_KEYS + KEY_GRADED) editor.remove(key)
+        editor.commit()
+    }
 
     /** The headline chosen when the session opened, kept so re-posts after a grade don't
      * re-roll the wording under the user's thumb. */
@@ -93,7 +111,8 @@ internal class NudgeStore(context: Context) {
     private companion object {
         const val PREFS = "nudge"
         const val KEY_LAST_NUDGE = "last_nudge_at"
-        const val KEY_IGNORED = "ignored_streak"
+        const val KEY_OPEN = "open"
+        const val KEY_DISMISSED = "dismissed_at"
         const val KEY_TITLE = "title"
         const val KEY_ITEM = "item"
         const val KEY_KIND = "kind"

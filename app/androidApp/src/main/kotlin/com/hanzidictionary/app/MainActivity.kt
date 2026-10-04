@@ -15,6 +15,9 @@ import com.hanzidictionary.app.ui.isDark
 import com.hanzidictionary.app.widget.PracticeWidgetProvider
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.isStaleSession
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     // Text arriving via the SEND share target; consumed (nulled) once routed.
@@ -86,7 +89,8 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         val app = application as HanziApp
-        NudgeScheduler.dismissForOpenApp(this)
+        app.inForeground = true
+        NudgeScheduler.hideForOpenApp(this)
         val arriving = sharedText.value != null || widgetItem.value != null
         if (!arriving && isStaleSession(app.lastActiveAt, System.currentTimeMillis())) {
             staleSessionKey.intValue++
@@ -95,7 +99,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        (application as HanziApp).lastActiveAt = System.currentTimeMillis()
+        val app = application as HanziApp
+        app.lastActiveAt = System.currentTimeMillis()
+        app.inForeground = false
+        // A rotation stops and restarts the activity; that isn't leaving the app.
+        if (!isChangingConfigurations) {
+            CoroutineScope(Dispatchers.IO).launch { NudgeScheduler.reshowOnLeave(app) }
+        }
     }
 
     private fun extractSharedText(intent: Intent?): String? =

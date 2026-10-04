@@ -145,8 +145,10 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   grade gutters (Again/Good, no Hard/Easy) either side of the card, graded in place by
   `NudgeReceiver` (`origin = 'notification'`); tapping the card opens it through the *widget's*
   intent extras (`EXTRA_PRACTICE_ITEM`/`_KIND`), so `MainActivity`/`AppRoot` need no routing of
-  their own. It must be a direct activity PendingIntent — Android 12+ blocks trampolines. Whether
-  to post is the pure `shouldNudge` (`Nudge.kt`); the hourly `NudgeWorker` only gathers inputs. A
+  their own. It must be a direct activity PendingIntent — Android 12+ blocks trampolines. A reminder
+  is *open* until nothing is owed (deck minus ahead): `shouldNudge` opens it, `shouldReshow` brings an
+  open one back after a swipe-away (interval, default 4 h, both modes) and `MainActivity` hides it
+  only while the app is foregrounded; the hourly `NudgeWorker` only gathers inputs. A
   notification layout is `RemoteViews`, so the widget's whitelist-of-view-classes rule applies.
   **It wears the app's design language, not the widget's:** amber/jade gutters, a paper0 card,
   colours from `res/values{,-night}/nudge.xml` (a copy of the `Theme.kt` tokens — change both

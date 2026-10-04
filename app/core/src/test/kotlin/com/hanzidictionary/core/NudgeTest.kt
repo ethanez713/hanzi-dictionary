@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -29,9 +30,11 @@ class NudgeTest {
         settings: NudgeSettings = adaptive,
         lastReview: Long? = null,
         lastNudge: Long? = null,
-        ignored: Int = 0,
         hasDue: Boolean = true,
-    ) = shouldNudge(now, settings, lastReview, lastNudge, ignored, hasDue, utc)
+    ) = shouldNudge(now, settings, lastReview, lastNudge, hasDue, utc)
+
+    private fun reshow(now: Long, dismissedAt: Long? = null, settings: NudgeSettings = adaptive) =
+        shouldReshow(now, settings, dismissedAt, utc)
 
     @Test
     fun disabledOrNothingDueNeverNudges() {
@@ -63,24 +66,17 @@ class NudgeTest {
     }
 
     @Test
-    fun adaptiveSkipsADayYouAlreadyStudied() {
-        // Studied this morning; the 23h gap is long past from yesterday's session, but the
-        // habit already happened today so a nudge would be noise.
-        assertFalse(should(at(1, 14), lastReview = at(1, 9)))
+    fun aPartialDayReopensOneIntervalAfterTheLastReview() {
+        val reviewed = at(1, 9)
+        assertFalse(should(at(1, 12), lastReview = reviewed), "3h later is too soon")
+        assertTrue(should(at(1, 13), lastReview = reviewed), "the default 4h interval has passed")
+        assertFalse(should(at(1, 14), lastReview = reviewed, lastNudge = at(1, 12)), "a nudge 2h ago still counts")
     }
 
     @Test
     fun adaptiveSendsAtMostOnePerDay() {
         assertFalse(should(at(0, 15), lastNudge = at(0, 10)))
         assertTrue(should(at(1, 10), lastNudge = at(0, 10)))
-    }
-
-    @Test
-    fun adaptiveBacksOffAfterFourIgnoredNudges() {
-        val last = at(0, 10)
-        assertTrue(should(at(1, 10), lastNudge = last, ignored = 3))
-        assertFalse(should(at(1, 10), lastNudge = last, ignored = 4), "backed off to every 2 days")
-        assertTrue(should(at(2, 10), lastNudge = last, ignored = 4))
     }
 
     @Test
@@ -103,11 +99,17 @@ class NudgeTest {
     }
 
     @Test
-    fun ignoredStreakGrowsUntilAReviewResetsIt() {
-        assertEquals(0, nextIgnoredStreak(5, lastNudgeAt = null, lastReviewAt = at(0, 9)))
-        assertEquals(3, nextIgnoredStreak(2, lastNudgeAt = at(0, 9), lastReviewAt = at(0, 8)))
-        assertEquals(1, nextIgnoredStreak(0, lastNudgeAt = at(0, 9), lastReviewAt = null))
-        assertEquals(0, nextIgnoredStreak(7, lastNudgeAt = at(0, 9), lastReviewAt = at(0, 10)))
+    fun anOpenReminderReturnsOnceTheIntervalSinceASwipePasses() {
+        assertTrue(reshow(at(0, 12)), "only hidden for the open app, never dismissed")
+        assertFalse(reshow(at(0, 12), dismissedAt = at(0, 10)), "2h after a swipe, 4h interval")
+        assertTrue(reshow(at(0, 14), dismissedAt = at(0, 10)))
+        assertTrue(reshow(at(0, 12), dismissedAt = at(0, 8), settings = every2h))
+    }
+
+    @Test
+    fun anOpenReminderStaysQuietOutsideTheWindowOrWhenDisabled() {
+        assertFalse(reshow(at(0, 22)))
+        assertFalse(reshow(at(0, 12), settings = adaptive.copy(enabled = false)))
     }
 
     // ---- the in-notification session ----
@@ -161,12 +163,12 @@ class NudgeTest {
     }
 
     @Test
-    fun theSessionStopsAfterTheCap() {
+    fun theSessionRunsUntilNothingIsOwed() {
         var s = NudgeSession(WidgetCardInfo(StudyItem.character("c0"), "F:c0", "A:c0"))
         val deck = (1..20).map { dueEntry("c$it") }
-        repeat(NUDGE_SESSION_MAX) { s = nextNudgeSession(s, Rating.GOOD, deck, summarize, Random(it)) }
-        assertNull(s.card)
-        assertEquals(NUDGE_SESSION_MAX, s.graded)
+        repeat(10) { s = nextNudgeSession(s, Rating.GOOD, deck, summarize, Random(it)) }
+        assertEquals(10, s.graded)
+        assertNotNull(s.card)
     }
 
     @Test
