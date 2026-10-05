@@ -94,6 +94,10 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   `SwipeToDismissBox`) — **do not "fix" this by bumping the compose BOM**. `SwipeCard` is a
   2D drag (horizontal = graded verbs, vertical-up = skip); every swipe also exposes a
   TalkBack `CustomAccessibilityAction`.
+- **The list-detail screen (`ListDetailScreen`) has no swipes at all** — it was too easy to
+  fire one by accident while scrolling. Changes go through an explicit edit mode (three-dots →
+  Edit): a checkbox per row and a bottom bar with bulk Archive / Remove, each with an Undo
+  snackbar. Don't bring `SwipeRow` back there.
 - **Grading is swipe-only, and only two grades.** Left/right/up on the practice card are the
   *whole* grading interface — no grade buttons beside them, and **no Hard/Easy anywhere**
   (`Fsrs.kt` still implements all four ratings; the UI only ever emits `AGAIN` and `GOOD`).
