@@ -34,7 +34,10 @@ import com.hanzidictionary.core.StudyItem
  * timestamp — and gives the user the usual long-press → mute controls.
  */
 internal object NudgeNotifier {
-    const val CHANNEL_ID = "study_reminders"
+    // Channel importance/vibration are frozen once a channel exists, so silencing the reminder
+    // needed a new id; the old one (IMPORTANCE_DEFAULT, buzzed on every hourly post) is deleted.
+    const val CHANNEL_ID = "study_reminders_silent"
+    private const val LEGACY_CHANNEL_ID = "study_reminders"
     const val ACTION_GRADE = "com.hanzidictionary.app.nudge.GRADE"
     const val EXTRA_RATING = "rating"
 
@@ -50,8 +53,14 @@ internal object NudgeNotifier {
 
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel(CHANNEL_ID, "Study reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
+        manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
+        // LOW = shown in the shade with no sound, vibration or heads-up popup; the explicit
+        // flags keep it silent even if a device's defaults for a new channel differ.
+        val channel = NotificationChannel(CHANNEL_ID, "Study reminders", NotificationManager.IMPORTANCE_LOW).apply {
             description = "A flashcard you can grade straight from the notification."
+            enableVibration(false)
+            setSound(null, null)
+            setShowBadge(false)
         }
         manager.createNotificationChannel(channel)
     }
@@ -61,11 +70,11 @@ internal object NudgeNotifier {
     fun cancel(context: Context) = NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
 
     /**
-     * Posts (or replaces) the reminder for [session]. [quiet] suppresses the sound and
-     * vibration on a re-post after a grade — the user is already looking at it.
+     * Posts (or replaces) the reminder for [session]. The channel is silent, so a re-post never
+     * alerts.
      */
     @SuppressLint("MissingPermission") // guarded by canPost(); the permission itself is requested from Settings
-    fun post(context: Context, title: String, session: NudgeSession, quiet: Boolean) {
+    fun post(context: Context, title: String, session: NudgeSession) {
         if (!canPost(context)) return
         ensureChannel(context)
         val card = session.card
@@ -74,7 +83,6 @@ internal object NudgeNotifier {
             // The app's accent on the shade header (icon and app name), as on its own chrome.
             .setColor(ContextCompat.getColor(context, R.color.nudge_accent))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setOnlyAlertOnce(quiet)
             .setAutoCancel(false)
 
         if (card == null) {
@@ -188,9 +196,10 @@ internal object NudgeNotifier {
 
     /**
      * Opens the app on [item] through the widget's own hand-off — same extras, same
-     * `MainActivity` path — so the card is pinned and the lookup sheet opens over it with no new
-     * routing. A direct activity PendingIntent, never a trampoline: Android 12+ blocks starting
-     * an activity from a notification-tap receiver or service.
+     * `MainActivity` path — so the card is pinned and shown revealed; `EXTRA_PRACTICE_SHEET =
+     * false` keeps the lookup sheet from opening over it. A direct activity PendingIntent, never
+     * a trampoline: Android 12+ blocks starting an activity from a notification-tap receiver or
+     * service.
      */
     private fun openIntent(context: Context, item: StudyItem?): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -199,6 +208,8 @@ internal object NudgeNotifier {
             if (item != null) {
                 putExtra(PracticeWidgetProvider.EXTRA_PRACTICE_ITEM, item.itemId)
                 putExtra(PracticeWidgetProvider.EXTRA_PRACTICE_KIND, item.kind)
+                // The card's brief answer is what a reminder tap is for, not the full page.
+                putExtra(PracticeWidgetProvider.EXTRA_PRACTICE_SHEET, false)
             }
             data = Uri.parse("hanzi://nudge/open/${item?.itemId.orEmpty()}")
         }

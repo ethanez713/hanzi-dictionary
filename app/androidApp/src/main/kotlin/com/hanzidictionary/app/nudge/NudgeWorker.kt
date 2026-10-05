@@ -55,7 +55,7 @@ class NudgeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         store.saveSession(session)
         store.lastNudgeAt = now
         store.ignoredStreak = ignored
-        NudgeNotifier.post(applicationContext, title, session, quiet = false)
+        NudgeNotifier.post(applicationContext, title, session)
         return Result.success()
     }
 }

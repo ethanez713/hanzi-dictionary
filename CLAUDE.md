@@ -144,8 +144,10 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
 - **The study-reminder notification is the widget, enlarged — same verbs, same hand-off.** Two
   grade gutters (Again/Good, no Hard/Easy) either side of the card, graded in place by
   `NudgeReceiver` (`origin = 'notification'`); tapping the card opens it through the *widget's*
-  intent extras (`EXTRA_PRACTICE_ITEM`/`_KIND`), so `MainActivity`/`AppRoot` need no routing of
-  their own. It must be a direct activity PendingIntent — Android 12+ blocks trampolines. Whether
+  intent extras (`EXTRA_PRACTICE_ITEM`/`_KIND`), plus `EXTRA_PRACTICE_SHEET = false` so it lands on
+  the revealed flashcard alone rather than the widget's lookup sheet over it. The channel is
+  `IMPORTANCE_LOW` with vibration/sound off (channel settings are frozen once created — change
+  the id to change them). It must be a direct activity PendingIntent — Android 12+ blocks trampolines. Whether
   to post is the pure `shouldNudge` (`Nudge.kt`); the hourly `NudgeWorker` only gathers inputs. A
   notification layout is `RemoteViews`, so the widget's whitelist-of-view-classes rule applies.
   **It wears the app's design language, not the widget's:** amber/jade gutters, a paper0 card,

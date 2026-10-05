@@ -56,7 +56,7 @@ class NudgeReceiver : BroadcastReceiver() {
         val next = nextNudgeSession(session, rating, nudgeDeck(app), { cardInfo(app, it) })
         store.saveSession(next)
         PracticeWidgetUpdater.refresh(context)
-        NudgeNotifier.post(context, store.title, next, quiet = true)
+        NudgeNotifier.post(context, store.title, next)
     }
 
     private companion object {
