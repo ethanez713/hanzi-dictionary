@@ -30,11 +30,11 @@ const val AUDIT_SAMPLE_LIMIT = 5
  * judgement call, like the other retirement numbers. */
 const val AUDIT_MIN_GAP_DAYS = 30.0
 
-/** Assumed recall when the archive has no grading to rebuild a memory from. Below a
- * half, because the documented failure is overclaiming knowledge when there's no
- * evidence — high enough that these items don't crowd out everything else. The sample
- * weight is one minus recall. */
-const val AUDIT_NO_HISTORY_RETRIEVABILITY = 0.25
+/** Assumed recall when the archive has no grading to rebuild a memory from (a bulk import,
+ * a word archived on sight). An untested "I know it" is wrong about 4-25% of the time on
+ * Yes/No vocabulary tests; this takes the pessimistic end. Lower would let a large import
+ * crowd every tested word out of the sample. The sample weight is one minus recall. */
+const val AUDIT_NO_HISTORY_RETRIEVABILITY = 0.75
 
 enum class FinalCheckKind {
     /** Active card the sitting may archive. */

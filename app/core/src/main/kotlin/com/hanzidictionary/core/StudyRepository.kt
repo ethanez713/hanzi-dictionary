@@ -561,7 +561,7 @@ class StudyRepository(
     }
 
     /** No review to rebuild from means there is no review-phase memory to restore, so a
-     * miss starts the item as a new card. The 0.25 prior is only a sampling weight. */
+     * miss starts the item as a new card. [AUDIT_NO_HISTORY_RETRIEVABILITY] is only a sampling weight. */
     private fun auditBaseCard(item: StudyItem, now: Long): CardState {
         val newest = q.newestReviewFor(item.itemId).executeAsOneOrNull()
         val rows = reviewHistory(listOf(item.itemId))[item.itemId].orEmpty()

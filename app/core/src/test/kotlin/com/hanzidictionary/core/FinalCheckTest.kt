@@ -98,7 +98,7 @@ class FinalCheckTest {
 
     @Test
     fun auditWeightIsOneMinusRecallAndAMissIsThePrior() {
-        assertEquals(0.75, auditWeight(AUDIT_NO_HISTORY_RETRIEVABILITY))
+        assertEquals(0.25, auditWeight(AUDIT_NO_HISTORY_RETRIEVABILITY))
         assertEquals(1.0, auditWeight(0.0))
         assertEquals(0.0, auditWeight(1.0))
         assertEquals(0.0, auditWeight(1.5), "a recall above 1 must not produce a negative weight")

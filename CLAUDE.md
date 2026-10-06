@@ -18,7 +18,7 @@ Authoritative spec: `docs/hanzi-dictionary-spec-v1.md`. Data provenance/licensin
 - **`app/`** — Gradle, two modules:
   - **`:core`** — **pure Kotlin, no Android deps, JVM-unit-tested.** Repositories
     (`HanziRepository` over the content pack, `StudyRepository`/`UserRepository` over user
-    state), `Fsrs.kt` (hand-written FSRS-6), and **pure state machines / rules** (`WidgetState.kt`,
+    state), `Fsrs.kt` (hand-written FSRS-6), and **pure state machines / rules** (`WidgetState.kt`, `FinalCheck.kt`,
     `PracticeState.kt`, `PhotoScan.kt`, `Nudge.kt`, `Mastery.kt`, `DeckHealth.kt`). **Put logic here, not in the UI/provider**, so it can
     be tested without a device. SQLDelight schemas live under `src/main/sqldelight/`.
   - **`:androidApp`** — Jetpack Compose UI (`ui/`), the home-screen widget (`widget/`), the reminder notification (`nudge/`), and
@@ -168,6 +168,12 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   *suggests* (tags, a filter, an evidence line); archiving stays the user's swipe. Rows with
   `origin = 'triage'` are self-reports, not retrievals: mastery and the recent-accuracy gate both
   exclude them.
+- **Retirement goes through the final check, and the test is the long-gap proof.** `FinalCheck.kt`
+  gates a candidate until a pass would itself be evidence — never a same-day retest — and a
+  sitting also spot-checks the archive, weighted by predicted forgetting. Archiving deletes
+  `card_state`, so an archived word's memory is rebuilt from its newest `review_log` row; keep
+  that row's post-review stability trustworthy. Origins `final` and `audit` are real retrievals
+  and count toward mastery. Constants are anchored in `docs/research/flashcard-retirement.md` §F.
 - **New words are suggested only through the thin-deck rule** (`newWordGap` in `DeckHealth.kt`),
   and only from the Study deck strip. Don't add a second entry point that bypasses it — the user
   asked for suggestions to be metric-gated. Triage "know" files a word with an Easy first rating
