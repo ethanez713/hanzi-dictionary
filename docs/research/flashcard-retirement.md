@@ -117,3 +117,41 @@ stays the user's swipe. Self-reported "I know it" from new-word triage never cou
 - Hence triage: **know** files the word with an Easy first rating (initial stability ≈ 8 days) so a
   real recall check arrives in about a week; it is never archived on the claim alone. Not
   implemented: seeding fake words to estimate the user's false-alarm rate (Meara-style).
+
+## F. The final check, and auditing the archive
+
+**What other tools do.**
+- WaniKani retires ("burns") an item only by passing one last review four months after the
+  previous one — the final test *is* the long-gap review, never an extra same-day one. A miss
+  there drops the item back two stages. Burned items can be resurrected, and a widely used
+  community script quizzes random burned items and offers to resurrect the misses.
+- Anki has no retirement; the Card Retirement add-on suspends cards past an interval threshold
+  with no test. SuperMemo never retires — intervals simply grow to years.
+- Leitner boxes retire a card after the last box; the usual advice is to re-test the retired
+  box occasionally. Skritter and Pleco offer only a manual "learned" mark.
+
+**What the literature supports.**
+- A retest on the day a card qualifies is the weakest evidence available (Karpicke & Roediger
+  2008; the same reason same-day repeats don't extend the streak in A). The test has to follow
+  a gap to mean anything, so it is placed where the 60-day proof was already required.
+- Tabibian et al. 2019 (*PNAS* 116:3988, "MEMORIZE") — with a forgetting-curve memory model, the
+  optimal review intensity is proportional to the probability of forgetting,
+  u(t) = q^(-1/2)·(1 − m(t)), sampled stochastically; on Duolingo data learners whose reviews
+  tracked it forgot less than under uniform or threshold schedules **[secondary]**. That is one
+  quantity doing both jobs wanted of an archive audit: recall probability falls with time since
+  the last test, and falls faster for items with lapses (lower stability).
+- Yes/No vocabulary tests (E) put the false-alarm rate of an untested "I know it" at ~4–25%.
+
+**What the app does with it** (`FinalCheck.kt`):
+
+| Rule | Value | Anchor |
+|---|---|---|
+| candidate | streak ≥ 3 and stability ≥ 180 d | A's ready-to-archive rule minus its gap clause |
+| final check unlocks | 60 d after the last review (or the next day, if the streak already holds a 60 d gap) | the test supplies A's 60 d proof instead of waiting for the ~180 d scheduled review; WaniKani's burn review |
+| candidate order | lowest predicted recall first, at most 15 | FSRS / MEMORIZE |
+| archive sample | 5 per session, drawn with probability ∝ 1 − predicted recall | MEMORIZE |
+| archive eligibility | untested for ≥ 30 d | Bahrick's 30-day gap; a **judgement call** |
+| never-tested archive items | 25% miss prior | top of the Yes/No false-alarm range |
+| a miss | candidate: an ordinary lapse; archived: back into study with a lapse | WaniKani resurrect |
+
+The session sizes (15 and 5) are **judgement calls**; no study sets them.
