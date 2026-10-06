@@ -45,14 +45,14 @@ class NudgeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         }
         if (store.open) {
             if (app.inForeground || NudgeNotifier.isShowing(applicationContext)) return Result.success()
-            if (shouldReshow(now, settings, store.dismissedAt)) NudgeScheduler.postFresh(app, deck, owed, quiet = false)
+            if (shouldReshow(now, settings, store.dismissedAt)) NudgeScheduler.postFresh(app, deck, owed)
             return Result.success()
         }
 
         if (!shouldNudge(now, settings, app.studyRepository.lastReviewAt(), store.lastNudgeAt, hasDue = true)) {
             return Result.success()
         }
-        if (NudgeScheduler.postFresh(app, deck, owed, quiet = false)) store.openReminder(now)
+        if (NudgeScheduler.postFresh(app, deck, owed)) store.openReminder(now)
         return Result.success()
     }
 }
@@ -81,7 +81,7 @@ object NudgeScheduler {
     }
 
     /** Deals a fresh session from [deck] and posts it. False if nothing could be posted. */
-    internal fun postFresh(app: HanziApp, deck: List<DeckEntry>, owed: Int, quiet: Boolean): Boolean {
+    internal fun postFresh(app: HanziApp, deck: List<DeckEntry>, owed: Int): Boolean {
         val session = startNudgeSession(deck, { cardInfo(app, it) })
         if (session.card == null) return false
         val store = NudgeStore(app)
@@ -90,7 +90,7 @@ object NudgeScheduler {
         val title = nudgeTitle(dayIndex, owed)
         store.title = title
         store.saveSession(session)
-        NudgeNotifier.post(app, title, session, quiet)
+        NudgeNotifier.post(app, title, session)
         return true
     }
 
@@ -112,7 +112,7 @@ object NudgeScheduler {
         when {
             owed == 0 -> close(app)
             app.inForeground -> Unit
-            shouldReshow(System.currentTimeMillis(), settings, store.dismissedAt) -> postFresh(app, deck, owed, quiet = true)
+            shouldReshow(System.currentTimeMillis(), settings, store.dismissedAt) -> postFresh(app, deck, owed)
         }
     }
 

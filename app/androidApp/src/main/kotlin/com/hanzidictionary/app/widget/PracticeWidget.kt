@@ -232,6 +232,11 @@ class PracticeWidgetProvider : AppWidgetProvider() {
          * pinned card, so the study surfaces resume on the card you tapped. */
         const val EXTRA_PRACTICE_ITEM = "practice_item"
         const val EXTRA_PRACTICE_KIND = "practice_kind"
+
+        /** Whether the hand-off also opens the item's lookup sheet over the card. Absent means
+         * yes (the widget); the reminder notification sends false and lands on the revealed
+         * flashcard alone. */
+        const val EXTRA_PRACTICE_SHEET = "practice_sheet"
     }
 }
 

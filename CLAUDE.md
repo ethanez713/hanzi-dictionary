@@ -94,6 +94,10 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   `SwipeToDismissBox`) — **do not "fix" this by bumping the compose BOM**. `SwipeCard` is a
   2D drag (horizontal = graded verbs, vertical-up = skip); every swipe also exposes a
   TalkBack `CustomAccessibilityAction`.
+- **The list-detail screen (`ListDetailScreen`) has no swipes at all** — it was too easy to
+  fire one by accident while scrolling. Changes go through an explicit edit mode (three-dots →
+  Edit): a checkbox per row and a bottom bar with bulk Archive / Remove, each with an Undo
+  snackbar. Don't bring `SwipeRow` back there.
 - **Grading is swipe-only, and only two grades.** Left/right/up on the practice card are the
   *whole* grading interface — no grade buttons beside them, and **no Hard/Easy anywhere**
   (`Fsrs.kt` still implements all four ratings; the UI only ever emits `AGAIN` and `GOOD`).
@@ -144,8 +148,10 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
 - **The study-reminder notification is the widget, enlarged — same verbs, same hand-off.** Two
   grade gutters (Again/Good, no Hard/Easy) either side of the card, graded in place by
   `NudgeReceiver` (`origin = 'notification'`); tapping the card opens it through the *widget's*
-  intent extras (`EXTRA_PRACTICE_ITEM`/`_KIND`), so `MainActivity`/`AppRoot` need no routing of
-  their own. It must be a direct activity PendingIntent — Android 12+ blocks trampolines. A reminder
+  intent extras (`EXTRA_PRACTICE_ITEM`/`_KIND`), plus `EXTRA_PRACTICE_SHEET = false` so it lands on
+  the revealed flashcard alone rather than the widget's lookup sheet over it. The channel is
+  `IMPORTANCE_LOW` with vibration/sound off (channel settings are frozen once created — change
+  the id to change them). It must be a direct activity PendingIntent — Android 12+ blocks trampolines. A reminder
   is *open* until nothing is owed (deck minus ahead): `shouldNudge` opens it, `shouldReshow` brings an
   open one back after a swipe-away (interval, default 4 h, both modes) and `MainActivity` hides it
   only while the app is foregrounded; the hourly `NudgeWorker` only gathers inputs. A

@@ -101,6 +101,7 @@ fun AppRoot(
     onSharedTextConsumed: () -> Unit = {},
     widgetItem: StudyItem? = null,
     onWidgetItemConsumed: () -> Unit = {},
+    widgetOpensSheet: Boolean = true,
     staleSessionKey: Int = 0,
 ) {
     val context = LocalContext.current
@@ -165,7 +166,8 @@ fun AppRoot(
         }
     }
 
-    // Widget tap → go to Study with the tapped item pinned
+    // Widget tap → go to Study with the tapped item pinned (and, unless the hand-off says
+    // otherwise, its page open over it)
     LaunchedEffect(widgetItem) {
         val item = widgetItem ?: return@LaunchedEffect
         val pin = CardPin(item.itemId, revealed = true)
@@ -181,13 +183,18 @@ fun AppRoot(
             text to src
         }
         studySource = loaded.second
-        // Open the character/word in a lookup sheet over Study
-        val displayText = loaded.first ?: item.itemId
-        studyLookupStack.suspendedCardText = displayText
-        studyLookupStack.push(
-            if (item.isWord) LookupEntry(wordId = item.itemId, displayText = displayText)
-            else LookupEntry(glyphId = item.itemId, displayText = displayText)
-        )
+        if (widgetOpensSheet) {
+            // Open the character/word in a lookup sheet over Study
+            val displayText = loaded.first ?: item.itemId
+            studyLookupStack.suspendedCardText = displayText
+            studyLookupStack.push(
+                if (item.isWord) LookupEntry(wordId = item.itemId, displayText = displayText)
+                else LookupEntry(glyphId = item.itemId, displayText = displayText)
+            )
+        } else {
+            // Reminder tap: the revealed card alone — clear any sheet left open over Study.
+            studyLookupStack.dismiss()
+        }
         selectedTab = Tab.STUDY
         studyResumeToken++
         onWidgetItemConsumed()

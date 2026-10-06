@@ -83,7 +83,7 @@ class NudgeReceiver : BroadcastReceiver() {
         if (next.card == null) store.closeReminder()
         store.saveSession(next)
         PracticeWidgetUpdater.refresh(context)
-        NudgeNotifier.post(context, store.title, next, quiet = true)
+        NudgeNotifier.post(context, store.title, next)
     }
 
     private companion object {

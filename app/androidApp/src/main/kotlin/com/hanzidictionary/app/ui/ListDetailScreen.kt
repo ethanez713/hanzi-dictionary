@@ -1,6 +1,6 @@
 package com.hanzidictionary.app.ui
 
-import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -84,9 +87,12 @@ private data class Loaded(
 )
 
 /**
- * One list's contents (spec §17). Swipe follows the app-wide grammar: **right archives**
- * (marks known, everywhere), **left removes** from this list only — two very different
- * things that the old single "I know this" button conflated.
+ * One list's contents (spec §17). Deliberately **no swipe gestures** here: a list is a
+ * place to browse, and a stray drag while scrolling it was too easy to mistake for a
+ * verdict. Changes happen in an explicit edit mode (three-dots menu) where each row gets a
+ * checkbox and the bar offers **Archive** (marks known, everywhere) or **Remove** (from this
+ * list only) for the whole selection — two very different things the old single "I know
+ * this" button conflated.
  *
  * Archived members stay visible at the bottom rather than vanishing: the list is a record
  * of what you studied, and seeing the pile grow is the reward.
@@ -120,6 +126,11 @@ fun ListDetailScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    // Back leaves edit mode first, rather than dropping the whole screen with a selection.
+    BackHandler(enabled = editing) { editing = false; selected = emptySet() }
 
     LaunchedEffect(listId, refresh) {
         val loaded = withContext(Dispatchers.IO) {
@@ -144,16 +155,22 @@ fun ListDetailScreen(
         addedAt = loaded.addedAt
     }
 
-    fun archive(summary: ItemSummary) {
+    /** "Archived Foo" for one, "Archived 3 items" for several. */
+    fun describe(verb: String, items: List<ItemSummary>) =
+        if (items.size == 1) "$verb ${items[0].text}" else "$verb ${items.size} items"
+
+    fun archive(items: List<ItemSummary>) {
+        if (items.isEmpty()) return
         scope.launch {
             withContext(Dispatchers.IO) {
-                app.userRepository.setKnown(summary.item.itemId, true, summary.item.kind)
+                for (i in items) app.userRepository.setKnown(i.item.itemId, true, i.item.kind)
             }
+            selected = emptySet()
             refresh++
             PracticeWidgetUpdater.refresh(context)
-            if (snackbar.snack("Archived ${summary.text}", action = "Undo")) {
+            if (snackbar.snack(describe("Archived", items), action = "Undo")) {
                 withContext(Dispatchers.IO) {
-                    app.userRepository.setKnown(summary.item.itemId, false, summary.item.kind)
+                    for (i in items) app.userRepository.setKnown(i.item.itemId, false, i.item.kind)
                 }
                 refresh++
                 PracticeWidgetUpdater.refresh(context)
@@ -161,16 +178,18 @@ fun ListDetailScreen(
         }
     }
 
-    fun remove(summary: ItemSummary) {
+    fun remove(items: List<ItemSummary>) {
+        if (items.isEmpty()) return
         scope.launch {
             withContext(Dispatchers.IO) {
-                app.studyRepository.removeFromList(listId, summary.item.itemId)
+                for (i in items) app.studyRepository.removeFromList(listId, i.item.itemId)
             }
+            selected = emptySet()
             refresh++
             PracticeWidgetUpdater.refresh(context)
-            if (snackbar.snack("Removed ${summary.text}", action = "Undo")) {
+            if (snackbar.snack(describe("Removed", items), action = "Undo")) {
                 withContext(Dispatchers.IO) {
-                    app.studyRepository.addToList(listId, summary.item)
+                    for (i in items) app.studyRepository.addToList(listId, i.item)
                 }
                 refresh++
                 PracticeWidgetUpdater.refresh(context)
@@ -195,31 +214,97 @@ fun ListDetailScreen(
         sortedLearning
     }
 
+    // Act only on rows actually on screen: a selection made before flipping the "ready"
+    // filter or collapsing Archived must not quietly carry hidden rows into a bulk remove.
+    val shownArchived = if (showArchived) archived else emptyList()
+    val selectedLearning = shownLearning.filter { it.item.itemId in selected }
+    val selectedArchived = shownArchived.filter { it.item.itemId in selected }
+    val selectedCount = selectedLearning.size + selectedArchived.size
+    val allShownSelected = selectedCount == shownLearning.size + shownArchived.size
+
+    fun toggle(summary: ItemSummary) {
+        val id = summary.item.itemId
+        selected = if (id in selected) selected - id else selected + id
+    }
+
     Scaffold(
         snackbarHost = { AppSnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text(name.ifBlank { "List" }) },
-                navigationIcon = { BackButton(onBack) },
-                actions = {
-                    TextButton(onClick = { onPractice(DeckSource.UserList(listId, name)) }) {
-                        Text("▶ Practice")
-                    }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "List options")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Rename") },
-                            onClick = { menuOpen = false; renaming = true },
+            if (editing) {
+                TopAppBar(
+                    title = { Text(if (selectedCount == 0) "Select items" else "$selectedCount selected") },
+                    navigationIcon = {
+                        IconButton(onClick = { editing = false; selected = emptySet() }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Done editing")
+                        }
+                    },
+                    actions = {
+                        TextButton(
+                            onClick = {
+                                selected = if (allShownSelected) emptySet()
+                                else (shownLearning + shownArchived).map { it.item.itemId }.toSet()
+                            },
+                        ) { Text(if (allShownSelected && selectedCount > 0) "Select none" else "Select all") }
+                    },
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(name.ifBlank { "List" }) },
+                    navigationIcon = { BackButton(onBack) },
+                    actions = {
+                        TextButton(onClick = { onPractice(DeckSource.UserList(listId, name)) }) {
+                            Text("▶ Practice")
+                        }
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "List options")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Edit") },
+                                onClick = { menuOpen = false; editing = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Rename") },
+                                onClick = { menuOpen = false; renaming = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete list") },
+                                onClick = { menuOpen = false; confirmDelete = true },
+                            )
+                        }
+                    },
+                )
+            }
+        },
+        bottomBar = {
+            if (editing) {
+                BottomAppBar {
+                    // Archive is meaningless for a row already archived, so it counts (and
+                    // enables on) only the Studying part of the selection.
+                    TextButton(
+                        enabled = selectedLearning.isNotEmpty(),
+                        onClick = { archive(selectedLearning) },
+                    ) {
+                        Text(
+                            "${ArchiveAction.icon} Archive" +
+                                if (selectedLearning.isNotEmpty()) " (${selectedLearning.size})" else "",
+                            color = if (selectedLearning.isNotEmpty()) ArchiveAction.color
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        DropdownMenuItem(
-                            text = { Text("Delete list") },
-                            onClick = { menuOpen = false; confirmDelete = true },
+                    }
+                    TextButton(
+                        enabled = selectedCount > 0,
+                        onClick = { remove(selectedLearning + selectedArchived) },
+                    ) {
+                        Text(
+                            "${RemoveAction.icon} Remove" +
+                                if (selectedCount > 0) " ($selectedCount)" else "",
+                            color = if (selectedCount > 0) RemoveAction.color
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                },
-            )
+                }
+            }
         },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
@@ -276,19 +361,14 @@ fun ListDetailScreen(
                 }
             }
             items(shownLearning, key = { it.item.itemId }) { summary ->
-                SwipeRow(
-                    rightAction = ArchiveAction,
-                    leftAction = RemoveAction,
-                    onSwipeRight = { archive(summary) },
-                    onSwipeLeft = { remove(summary) },
-                ) {
+                SelectableRow(editing, summary.item.itemId in selected, { toggle(summary) }) {
                     ItemRow(
                         text = summary.text,
                         secondaryText = summary.secondaryText,
                         pinyin = summary.pinyin,
                         gloss = summary.gloss,
                         glossLines = 1,
-                        onClick = { onOpenItem(summary.item) },
+                        onClick = { if (editing) toggle(summary) else onOpenItem(summary.item) },
                         trailing = {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -313,10 +393,7 @@ fun ListDetailScreen(
                 }
                 if (showArchived) {
                     items(archived, key = { "archived-${it.item.itemId}" }) { summary ->
-                        SwipeRow(
-                            leftAction = RemoveAction,
-                            onSwipeLeft = { remove(summary) },
-                        ) {
+                        SelectableRow(editing, summary.item.itemId in selected, { toggle(summary) }) {
                             ItemRow(
                                 text = summary.text,
                                 secondaryText = summary.secondaryText,
@@ -324,7 +401,7 @@ fun ListDetailScreen(
                                 gloss = summary.gloss,
                                 glossLines = 1,
                                 dimmed = true,
-                                onClick = { onOpenItem(summary.item) },
+                                onClick = { if (editing) toggle(summary) else onOpenItem(summary.item) },
                                 trailing = {
                                     Text(
                                         "✓",
@@ -396,6 +473,25 @@ fun ListDetailScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
+    }
+}
+
+/** A row that grows a leading checkbox in edit mode; outside it the row is untouched, so
+ * browsing keeps its full width. Tapping the checkbox or the row toggles the same selection. */
+@Composable
+private fun SelectableRow(
+    editing: Boolean,
+    checked: Boolean,
+    onToggle: () -> Unit,
+    row: @Composable () -> Unit,
+) {
+    if (!editing) {
+        row()
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = checked, onCheckedChange = { onToggle() })
+        Box(Modifier.weight(1f)) { row() }
     }
 }
 

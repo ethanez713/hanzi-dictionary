@@ -26,6 +26,9 @@ class MainActivity : ComponentActivity() {
     // The card the home-screen widget was showing when its middle was tapped.
     private val widgetItem = mutableStateOf<StudyItem?>(null)
 
+    // Whether that hand-off also opens the lookup sheet (widget) or just the card (reminder).
+    private val widgetOpensSheet = mutableStateOf(true)
+
     // Bumped when the app is reopened after a long enough gap that the browse trail it left
     // behind is stale; AppRoot watches this and starts the user back at home.
     private val staleSessionKey = mutableIntStateOf(0)
@@ -40,6 +43,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.navigationBarColor = Color.TRANSPARENT
         sharedText.value = extractSharedText(intent)
+        widgetOpensSheet.value = intent?.getBooleanExtra(PracticeWidgetProvider.EXTRA_PRACTICE_SHEET, true) ?: true
         widgetItem.value = extractWidgetItem(intent)
         val app = application as HanziApp
         setContent {
@@ -62,6 +66,7 @@ class MainActivity : ComponentActivity() {
                     sharedText = sharedText.value,
                     onSharedTextConsumed = { sharedText.value = null },
                     widgetItem = widgetItem.value,
+                    widgetOpensSheet = widgetOpensSheet.value,
                     onWidgetItemConsumed = { widgetItem.value = null },
                     staleSessionKey = staleSessionKey.intValue,
                 )
@@ -74,7 +79,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         extractSharedText(intent)?.let { sharedText.value = it }
-        extractWidgetItem(intent)?.let { widgetItem.value = it }
+        extractWidgetItem(intent)?.let {
+            // Flag first: the AppRoot effect reads both once the item changes.
+            widgetOpensSheet.value = intent.getBooleanExtra(PracticeWidgetProvider.EXTRA_PRACTICE_SHEET, true)
+            widgetItem.value = it
+        }
     }
 
     /**
