@@ -208,11 +208,12 @@ class HanziRepository(
         }
 
     /** Example sentences keyed by simplified form — a word, or a single character standing
-     * as its own form. The practice card asks for more than a word page's aside so the
-     * revealed side fills the screen rather than trailing off into dead space. */
-    fun cardSentences(simp: String, limit: Long = CARD_SENTENCE_LIMIT): List<SentenceExample> =
+     * as its own form. Only quality-passing rows (`shown = 1`) are ever returned. */
+    fun sentencesFor(simp: String, limit: Long = Long.MAX_VALUE): List<SentenceExample> =
         db.hanziQueries.sentencesForWord(simp, limit).executeAsList()
             .map { SentenceExample(it.zh, it.en) }
+
+    fun cardSentences(simp: String): List<SentenceExample> = sentencesFor(simp, CARD_SENTENCE_LIMIT)
 
     private fun firstSenses(defsJson: String?, count: Int = 2): String? =
         parseSenses(defsJson).take(count).joinToString("; ").ifEmpty { null }
@@ -374,8 +375,7 @@ class HanziRepository(
             db.hanziQueries.glyphByChar(ch).executeAsList().firstOrNull()
                 ?.let { WordCharView(it.id, it.char, it.definition) }
         }
-        val sentences = db.hanziQueries.sentencesForWord(w.simp, SENTENCE_LIMIT).executeAsList()
-            .map { SentenceExample(it.zh, it.en) }
+        val sentences = sentencesFor(w.simp)
         val lookAlikes = lookAlikesForGlyphs(charViews.map { it.glyphId })
         return WordPage(
             w.id, w.simp, w.trad, w.pinyin, parseSenses(w.defs), w.hsk, w.freq_rank,
@@ -475,11 +475,8 @@ class HanziRepository(
 
     private companion object {
         const val HSK_PAGE = 200
-        /** A few examples is plenty on a word page; more would bury the definitions. */
-        const val SENTENCE_LIMIT = 5L
-
-        /** The practice card's revealed side scrolls and has a whole screen to fill, so it
-         * pulls more example sentences than the word page's fixed aside. */
+        /** Ceiling for the practice card only: the detail page shows every sentence the pack
+         * keeps, so the card must never hold more than the page it hands off to. */
         const val CARD_SENTENCE_LIMIT = 12L
 
         /** The character page's own drawer, which you opened to compare things, so it can

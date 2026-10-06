@@ -41,6 +41,15 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun aWordPageKeepsEverySentenceTheCardCanShow() {
+        val page = repo.wordPage("w000015")
+        assertNotNull(page)
+        assertTrue(page.sentences.isNotEmpty())
+        assertEquals(repo.sentencesFor(page.simp), page.sentences)
+        assertTrue(page.sentences.size >= repo.cardSentences(page.simp).size)
+    }
+
+    @Test
     fun aMeaningComponentIsGlossedByWhatItContributes() {
         // 页 alone is "page, sheet, leaf" — a borrowed sense. What it lends 项 is "head",
         // which is the only reading under which 工 + 页 arriving at "nape of neck" parses.
