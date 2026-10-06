@@ -3,6 +3,7 @@ package com.hanzidictionary.core
 import app.cash.sqldelight.db.SqlDriver
 import com.hanzidictionary.core.userdb.UserDatabase
 import java.util.TimeZone
+import kotlin.random.Random
 
 /** A studiable item: a character ("U+597D") or a pack word ("w000123"). */
 data class StudyItem(val itemId: String, val kind: String) {
@@ -199,31 +200,10 @@ class StudyRepository(
         revealMs: Long? = null,
     ): CardState {
         val before = cardState(item.itemId) ?: CardState(item.itemId, item.kind, due = now)
-        val elapsedDays = before.lastReview?.let { ((now - it) / DAY_MS).toDouble() }
         val after = fsrs.review(before, rating, now)
         q.transaction {
-            q.upsertCardState(
-                after.itemId,
-                after.kind,
-                after.phase.name.lowercase(),
-                after.step?.toLong(),
-                after.stability,
-                after.difficulty,
-                after.due,
-                after.lastReview,
-                after.reviews.toLong(),
-                after.lapses.toLong(),
-            )
-            q.logReview(
-                item.itemId,
-                rating.value.toLong(),
-                now,
-                elapsedDays,
-                after.stability,
-                after.difficulty,
-                origin,
-                revealMs,
-            )
+            persistCard(after)
+            persistReview(item.itemId, rating, before, after, origin, now, revealMs)
         }
         return after
     }
@@ -406,11 +386,301 @@ class StudyRepository(
         }
     }
 
+    // ---- final check ----
+
+    /**
+     * How the archive row should read, and whether the study strip should offer a sitting.
+     * Waiting candidates are not eligible yet; [FinalCheckStatus.daysToFirstUnlock] is the
+     * soonest of them. The archive sample counts only items left untested for
+     * [AUDIT_MIN_GAP_DAYS] (or never tested).
+     */
+    fun finalCheckStatus(
+        now: Long = System.currentTimeMillis(),
+        tz: TimeZone = TimeZone.getDefault(),
+    ): FinalCheckStatus {
+        val (gated, audit) = loadFinalCheck(now, tz)
+        val days = gated
+            .filter { !it.gate.eligible }
+            .mapNotNull { it.gate.unlockAt }
+            .minOrNull()
+            ?.let { daysUntilUnlock(it, now).takeIf { d -> d > 0 } }
+        return FinalCheckStatus(
+            eligible = gated.count { it.gate.eligible },
+            daysToFirstUnlock = days,
+            auditable = audit.size,
+        )
+    }
+
+    /**
+     * Up to [FINAL_CHECK_LIMIT] eligible candidates, least likely to be recalled first,
+     * then up to [AUDIT_SAMPLE_LIMIT] archived items weighted toward the ones memory
+     * says are closest to gone. [random] draws the sample, so a test can replay it.
+     */
+    fun finalCheckSession(
+        now: Long = System.currentTimeMillis(),
+        tz: TimeZone = TimeZone.getDefault(),
+        random: Random = Random.Default,
+    ): List<FinalCheckCard> {
+        val (gated, audit) = loadFinalCheck(now, tz)
+        val eligible = gated.filter { it.gate.eligible }.map {
+            FinalCheckCard(FinalCheckKind.CANDIDATE, it.item, it.mastery, it.retrievability)
+        }
+        val auditable = audit.map {
+            FinalCheckCard(FinalCheckKind.AUDIT, it.item, Mastery.NONE, it.retrievability)
+        }
+        val built = buildFinalCheckSession(eligible, auditable, random)
+        val sampled = built.filter { it.kind == FinalCheckKind.AUDIT }
+        if (sampled.isEmpty()) return built
+        val history = reviewHistory(sampled.map { it.item.itemId })
+        val prospectById = audit.associateBy { it.item.itemId }
+        return built.map { card ->
+            if (card.kind != FinalCheckKind.AUDIT) card
+            else card.copy(
+                mastery = auditMastery(
+                    card.item,
+                    prospectById.getValue(card.item.itemId),
+                    history[card.item.itemId].orEmpty(),
+                    tz,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Applies one swipe.
+     *
+     * A candidate pass grades Good and then archives. Archiving deletes card_state —
+     * that stays the archive's rule — so the grade has to land in review_log first,
+     * where its post-review stability is the only memory a later spot-check can rebuild.
+     * A candidate miss grades Again and stays in study. Skip writes nothing.
+     *
+     * An archive pass logs Good against the rebuilt memory and does not resurrect
+     * card_state. An archive miss un-archives, restores that memory as a review-phase
+     * card, grades Again, and files the item into the active list if it is in none —
+     * otherwise it would be a schedule no deck deals. [UserRepository.setKnown] can't
+     * do this: un-archiving through it deletes the schedule being restored.
+     *
+     * Returns the undo for an archive or a return-to-study, and null otherwise.
+     */
+    fun answerFinalCheck(
+        item: StudyItem,
+        kind: FinalCheckKind,
+        swipe: FinalCheckSwipe,
+        now: Long = System.currentTimeMillis(),
+    ): FinalCheckUndo? {
+        if (swipe == FinalCheckSwipe.SKIP) return null
+        return when (kind) {
+            FinalCheckKind.CANDIDATE -> answerCandidate(item, swipe, now)
+            FinalCheckKind.AUDIT -> answerAudit(item, swipe, now)
+        }
+    }
+
+    fun undoFinalCheck(undo: FinalCheckUndo) {
+        q.transaction {
+            q.deleteReviewRow(undo.reviewRowId)
+            if (undo.card != null) persistCard(undo.card) else q.deleteCardState(undo.item.itemId)
+            if (undo.wasKnown) {
+                q.upsertKnown(undo.item.itemId, undo.item.kind, "known", undo.knownAddedAt)
+            } else {
+                q.deleteKnown(undo.item.itemId)
+            }
+            undo.addedToListId?.let { q.removeListItem(it, undo.item.itemId) }
+        }
+    }
+
     /** Local midnight. Computed from the raw offset rather than java.time so this module
      * stays as close to plain Kotlin as the rest of `core`. */
     private fun startOfDay(now: Long): Long {
         val offset = TimeZone.getDefault().getOffset(now)
         return ((now + offset) / DAY_MS) * DAY_MS - offset
+    }
+
+    private fun answerCandidate(item: StudyItem, swipe: FinalCheckSwipe, now: Long): FinalCheckUndo? {
+        val before = cardState(item.itemId) ?: CardState(item.itemId, item.kind, due = now)
+        val rating = if (swipe == FinalCheckSwipe.PASS) Rating.GOOD else Rating.AGAIN
+        val after = fsrs.review(before, rating, now)
+        if (swipe == FinalCheckSwipe.MISS) {
+            q.transaction {
+                persistCard(after)
+                persistReview(item.itemId, rating, before, after, ORIGIN_FINAL, now, null)
+            }
+            return null
+        }
+        var rowId = 0L
+        q.transaction {
+            persistCard(after)
+            // Read the rowid before the archive insert, or undo would delete that row
+            // instead of this grade.
+            rowId = persistReview(item.itemId, rating, before, after, ORIGIN_FINAL, now, null)
+            q.upsertKnown(item.itemId, item.kind, "known", now)
+            q.deleteCardState(item.itemId)
+        }
+        return FinalCheckUndo(
+            item = item,
+            reviewRowId = rowId,
+            card = before,
+            wasKnown = false,
+            knownAddedAt = 0L,
+            addedToListId = null,
+        )
+    }
+
+    private fun answerAudit(item: StudyItem, swipe: FinalCheckSwipe, now: Long): FinalCheckUndo? {
+        val base = auditBaseCard(item, now)
+        val rating = if (swipe == FinalCheckSwipe.PASS) Rating.GOOD else Rating.AGAIN
+        val after = fsrs.review(base, rating, now)
+        if (swipe == FinalCheckSwipe.PASS) {
+            // review_log only. Resurrecting card_state would put an archived item back
+            // into every deck that filters on it.
+            q.transaction {
+                persistReview(item.itemId, rating, base, after, ORIGIN_AUDIT, now, null)
+            }
+            return null
+        }
+        val knownAddedAt = q.knownAddedAt(item.itemId).executeAsOneOrNull()
+        var rowId = 0L
+        var addedToList: Long? = null
+        q.transaction {
+            q.deleteKnown(item.itemId)
+            persistCard(after)
+            rowId = persistReview(item.itemId, rating, base, after, ORIGIN_AUDIT, now, null)
+            if (q.listIdsContaining(item.itemId).executeAsList().isEmpty()) {
+                val list = ensureActiveList(now)
+                q.addListItem(list.id, item.itemId, item.kind, now)
+                addedToList = list.id
+            }
+        }
+        return FinalCheckUndo(
+            item = item,
+            reviewRowId = rowId,
+            card = null,
+            wasKnown = knownAddedAt != null,
+            knownAddedAt = knownAddedAt ?: 0L,
+            addedToListId = addedToList,
+        )
+    }
+
+    /** No review to rebuild from means there is no review-phase memory to restore, so a
+     * miss starts the item as a new card. The 0.25 prior is only a sampling weight. */
+    private fun auditBaseCard(item: StudyItem, now: Long): CardState {
+        val newest = q.newestReviewFor(item.itemId).executeAsOneOrNull()
+        val rows = reviewHistory(listOf(item.itemId))[item.itemId].orEmpty()
+        val memory = rebuiltMemory(
+            newest?.stability,
+            newest?.difficulty,
+            newest?.ts,
+            reviews = rows.size,
+            lapses = rows.count { it.rating == Rating.AGAIN.value },
+        )
+        return memory?.let { rebuiltCard(item, it) } ?: CardState(item.itemId, item.kind, due = now)
+    }
+
+    private fun auditMastery(
+        item: StudyItem,
+        prospect: AuditProspect,
+        rows: List<ReviewEntry>,
+        tz: TimeZone,
+    ): Mastery {
+        val memory = rebuiltMemory(
+            prospect.stability,
+            prospect.difficulty,
+            prospect.reviewedAt,
+            reviews = rows.size,
+            lapses = rows.count { it.rating == Rating.AGAIN.value },
+        )
+        return masteryOf(memory?.let { rebuiltCard(item, it) }, rows, tz)
+    }
+
+    private fun loadFinalCheck(now: Long, tz: TimeZone): Pair<List<GatedCandidate>, List<AuditProspect>> {
+        val knownRows = q.allKnown().executeAsList()
+        val knownIds = knownRows.mapTo(HashSet()) { it.item_id }
+        val active = allListItems().filter { it.itemId !in knownIds }
+        val cards = cardStates(active.map { it.itemId })
+        val promising = active.mapNotNull { item ->
+            val card = cards[item.itemId] ?: return@mapNotNull null
+            val stability = card.stability ?: return@mapNotNull null
+            if (stability < RETIRE_MIN_STABILITY_DAYS || card.lastReview == null) return@mapNotNull null
+            item to card
+        }
+        val history = reviewHistory(promising.map { it.first.itemId })
+        val gated = promising.mapNotNull { (item, card) ->
+            val mastery = masteryOf(card, history[item.itemId].orEmpty(), tz)
+            if (!isFinalCheckCandidate(mastery)) return@mapNotNull null
+            val last = card.lastReview ?: return@mapNotNull null
+            GatedCandidate(
+                item = item,
+                card = card,
+                mastery = mastery,
+                retrievability = fsrs.retrievability(card, now),
+                gate = candidateGate(mastery.longestGapDays, last, now, tz),
+            )
+        }
+
+        val newest = newestByItem()
+        val audit = knownRows.mapNotNull { row ->
+            val item = StudyItem(row.item_id, row.kind)
+            val latest = newest[row.item_id]
+            if (!auditEligible(latest?.ts, now)) return@mapNotNull null
+            val memory = rebuiltMemory(latest?.stability, latest?.difficulty, latest?.ts, 0, 0)
+            val recall = if (memory == null) {
+                AUDIT_NO_HISTORY_RETRIEVABILITY
+            } else {
+                fsrs.retrievability(rebuiltCard(item, memory), now)
+            }
+            AuditProspect(item, recall, latest?.stability, latest?.difficulty, latest?.ts)
+        }
+        return gated to audit
+    }
+
+    private fun newestByItem(): Map<String, NewestReview> {
+        val best = HashMap<String, NewestReview>()
+        for (row in q.newestReviews().executeAsList()) {
+            val current = NewestReview(row.ts, row.stability, row.difficulty, row.review_rowid)
+            val prev = best[row.item_id]
+            if (prev == null || current.ts > prev.ts || (current.ts == prev.ts && current.rowId > prev.rowId)) {
+                best[row.item_id] = current
+            }
+        }
+        return best
+    }
+
+    private fun persistCard(card: CardState) {
+        q.upsertCardState(
+            card.itemId,
+            card.kind,
+            card.phase.name.lowercase(),
+            card.step?.toLong(),
+            card.stability,
+            card.difficulty,
+            card.due,
+            card.lastReview,
+            card.reviews.toLong(),
+            card.lapses.toLong(),
+        )
+    }
+
+    /** Returns the review_log rowid. The caller has to read it before the next insert. */
+    private fun persistReview(
+        itemId: String,
+        rating: Rating,
+        before: CardState,
+        after: CardState,
+        origin: String,
+        now: Long,
+        revealMs: Long?,
+    ): Long {
+        val elapsedDays = before.lastReview?.let { ((now - it) / DAY_MS).toDouble() }
+        q.logReview(
+            itemId,
+            rating.value.toLong(),
+            now,
+            elapsedDays,
+            after.stability,
+            after.difficulty,
+            origin,
+            revealMs,
+        )
+        return q.lastInsertedRowId().executeAsOne()
     }
 
     private fun com.hanzidictionary.core.userdb.Card_state.toCardState() = CardState(
@@ -439,6 +709,13 @@ class StudyRepository(
          * the schedule but is a claim, not a retrieval, so mastery and the recent-accuracy
          * gate both ignore it. */
         const val ORIGIN_TRIAGE = "triage"
+
+        /** A final-check retrieval of a card under consideration for the archive. */
+        const val ORIGIN_FINAL = "final"
+
+        /** An archive spot-check. A retrieval, unlike [ORIGIN_TRIAGE]: mastery and the
+         * recent-accuracy gate both count it. */
+        const val ORIGIN_AUDIT = "audit"
         private const val HISTORY_CHUNK = 500
         private const val PREF_TRIAGE_SKIP = "triage_skip:"
 
@@ -448,3 +725,26 @@ class StudyRepository(
         private const val ACTIVE_EVERYTHING = "everything"
     }
 }
+
+private data class GatedCandidate(
+    val item: StudyItem,
+    val card: CardState,
+    val mastery: Mastery,
+    val retrievability: Double,
+    val gate: CandidateGate,
+)
+
+private data class AuditProspect(
+    val item: StudyItem,
+    val retrievability: Double,
+    val stability: Double?,
+    val difficulty: Double?,
+    val reviewedAt: Long?,
+)
+
+private data class NewestReview(
+    val ts: Long,
+    val stability: Double?,
+    val difficulty: Double?,
+    val rowId: Long,
+)

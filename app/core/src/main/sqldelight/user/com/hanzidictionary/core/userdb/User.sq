@@ -51,9 +51,9 @@ CREATE TABLE review_log (
     rating       INTEGER NOT NULL,        -- 1 again | 2 hard | 3 good | 4 easy
     ts           INTEGER NOT NULL,
     elapsed_days REAL,
-    stability    REAL,
+    stability    REAL,                     -- post-review: memory as of this row, not the memory it was graded from
     difficulty   REAL,
-    origin       TEXT NOT NULL,           -- app | widget | notification | triage
+    origin       TEXT NOT NULL,           -- app | widget | notification | triage | final | audit
     reveal_ms    INTEGER                  -- face-down time before reveal; app only, else NULL
 );
 
@@ -106,6 +106,12 @@ SELECT COUNT(*) > 0 FROM known_item WHERE item_id = :itemId AND status = 'known'
 
 allKnownIds:
 SELECT item_id FROM known_item WHERE status = 'known';
+
+allKnown:
+SELECT item_id, kind, added_at FROM known_item WHERE status = 'known';
+
+knownAddedAt:
+SELECT added_at FROM known_item WHERE item_id = :itemId;
 
 knownCount:
 SELECT COUNT(*) FROM known_item WHERE status = 'known';
@@ -259,8 +265,34 @@ SELECT COUNT(*) FROM review_log WHERE ts >= :since;
 
 -- The latest real reviews' ratings, newest first — the "is the current deck manageable?" gate
 -- on suggesting new words. Triage self-reports are claims, not reviews, so they don't count.
+-- Final-check and archive spot-check grades are retrievals, so this filter leaves them in.
 recentRatings:
 SELECT rating FROM review_log WHERE origin <> 'triage' ORDER BY ts DESC LIMIT :limit;
+
+-- Newest grading of one item. rowid breaks a shared timestamp toward the later insert.
+newestReviewFor:
+SELECT ts, stability, difficulty
+FROM review_log
+WHERE item_id = :itemId
+ORDER BY ts DESC, rowid DESC
+LIMIT 1;
+
+-- Newest grading of every item. A shared timestamp can match twice; the caller keeps
+-- the greater rowid. Archiving deletes card_state, so this row is the only memory left.
+newestReviews:
+SELECT r.item_id AS item_id, r.ts AS ts, r.stability AS stability, r.difficulty AS difficulty, r.rowid AS review_rowid
+FROM review_log r
+INNER JOIN (
+    SELECT item_id AS latest_item, MAX(ts) AS latest_ts
+    FROM review_log
+    GROUP BY item_id
+) AS latest ON r.item_id = latest.latest_item AND r.ts = latest.latest_ts;
+
+lastInsertedRowId:
+SELECT last_insert_rowid();
+
+deleteReviewRow:
+DELETE FROM review_log WHERE rowid = :rowId;
 
 allCardItemIds:
 SELECT item_id FROM card_state;

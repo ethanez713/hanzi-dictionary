@@ -50,10 +50,12 @@ import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.DeckSource
+import com.hanzidictionary.core.FinalCheckStatus
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ListStats
 import com.hanzidictionary.core.StudyList
 import com.hanzidictionary.core.UserRepository
+import com.hanzidictionary.core.finalCheckStatusLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,6 +67,7 @@ private data class LibraryState(
     val encounteredCount: Int = 0,
     val archivedCount: Int = 0,
     val reviewsToday: Long = 0,
+    val finalCheck: FinalCheckStatus? = null,
 )
 
 /**
@@ -82,7 +85,9 @@ fun LibraryScreen(
     onLookup: (LookupEntry) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenArchive: () -> Unit,
+    onOpenFinalCheck: () -> Unit,
     onEditList: (Long) -> Unit,
+    reloadToken: Int = 0,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
@@ -95,7 +100,7 @@ fun LibraryScreen(
     var showNewList by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
 
-    LaunchedEffect(refresh) {
+    LaunchedEffect(refresh, reloadToken) {
         state = withContext(Dispatchers.IO) {
             val lists = app.studyRepository.lists()
             val stats = app.studyRepository.statsByList()
@@ -103,7 +108,8 @@ fun LibraryScreen(
             val encCount = userRepository.practiceQueue().size
             val archived = userRepository.knownIds().size
             val reviews = app.studyRepository.reviewsToday()
-            LibraryState(lists, stats, activeId, encCount, archived, reviews)
+            val finalCheck = app.studyRepository.finalCheckStatus()
+            LibraryState(lists, stats, activeId, encCount, archived, reviews, finalCheck)
         }
     }
 
@@ -262,6 +268,12 @@ fun LibraryScreen(
 
             // ── ARCHIVE ──────────────────────────────────────────────────────────────
             LibrarySectionHeader("Archive")
+            PoolRow(
+                label = "Final check",
+                sublabel = state.finalCheck?.let(::finalCheckStatusLabel) ?: "…",
+                onClick = onOpenFinalCheck,
+            )
+            HorizontalDivider(color = eth.inkRule)
             PoolRow(
                 label = "Archived characters",
                 sublabel = "${state.archivedCount} characters marked as known",

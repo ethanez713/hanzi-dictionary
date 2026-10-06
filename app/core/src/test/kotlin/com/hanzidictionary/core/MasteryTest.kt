@@ -109,6 +109,26 @@ class MasteryTest {
     }
 
     @Test
+    fun finalCheckAndAuditGradesAreRealRetrievals() {
+        val passed = mastery(
+            card(stability = 200.0),
+            entry(0, elapsed = null, origin = StudyRepository.ORIGIN_FINAL),
+            entry(30, elapsed = 30.0, origin = StudyRepository.ORIGIN_AUDIT),
+            entry(100, elapsed = 70.0, origin = StudyRepository.ORIGIN_FINAL),
+        )
+        assertEquals(3, passed.spacedStreak)
+        assertEquals(MasteryLevel.RETIRE_READY, passed.level)
+
+        val missed = mastery(
+            card(),
+            entry(0),
+            entry(40, elapsed = 40.0),
+            entry(80, Rating.AGAIN, elapsed = 40.0, origin = StudyRepository.ORIGIN_AUDIT),
+        )
+        assertEquals(0, missed.spacedStreak, "a spot-check miss is a miss, so it resets the streak")
+    }
+
+    @Test
     fun aTriageClaimDoesNotBreakOrPadAnExistingStreak() {
         val claim = entry(5, Rating.EASY, origin = StudyRepository.ORIGIN_TRIAGE)
         val m = mastery(card(), entry(0), entry(7), claim, entry(14))

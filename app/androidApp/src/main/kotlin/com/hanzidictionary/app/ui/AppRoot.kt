@@ -89,6 +89,9 @@ private sealed interface AppOverlay {
 
     /** Suggested HSK words to sort into "know / don't know" — offered only when the deck is thin. */
     data object Triage : AppOverlay
+
+    /** Retirement candidates, then a spot-check of the archive. */
+    data object FinalCheck : AppOverlay
 }
 
 @Composable
@@ -121,6 +124,10 @@ fun AppRoot(
     // (re)load on this so it repositions to the pinned card even when the deck *source* is
     // unchanged — a widget into the already-active list wouldn't otherwise re-open the deck.
     var studyResumeToken by remember { mutableIntStateOf(0) }
+
+    // Library stays composed under an overlay opened from that tab, so closing a final
+    // check has to tell it to re-read the archive row. A later visit remounts anyway.
+    var libraryReload by remember { mutableIntStateOf(0) }
 
     // Per-tab lookup stacks: incidental lookups open a sheet over the current tab
     val studyLookupStack = remember { LookupStack() }
@@ -281,6 +288,7 @@ fun AppRoot(
                         onSwitchToDictionary = { selectedTab = Tab.DICTIONARY },
                         onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
                         onAddNewWords = { overlay = AppOverlay.Triage },
+                        onFinalCheck = { overlay = AppOverlay.FinalCheck },
                     )
                     if (studyLookupStack.isOpen) {
                         LookupSheet(
@@ -323,7 +331,9 @@ fun AppRoot(
                         },
                         onOpenSettings = { overlay = AppOverlay.Settings },
                         onOpenArchive = { overlay = AppOverlay.Archive },
+                        onOpenFinalCheck = { overlay = AppOverlay.FinalCheck },
                         onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
+                        reloadToken = libraryReload,
                     )
                 }
             }
@@ -352,6 +362,18 @@ fun AppRoot(
                 // pinned card, if any, stays put) so the new words are there on return.
                 onDone = {
                     studyResumeToken++
+                    overlay = null
+                },
+            )
+        AppOverlay.FinalCheck ->
+            FinalCheckScreen(
+                repository = repository,
+                // Archiving and sending words back both change what's due. The token is
+                // what PracticeScreen reloads on; Library reads reloadToken for the same
+                // reason, because that tab stays composed under this overlay.
+                onDone = {
+                    studyResumeToken++
+                    libraryReload++
                     overlay = null
                 },
             )

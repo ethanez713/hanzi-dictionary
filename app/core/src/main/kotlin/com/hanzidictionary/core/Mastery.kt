@@ -29,7 +29,8 @@ import kotlin.math.roundToInt
  * filter); archiving stays the user's swipe.
  *
  * Self-reported "I know it" from new-word triage ([StudyRepository.ORIGIN_TRIAGE]) is excluded
- * from all of this: a claim is not a retrieval.
+ * from all of this: a claim is not a retrieval. A final-check grade and an archive spot-check
+ * are retrievals, so they count — they are the evidence the retirement test exists to record.
  */
 enum class MasteryLevel {
     /** Still being learned — the default, and where every lapse sends a card back to. */
@@ -106,7 +107,8 @@ fun masteryOf(
 ): Mastery {
     if (card == null) return Mastery.NONE
 
-    // Only genuine retrievals; a triage "I know it" never reached the retrieval step.
+    // Triage is a claim, not a retrieval. Final-check and archive spot-checks are
+    // retrievals and stay in: dropping them would throw away the proof just recorded.
     val retrievals = history
         .filter { it.origin != StudyRepository.ORIGIN_TRIAGE }
         .sortedBy { it.ts }
