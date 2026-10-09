@@ -213,6 +213,17 @@ any signal; capped at `NEW_PER_DAY=15`, which is the safety valve against review
 don't shuffle them; tests assert the order). The home-screen widget mirrors this via
 `selectWidgetCard`.
 
+## Local model (sentence scoring)
+
+The pipeline scores sentences on the local Ollama model (`pipeline/pipeline/score_sentences.py`);
+the model name lives in that file. The pick is the largest Qwen-line model that fits the
+RTX 3050's 6 GB. The open-weight frontier moves faster than this file, so before a long or
+quality-sensitive scoring run, `ollama list` prints each model's age: if the one in use is
+more than ~6 months old, compare it against <https://ollama.com/library> for a newer
+generation that fits in 6 GB, then `ollama rm` whatever it supersedes. Cached scores are
+comparable only within one model: record which model produced them and re-score after a
+swap rather than mixing two models' judgements.
+
 ## Reviewing this project
 
 Follow the `review` skill (strict nitpicky pass → Implement/Optional/Dismiss triage) with the
