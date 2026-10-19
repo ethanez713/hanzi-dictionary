@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import com.hanzidictionary.core.NudgeMode
 import com.hanzidictionary.core.NudgeSettings
 import com.hanzidictionary.core.PhotoSort
+import kotlin.math.abs
 
 /** How the app picks light vs dark: follow the system, or force one. */
 enum class ThemeMode { AUTO, LIGHT, DARK }
@@ -22,6 +23,10 @@ class AppSettings(private val prefs: SharedPreferences) {
     var themeMode by mutableStateOf(readThemeMode())
         private set
     var photoSort by mutableStateOf(readPhotoSort())
+        private set
+
+    /** Reviews that fill the Study ring. Display only — the streak counts days. */
+    var dailyGoal by mutableStateOf(readDailyGoal())
         private set
 
     // Study reminders (the notification). Defaults match NudgeSettings, except that it ships
@@ -87,6 +92,12 @@ class AppSettings(private val prefs: SharedPreferences) {
         prefs.edit().putString(KEY_PHOTO_SORT, sort.name).apply()
     }
 
+    fun updateDailyGoal(goal: Int) {
+        val coerced = coerceDailyGoal(goal)
+        dailyGoal = coerced
+        prefs.edit().putInt(KEY_DAILY_GOAL, coerced).apply()
+    }
+
     private fun readThemeMode(): ThemeMode =
         runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: ThemeMode.AUTO.name) }
             .getOrDefault(ThemeMode.AUTO)
@@ -99,15 +110,31 @@ class AppSettings(private val prefs: SharedPreferences) {
         runCatching { NudgeMode.valueOf(prefs.getString(KEY_NUDGE_MODE, null) ?: NudgeMode.ADAPTIVE.name) }
             .getOrDefault(NudgeMode.ADAPTIVE)
 
+    /** A missing or unreadable value falls back to the default; a number that isn't one
+     * of the choices snaps to the nearest one so a hand-edited pref can't strand the ring. */
+    private fun readDailyGoal(): Int {
+        if (!prefs.contains(KEY_DAILY_GOAL)) return DEFAULT_DAILY_GOAL
+        val raw = runCatching { prefs.getInt(KEY_DAILY_GOAL, DEFAULT_DAILY_GOAL) }.getOrElse {
+            runCatching { prefs.getString(KEY_DAILY_GOAL, null)?.trim()?.toIntOrNull() }.getOrNull()
+                ?: return DEFAULT_DAILY_GOAL
+        }
+        return coerceDailyGoal(raw)
+    }
+
     companion object {
         const val PREFS = "app_settings"
+        val DAILY_GOAL_CHOICES = listOf(10, 20, 30, 50)
+        const val DEFAULT_DAILY_GOAL = 20
         private const val KEY_HINTS = "show_swipe_hints"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_PHOTO_SORT = "photo_sort"
+        private const val KEY_DAILY_GOAL = "daily_goal"
         private const val KEY_NUDGE_ON = "nudge_enabled"
         private const val KEY_NUDGE_MODE = "nudge_mode"
         private const val KEY_NUDGE_INTERVAL = "nudge_interval_hours"
         private const val KEY_NUDGE_FROM = "nudge_window_start_min"
         private const val KEY_NUDGE_TO = "nudge_window_end_min"
+
+        fun coerceDailyGoal(value: Int): Int = DAILY_GOAL_CHOICES.minBy { abs(it - value) }
     }
 }

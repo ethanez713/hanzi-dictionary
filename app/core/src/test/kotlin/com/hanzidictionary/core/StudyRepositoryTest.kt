@@ -280,6 +280,20 @@ class StudyRepositoryTest {
     }
 
     @Test
+    fun goalReviewsTodayCountsRowsAndSkipsTriage() {
+        assertEquals(0L, study.goalReviewsToday(now))
+        study.grade(hao, Rating.GOOD, now = now)
+        study.grade(hao, Rating.AGAIN, now = now + 60_000)
+        study.grade(ni, Rating.GOOD, StudyRepository.ORIGIN_FINAL, now = now + 120_000)
+        study.triage(nihao, TriageVerdict.KNOW, now + 180_000)
+        study.grade(StudyItem.character("U+4E00"), Rating.GOOD, now = now - 30 * day)
+
+        val at = now + 180_000
+        assertEquals(4L, study.reviewsToday(at), "the Library total still includes the triage claim")
+        assertEquals(3L, study.goalReviewsToday(at), "two grades of one card are two reviews; triage is not")
+    }
+
+    @Test
     fun activityCountsDistinctStudiedItemsPerLocalDayAndSkipsTriage() {
         val tz = TimeZone.getTimeZone("UTC")
         study.grade(hao, Rating.GOOD, now = now)

@@ -69,6 +69,20 @@
             android:maxLines="2"
             android:textColor="@color/widget_text_muted"
             android:textSize="11sp" />
+
+        <!-- Gone until a refresh has a streak or a review today; an empty day with no
+             run says nothing rather than "0-day streak". -->
+        <TextView
+            android:id="@+id/widget_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_muted"
+            android:textSize="9sp"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!-- RIGHT gutter: you recalled it. -->

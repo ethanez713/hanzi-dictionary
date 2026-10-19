@@ -48,6 +48,7 @@ import com.hanzidictionary.app.AppSettings
 import com.hanzidictionary.app.PackManager
 import com.hanzidictionary.app.ThemeMode
 import com.hanzidictionary.app.nudge.NudgeScheduler
+import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.NudgeMode
 import com.hanzidictionary.core.SourceInfo
@@ -67,6 +68,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val eth = EthanTheme.colors
+    val context = LocalContext.current
     BackHandler(onBack = onBack)
 
     Scaffold(
@@ -126,6 +128,20 @@ fun SettingsScreen(
                         uncheckedTrackColor = eth.ink200,
                         uncheckedBorderColor = eth.borderDefault,
                     ),
+                )
+            }
+            SettingsRow(
+                title = "Daily goal",
+                subtitle = "How many reviews fill the ring on Study. The streak counts the days you study.",
+            ) {
+                SegmentedChoice(
+                    options = AppSettings.DAILY_GOAL_CHOICES.map { it to it.toString() },
+                    selected = settings.dailyGoal,
+                    onSelect = {
+                        settings.updateDailyGoal(it)
+                        PracticeWidgetUpdater.refresh(context)
+                    },
+                    eth = eth,
                 )
             }
             HorizontalDivider(color = eth.inkRule)

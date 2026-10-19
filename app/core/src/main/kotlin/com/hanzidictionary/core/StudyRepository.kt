@@ -300,6 +300,15 @@ class StudyRepository(
     fun reviewsToday(now: Long = System.currentTimeMillis()): Long =
         q.reviewCountSince(startOfLocalDay(now)).executeAsOne()
 
+    /**
+     * Review rows since local midnight, triage excluded. The daily-goal ring counts
+     * gradings; a triage "know" is a claim, so it stays out. [reviewsToday] still
+     * counts every row — the Library total includes those claims. Row count, not
+     * distinct items: grading the same card twice is two reviews.
+     */
+    fun goalReviewsToday(now: Long = System.currentTimeMillis()): Long =
+        q.reviewItemsSince(startOfLocalDay(now)).executeAsList().size.toLong()
+
     /** Distinct items reviewed on each local day from [days] midnights ago through [now]. */
     fun activity(
         now: Long = System.currentTimeMillis(),
