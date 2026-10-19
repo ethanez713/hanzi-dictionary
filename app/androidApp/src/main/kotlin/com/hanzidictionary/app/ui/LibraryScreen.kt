@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,9 +55,12 @@ import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.FinalCheckStatus
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ListStats
+import com.hanzidictionary.core.StreakState
 import com.hanzidictionary.core.StudyList
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.finalCheckStatusLabel
+import com.hanzidictionary.core.localDay
+import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,6 +73,10 @@ private data class LibraryState(
     val archivedCount: Int = 0,
     val reviewsToday: Long = 0,
     val finalCheck: FinalCheckStatus? = null,
+    val activity: Map<Long, Int> = emptyMap(),
+    val streak: StreakState = StreakState(0, 0, studiedToday = false, frozenDays = emptySet()),
+    /** Null until the first load, so the heatmap does not draw epoch day 0. */
+    val today: Long? = null,
 )
 
 /**
@@ -75,7 +84,7 @@ private data class LibraryState(
  * Lists can be created, renamed, deleted, and set active (where swipe-right files things).
  * Tapping a list or pool navigates to Practice via [onPractice].
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun LibraryScreen(
     repository: HanziRepository,
@@ -102,14 +111,21 @@ fun LibraryScreen(
 
     LaunchedEffect(refresh, reloadToken) {
         state = withContext(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val tz = TimeZone.getDefault()
             val lists = app.studyRepository.lists()
             val stats = app.studyRepository.statsByList()
             val activeId = app.studyRepository.activeListId()
             val encCount = userRepository.practiceQueue().size
             val archived = userRepository.knownIds().size
-            val reviews = app.studyRepository.reviewsToday()
+            val reviews = app.studyRepository.reviewsToday(now)
             val finalCheck = app.studyRepository.finalCheckStatus()
-            LibraryState(lists, stats, activeId, encCount, archived, reviews, finalCheck)
+            val activity = app.studyRepository.activity(now, HEATMAP_LOOKBACK_DAYS, tz)
+            val streak = app.studyRepository.streakState(now, tz)
+            LibraryState(
+                lists, stats, activeId, encCount, archived, reviews, finalCheck,
+                activity, streak, localDay(now, tz),
+            )
         }
     }
 
@@ -285,13 +301,25 @@ fun LibraryScreen(
 
             // ── PROGRESS ─────────────────────────────────────────────────────────────
             LibrarySectionHeader("Progress")
-            Row(
+            // Five stats don't fit a phone-width row, so they wrap.
+            FlowRow(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 StatCell(value = state.reviewsToday.toString(), label = "reviews today")
                 StatCell(value = state.archivedCount.toString(), label = "archived")
                 StatCell(value = state.lists.sumOf { state.stats[it.id]?.total ?: 0 }.toString(), label = "in lists")
+                StatCell(value = state.streak.current.toString(), label = "current streak")
+                StatCell(value = state.streak.longest.toString(), label = "longest streak")
+            }
+            val today = state.today
+            if (today != null) {
+                ActivityHeatmap(
+                    activity = state.activity,
+                    streak = state.streak,
+                    today = today,
+                )
             }
 
             Spacer(Modifier.height(32.dp))
