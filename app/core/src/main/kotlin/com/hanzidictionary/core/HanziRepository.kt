@@ -633,6 +633,37 @@ class HanziRepository(
     }
 
     /**
+     * Characters from [ids] to offer ahead of [hskWordCandidates]. The ones present in the
+     * pack and not in [exclude], easiest HSK level first and most common first within a
+     * level, then id. A character with no HSK level still qualifies — a photo find is not
+     * an HSK catalogue — and sorts last. Study state lives in the other database (the two
+     * are never ATTACHed), so the caller passes what it has already seen and this filters
+     * in Kotlin. Chunked like [sortByFrequency]: the id list can exceed SQLite's
+     * bound-parameter limit, and a glyph that lands in two chunks is still one candidate.
+     */
+    fun glyphCandidates(ids: List<String>, exclude: Set<String>, limit: Int): List<StudyItem> {
+        if (ids.isEmpty() || limit <= 0) return emptyList()
+        val rows = buildList {
+            for (chunk in ids.distinct().chunked(500)) {
+                addAll(db.hanziQueries.glyphsByIds(chunk).executeAsList())
+            }
+        }
+        return rows
+            .filter { it.id !in exclude }
+            .sortedWith(
+                compareBy(
+                    { it.hsk == null },
+                    { it.hsk },
+                    { it.freq_rank == null },
+                    { it.freq_rank },
+                    { it.id },
+                ),
+            )
+            .take(limit)
+            .map { StudyItem.character(it.id) }
+    }
+
+    /**
      * Component-compose search (spec §9 / M3.7): characters that contain EVERY one of
      * [parts], most-common first — for when the user can see a character's pieces
      * (氵 + 青 → 清) but can't type the whole thing. Each part also matches through

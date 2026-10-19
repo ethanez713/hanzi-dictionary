@@ -1,5 +1,6 @@
 package com.hanzidictionary.app.ui
 
+import android.graphics.Paint
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,11 +40,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.res.ResourcesCompat
 import com.hanzidictionary.app.HanziApp
+import com.hanzidictionary.app.R
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ItemSummary
 import com.hanzidictionary.core.TriageVerdict
+import com.hanzidictionary.core.charOfGlyphId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -59,14 +63,17 @@ private val DontKnowAction = SwipeAction("Don't know", "✗", Color(0xFFC62828))
 private const val SKIP_BUFFER = 12
 
 /**
- * New-word triage: the app shows an HSK word you haven't met in the app, and you say whether
- * you know it. A whole-screen overlay (not a tab) like Settings and the list editor.
+ * New-word triage: the app shows a character from your photos, or else an HSK word you
+ * haven't met in the app, and you say whether you know it. A whole-screen overlay (not a
+ * tab) like Settings and the list editor.
  *
- * It is only reachable while the deck is thin (see `newWordGap`), and it stops by itself once
- * it has added that many words — the point is to top the deck up, not to invite a binge. The
- * app never tests the claim: "know" files the word with a first rating that brings it back for
- * a real recall check in about a week, "don't know" files it as a plain new card, and up skips
- * it for a while without filing anything.
+ * Photos lead because those characters have already shown up in the user's life; the HSK
+ * list only fills a thin deck. It is only reachable while the deck is thin (see
+ * `newWordGap`), and it stops by itself once it has added that many items — the point is
+ * to top the deck up, not to invite a binge. The app never tests the claim: "know" files
+ * the item with a first rating that brings it back for a real recall check in about a
+ * week, "don't know" files it as a plain new card, and up skips it for a while without
+ * filing anything.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +89,7 @@ fun TriageScreen(
 
     var loaded by remember { mutableStateOf(false) }
     var queue by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
+    var fromPhotos by remember { mutableStateOf<Set<String>>(emptySet()) }
     var target by remember { mutableIntStateOf(0) }
     var index by remember { mutableIntStateOf(0) }
     var added by remember { mutableIntStateOf(0) }
@@ -91,16 +99,38 @@ fun TriageScreen(
     // two swipes racing to do that would leave two of them.
     val writes = remember { Mutex() }
 
+    // The pack includes characters the bundled Noto font has no glyph for; they'd render as
+    // tofu boxes. Same test the photo feed uses, so triage never offers one either.
+    val glyphPaint = remember {
+        Paint().apply { typeface = ResourcesCompat.getFont(context, R.font.noto_sans_cjk_sc) }
+    }
+
     LaunchedEffect(Unit) {
-        val (want, picks) = withContext(Dispatchers.IO) {
+        val (want, picks, photoSet) = withContext(Dispatchers.IO) {
             val study = app.studyRepository
             val wanted = study.newWordsWanted()
             val seen = study.everSeenIds() + study.recentlySkippedIds()
-            val candidates = repository.hskWordCandidates(seen, wanted + SKIP_BUFFER)
-            wanted to repository.itemSummaries(candidates)
+            val quota = wanted + SKIP_BUFFER
+            // A character already met in a photo is a better suggestion than the next HSK
+            // word, so photo finds lead and the word list only fills what's left. Seen-state
+            // lives in the other database, so both filters take it as a set.
+            val photoIds = app.userRepository.recentPhotoFinds().map { it.glyphId }
+            val photos = repository.glyphCandidates(photoIds, seen, quota)
+                .filter { glyphPaint.hasGlyph(charOfGlyphId(it.itemId)) }
+            val words = if (photos.size < quota) {
+                repository.hskWordCandidates(seen + photoIds, quota - photos.size)
+            } else {
+                emptyList()
+            }
+            Triple(
+                wanted,
+                repository.itemSummaries(photos + words),
+                photos.map { it.itemId }.toSet(),
+            )
         }
         target = want
         queue = picks
+        fromPhotos = photoSet
         loaded = true
     }
 
@@ -180,7 +210,7 @@ fun TriageScreen(
                         upAction = SkipAction,
                         onSwipeUp = { answer(TriageVerdict.SKIP) },
                     ) {
-                        TriageCard(card, revealed, eth) { revealed = true }
+                        TriageCard(card, revealed, card.item.itemId in fromPhotos, eth) { revealed = true }
                     }
                     Text(
                         "← don't know        know →",
@@ -196,7 +226,13 @@ fun TriageScreen(
 }
 
 @Composable
-private fun TriageCard(summary: ItemSummary, revealed: Boolean, eth: EthanColors, onReveal: () -> Unit) {
+private fun TriageCard(
+    summary: ItemSummary,
+    revealed: Boolean,
+    fromPhotos: Boolean,
+    eth: EthanColors,
+    onReveal: () -> Unit,
+) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -216,6 +252,9 @@ private fun TriageCard(summary: ItemSummary, revealed: Boolean, eth: EthanColors
             color = eth.ink900,
             textAlign = TextAlign.Center,
         )
+        if (fromPhotos) {
+            Text("from your photos", fontFamily = InstrumentSans, fontSize = 12.sp, color = eth.textFaint)
+        }
         if (revealed) {
             summary.pinyin?.let {
                 Text(it, fontFamily = PlexMono, fontSize = 20.sp, color = eth.ink900)
@@ -245,10 +284,10 @@ private fun TriageDone(added: Int, outOfWords: Boolean, eth: EthanColors, onDone
     ) {
         val message = when {
             added > 0 && outOfWords ->
-                "Added $added. That's every HSK word left to offer for now."
+                "Added $added. That's everything left to offer for now."
             added > 0 ->
                 "Added $added new ${if (added == 1) "word" else "words"}. That's enough for the next sitting."
-            outOfWords -> "No more HSK words to offer right now."
+            outOfWords -> "Nothing left to offer right now."
             else -> "Your deck has plenty coming up — no new words needed yet."
         }
         Text(
