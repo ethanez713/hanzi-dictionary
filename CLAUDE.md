@@ -161,6 +161,11 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   together), and every text run drawn by `NudgeArt` as a tinted alpha-mask bitmap in the bundled
   fonts (Noto CJK / Piazzolla / Plex Mono / Instrument Sans), since RemoteViews TextViews only get
   system fonts. Keep those bitmaps small — they ride the ~1 MB binder parcel of every notify().
+- **Engagement mechanics are display-only.** The streak, daily-goal ring, heatmap, milestones and
+  the evening streak reminder read `review_log` through `Streak.kt` (a study day is ≥1 review with
+  `origin <> 'triage'`) and never feed scheduling or gate a card. The reminder stays on the silent
+  `IMPORTANCE_LOW` channel. Constants are anchored in `docs/research/engagement.md`; change them
+  there, with a reason.
 - **Never treat one correct answer as "learned".** Readiness to archive lives in `Mastery.kt` and
   is built from the graded history (streak on *distinct days*, gap before the latest success, FSRS
   stability, lapses); its constants are documented judgement calls anchored to
