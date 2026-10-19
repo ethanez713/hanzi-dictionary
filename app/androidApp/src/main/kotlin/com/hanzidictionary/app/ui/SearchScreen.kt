@@ -25,6 +25,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
@@ -72,12 +74,15 @@ import android.graphics.Paint
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.R
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.PhotoSort
 import com.hanzidictionary.core.SearchResult
+import com.hanzidictionary.core.sortFinds
 import com.hanzidictionary.core.SourceInfo
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.WordHit
@@ -243,6 +248,20 @@ fun SearchScreen(
                 anchorIndex = index
                 anchorOffset = offset
             }
+    }
+    // The feed keeps its place by row key, so a new order would stay parked on whichever
+    // tile was on screen — and the saved anchor is an index into the order that just
+    // stopped existing. A changed sort opens at the top. Entering the screen is not a
+    // change: that would throw away the anchor the effect above just restored.
+    var scrollPhotoFeedToTop by remember { mutableStateOf(false) }
+    LaunchedEffect(scrollPhotoFeedToTop) {
+        if (!scrollPhotoFeedToTop) return@LaunchedEffect
+        anchorIndex = 0
+        anchorOffset = 0
+        feedState.scrollToItem(0)
+        anchorIndex = 0
+        anchorOffset = 0
+        scrollPhotoFeedToTop = false
     }
 
     // Characters the user recently opened, so the home screen is a quick way back to what
@@ -416,6 +435,15 @@ fun SearchScreen(
                     clipSuggestion = clipSuggestion,
                     showDefinitions = showDefinitions,
                     onToggleDefinitions = { showDefinitions = !showDefinitions },
+                    sort = app.settings.photoSort,
+                    onSortChange = { next ->
+                        if (next != app.settings.photoSort) {
+                            app.settings.updatePhotoSort(next)
+                            anchorIndex = 0
+                            anchorOffset = 0
+                            scrollPhotoFeedToTop = true
+                        }
+                    },
                     repository = repository,
                     tts = tts,
                     lookupStack = lookupStack,
@@ -553,6 +581,8 @@ private fun PhotoFeed(
     clipSuggestion: String?,
     showDefinitions: Boolean,
     onToggleDefinitions: () -> Unit,
+    sort: PhotoSort,
+    onSortChange: (PhotoSort) -> Unit,
     repository: HanziRepository,
     tts: MandarinTts,
     lookupStack: LookupStack,
@@ -564,6 +594,7 @@ private fun PhotoFeed(
     onDismiss: (SearchResult) -> Unit,
     onUndo: (String) -> Unit,
 ) {
+    val orderedFinds = finds?.let { sortFinds(it, sort) }
     val muted = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
     // Android's back-gesture strip owns the outer ~28dp of both screen edges: a drag that
     // STARTS there belongs to the system, which is why the first and last tile columns could
@@ -595,17 +626,26 @@ private fun PhotoFeed(
             }
         }
         stickyHeader(key = "photos-header") {
-            FeedHeader("From your photos") {
-                // The one control that changes what every row below looks like sits in the
-                // header that's pinned while you scroll them.
-                FilterChip(
-                    selected = showDefinitions,
-                    onClick = onToggleDefinitions,
-                    label = { Text("Definitions", fontSize = 12.sp) },
-                )
-                IconButton(onClick = onRescan, enabled = granted && finds != null) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Scan photos again")
+            // The sort joins this pinned header on its own row: the title row already
+            // holds the definitions switch and the rescan button, and a third control
+            // doesn't fit beside them.
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(androidx.compose.material3.MaterialTheme.colorScheme.background),
+            ) {
+                FeedHeader("From your photos") {
+                    // The one control that changes what every row below looks like sits in the
+                    // header that's pinned while you scroll them.
+                    FilterChip(
+                        selected = showDefinitions,
+                        onClick = onToggleDefinitions,
+                        label = { Text("Definitions", fontSize = 12.sp) },
+                    )
+                    IconButton(onClick = onRescan, enabled = granted && orderedFinds != null) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Scan photos again")
+                    }
                 }
+                PhotoSortButton(sort, onSortChange)
             }
         }
         when {
@@ -618,7 +658,7 @@ private fun PhotoFeed(
                     TextButton(onClick = onAllow) { Text("Allow") }
                 }
             }
-            finds == null -> item(key = "scanning") {
+            orderedFinds == null -> item(key = "scanning") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     val p = scanProgress
                     if (p != null && p.second > 0) {
@@ -633,7 +673,7 @@ private fun PhotoFeed(
                     }
                 }
             }
-            finds.isEmpty() -> item(key = "empty") {
+            orderedFinds.isEmpty() -> item(key = "empty") {
                 Text(
                     "No characters in recent photos yet. Photograph something with Chinese " +
                         "text on it, then tap ↻.",
@@ -657,7 +697,7 @@ private fun PhotoFeed(
                     )
                 }
                 if (showDefinitions) {
-                    items(finds, key = { it.glyphId }) { f ->
+                    items(orderedFinds, key = { it.glyphId }) { f ->
                         val triaged = pending[f.glyphId]
                         if (triaged != null) {
                             ItemRow(
@@ -695,7 +735,7 @@ private fun PhotoFeed(
                     // Chunked into fixed rows rather than a LazyVerticalGrid: a grid can't
                     // nest inside this LazyColumn (unbounded height), and the column is what
                     // gives the section headers their stickiness.
-                    items(finds.chunked(FEED_COLUMNS), key = { it.first().glyphId }) { row ->
+                    items(orderedFinds.chunked(FEED_COLUMNS), key = { it.first().glyphId }) { row ->
                         TileRow(row) { f ->
                             val triaged = pending[f.glyphId]
                             if (triaged != null) {
@@ -749,6 +789,39 @@ private fun PhotoFeed(
                     color = muted,
                 )
                 Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+private val PhotoSort.label: String
+    get() = when (this) {
+        PhotoSort.RECENT -> "Recent"
+        PhotoSort.HSK -> "HSK"
+        PhotoSort.FREQUENCY -> "Frequency"
+    }
+
+@Composable
+private fun PhotoSortButton(sort: PhotoSort, onSortChange: (PhotoSort) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { open = true }) {
+            Text("${sort.label} ▾", fontSize = 13.sp)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (option in PhotoSort.entries) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            option.label,
+                            fontWeight = if (option == sort) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    },
+                    onClick = {
+                        onSortChange(option)
+                        open = false
+                    },
+                )
             }
         }
     }

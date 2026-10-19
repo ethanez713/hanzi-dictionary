@@ -9,6 +9,7 @@ data class SearchResult(
     val primaryPinyin: String?,
     val definition: String?,   // short English gloss, shown in the result row
     val freqRank: Long?,
+    val hsk: Long?,            // lowest HSK level of any word containing this character
     val tradChar: String? = null, // traditional form folded into this row (輕 on 轻's row)
 )
 
