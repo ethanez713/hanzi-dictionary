@@ -387,6 +387,19 @@ class StudyRepository(
             .mapTo(HashSet()) { it.key.removePrefix(PREF_TRIAGE_SKIP) }
     }
 
+    /** Notes already played. The id is the part after `milestone:` (`streak:30`). */
+    fun shownMilestones(): Set<String> =
+        q.milestonePrefs().executeAsList()
+            .mapTo(HashSet()) { it.key.removePrefix(PREF_MILESTONE) }
+
+    /** Record [ids] so [shownMilestones] hides them. Includes a note's [Milestone.alsoShown]. */
+    fun markMilestonesShown(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        q.transaction {
+            for (id in ids) q.setPref("$PREF_MILESTONE$id", "1")
+        }
+    }
+
     /**
      * Applies a swipe on a suggested new word. Nothing here decides whether the user *really*
      * knows it — they say so, the app takes their word, and keeps the claim honest by how it
@@ -744,6 +757,7 @@ class StudyRepository(
         const val ORIGIN_AUDIT = "audit"
         private const val HISTORY_CHUNK = 500
         private const val PREF_TRIAGE_SKIP = "triage_skip:"
+        private const val PREF_MILESTONE = "milestone:"
 
         /** How long a skipped suggestion stays out of the offer. */
         const val TRIAGE_SKIP_TTL_DAYS = 14L

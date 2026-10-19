@@ -64,12 +64,14 @@ import com.hanzidictionary.core.DeckEntry
 import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ItemSummary
+import com.hanzidictionary.core.Milestone
 import com.hanzidictionary.core.PracticeState
 import com.hanzidictionary.core.Rating
 import com.hanzidictionary.core.StreakState
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.deckOpenedAt
 import com.hanzidictionary.core.finalCheckStudyLine
+import com.hanzidictionary.core.newMilestone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -114,6 +116,8 @@ fun PracticeScreen(
     var streak by remember {
         mutableStateOf(StreakState(0, 0, studiedToday = false, frozenDays = emptySet()))
     }
+    // Cleared by a tap, or by the next deal (the note is pinned to [ShownMilestone.dealt]).
+    var banner by remember { mutableStateOf<ShownMilestone?>(null) }
 
     LaunchedEffect(source, resumeToken) {
         loaded = false
@@ -126,11 +130,17 @@ fun PracticeScreen(
         val chrome = withContext(Dispatchers.IO) {
             val study = app.studyRepository
             val now = System.currentTimeMillis()
+            val streakState = study.streakState(now)
             PracticeChrome(
                 newWordsWanted = study.newWordsWanted(),
                 finalCheckReady = study.finalCheckStatus().eligible,
                 reviewsToday = study.goalReviewsToday(now),
-                streak = study.streakState(now),
+                streak = streakState,
+                milestone = newMilestone(
+                    streakState.current,
+                    app.userRepository.knownIds().size,
+                    study.shownMilestones(),
+                ),
             )
         }
         newWordsWanted = chrome.newWordsWanted
@@ -139,6 +149,9 @@ fun PracticeScreen(
         streak = chrome.streak
         state = deckOpenedAt(deck = entries, pin = app.practiceCardPin)
         summaries = found
+        val hit = chrome.milestone
+        if (hit != null) markMilestoneShown(app, hit)
+        banner = hit?.let { ShownMilestone(it.message, state.dealt) }
         loaded = true
     }
 
@@ -167,17 +180,37 @@ fun PracticeScreen(
         val entry = state.current ?: return
         // A gap this long means the app was backgrounded mid-card, not that recall took minutes.
         val reveal = revealMs?.takeIf { it <= REVEAL_MS_CAP }
+        // The UI dispatcher runs a launch body immediately, up to its first suspend.
+        // Deal first, and capture the new dealt out here, so the note sticks to the
+        // card this grade revealed.
+        state = state.advance(requeue = rating == Rating.AGAIN)
+        val noteDealt = state.dealt
         scope.launch {
-            val snapshot = withContext(Dispatchers.IO) {
+            val followUp = withContext(Dispatchers.IO) {
                 app.studyRepository.grade(entry.item, rating, revealMs = reveal)
                 val now = System.currentTimeMillis()
-                app.studyRepository.goalReviewsToday(now) to app.studyRepository.streakState(now)
+                val streakState = app.studyRepository.streakState(now)
+                GradeFollowUp(
+                    reviewsToday = app.studyRepository.goalReviewsToday(now),
+                    streak = streakState,
+                    milestone = newMilestone(
+                        streakState.current,
+                        app.userRepository.knownIds().size,
+                        app.studyRepository.shownMilestones(),
+                    ),
+                )
             }
-            reviewsToday = snapshot.first
-            streak = snapshot.second
+            reviewsToday = followUp.reviewsToday
+            streak = followUp.streak
             PracticeWidgetUpdater.refresh(context)
+            // A further deal means this note missed its card. Leave it unrecorded so
+            // the next check can play it, instead of pinning it to a later card.
+            val hit = followUp.milestone
+            if (hit != null && state.dealt == noteDealt) {
+                markMilestoneShown(app, hit)
+                if (state.dealt == noteDealt) banner = ShownMilestone(hit.message, noteDealt)
+            }
         }
-        state = state.advance(requeue = rating == Rating.AGAIN)
     }
 
     fun archive() {
@@ -269,6 +302,10 @@ fun PracticeScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxSize()) {
+                val note = banner?.takeIf { loaded && it.dealt == state.dealt }
+                if (note != null) {
+                    MilestoneBanner(note.message, eth) { banner = null }
+                }
                 // Tapping the deck strip edits the list being studied — but only a real
                 // user list is editable; HSK/Encountered/Everything pools are not.
                 val editableListId = (source as? DeckSource.UserList)?.listId
@@ -377,7 +414,54 @@ private data class PracticeChrome(
     val finalCheckReady: Int,
     val reviewsToday: Long,
     val streak: StreakState,
+    val milestone: Milestone?,
 )
+
+private data class GradeFollowUp(
+    val reviewsToday: Long,
+    val streak: StreakState,
+    val milestone: Milestone?,
+)
+
+/** On screen only while [dealt] is still the deal that published it. */
+private data class ShownMilestone(val message: String, val dealt: Int)
+
+/** Record the note and the lower thresholds it skipped before it is drawn, so
+ * leaving the screen cannot make the same one play again. */
+private suspend fun markMilestoneShown(app: HanziApp, hit: Milestone) {
+    withContext(Dispatchers.IO) {
+        app.studyRepository.markMilestonesShown(setOf(hit.id) + hit.alsoShown)
+    }
+}
+
+@Composable
+private fun MilestoneBanner(message: String, eth: EthanColors, onDismiss: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(eth.jade100)
+            .clickable(onClick = onDismiss)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "✓",
+            fontFamily = PlexMono,
+            fontSize = 12.sp,
+            color = eth.jade600,
+            modifier = Modifier.clearAndSetSemantics {},
+        )
+        Text(
+            message,
+            fontFamily = InstrumentSans,
+            fontSize = 13.sp,
+            color = eth.jade600,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 @Composable
 private fun StreakChip(days: Int, studiedToday: Boolean, eth: EthanColors) {

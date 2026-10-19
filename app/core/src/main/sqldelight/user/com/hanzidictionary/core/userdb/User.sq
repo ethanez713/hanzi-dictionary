@@ -309,6 +309,11 @@ SELECT item_id FROM card_state;
 triageSkips:
 SELECT key, value FROM app_pref WHERE key LIKE 'triage_skip:%';
 
+-- One-time study notes already played. The key is milestone:<id> (streak:30,
+-- archived:100); the value is unused. Same table as triage skips — no migration.
+milestonePrefs:
+SELECT key, value FROM app_pref WHERE key LIKE 'milestone:%';
+
 -- Newest grading from any origin (null before the first), for the reminder's "have they
 -- already studied today / how long since" rules.
 lastReviewTs:

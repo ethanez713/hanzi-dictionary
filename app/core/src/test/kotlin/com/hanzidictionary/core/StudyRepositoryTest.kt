@@ -340,6 +340,33 @@ class StudyRepositoryTest {
     }
 
     @Test
+    fun milestonesAreStoredOnceUnderAMilestonePrefix() {
+        assertEquals(emptySet(), study.shownMilestones())
+        study.markMilestonesShown(emptySet())
+        assertEquals(emptySet(), study.shownMilestones())
+
+        val hit = newMilestone(30, 500, study.shownMilestones())!!
+        study.markMilestonesShown(setOf(hit.id) + hit.alsoShown)
+
+        val prefs = UserDatabase(driver).userQueries
+        assertEquals("1", prefs.getPref("milestone:streak:30").executeAsOne())
+        assertEquals("1", prefs.getPref("milestone:streak:7").executeAsOne())
+        assertNull(prefs.getPref("milestone:archived:500").executeAsOneOrNull())
+        assertEquals(setOf("streak:7", "streak:30"), study.shownMilestones())
+
+        // A triage skip lives in the same table and must not read back as a note.
+        study.triage(nihao, TriageVerdict.SKIP, now)
+        assertEquals(setOf("streak:7", "streak:30"), study.shownMilestones())
+        assertEquals(setOf(nihao.itemId), study.recentlySkippedIds(now))
+
+        val next = newMilestone(30, 500, study.shownMilestones())!!
+        assertEquals("archived:500", next.id)
+        study.markMilestonesShown(setOf(next.id) + next.alsoShown)
+        assertEquals(setOf("streak:7", "streak:30", "archived:100", "archived:500"), study.shownMilestones())
+        assertNull(newMilestone(30, 500, study.shownMilestones()))
+    }
+
+    @Test
     fun everSeenCoversListedArchivedAndScheduledItems() {
         val list = study.createList("A", now)
         study.addToList(list, hao, now)

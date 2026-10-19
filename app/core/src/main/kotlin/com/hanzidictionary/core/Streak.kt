@@ -87,3 +87,48 @@ private fun bridgedLength(
     if ((1..STREAK_FREEZE_WINDOW_DAYS).any { day - it in frozen }) return 0
     return prev + 1
 }
+
+/** Streak lengths that earn a one-time note. */
+val STREAK_MILESTONES = listOf(7, 30, 100, 365)
+
+/** Archive sizes that earn a one-time note. */
+val ARCHIVED_MILESTONES = listOf(100, 500, 1000)
+
+/**
+ * A one-time study note. [alsoShown] is every lower threshold of the same kind
+ * crossed at the same moment: jumping from no streak to 30 days celebrates 30
+ * only, and those skipped ids have to be recorded too or the next call would
+ * celebrate them.
+ */
+data class Milestone(
+    val id: String,
+    val message: String,
+    val alsoShown: Set<String> = emptySet(),
+)
+
+/**
+ * The single highest crossed threshold not in [shown]. When a streak threshold
+ * and an archive threshold are both new, the streak one is returned and the
+ * archive one stays unshown for the next call.
+ */
+fun newMilestone(streakDays: Int, archivedCount: Int, shown: Set<String>): Milestone? =
+    highestUnshown("streak", STREAK_MILESTONES, streakDays, shown) { "$it-day streak" }
+        ?: highestUnshown("archived", ARCHIVED_MILESTONES, archivedCount, shown) {
+            "$it characters archived"
+        }
+
+private fun highestUnshown(
+    kind: String,
+    thresholds: List<Int>,
+    value: Int,
+    shown: Set<String>,
+    message: (Int) -> String,
+): Milestone? {
+    val pending = thresholds.filter { value >= it && "$kind:$it" !in shown }
+    val top = pending.maxOrNull() ?: return null
+    return Milestone(
+        id = "$kind:$top",
+        message = message(top),
+        alsoShown = pending.filter { it != top }.mapTo(HashSet()) { "$kind:$it" },
+    )
+}
