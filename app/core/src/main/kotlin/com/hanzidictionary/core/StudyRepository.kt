@@ -293,12 +293,32 @@ class StudyRepository(
 
     /** Cards left in today's new-item budget. */
     fun newAllowance(now: Long = System.currentTimeMillis()): Int {
-        val introduced = q.newIntroducedSince(startOfDay(now)).executeAsOne()
+        val introduced = q.newIntroducedSince(startOfLocalDay(now)).executeAsOne()
         return (NEW_PER_DAY - introduced).coerceAtLeast(0L).toInt()
     }
 
     fun reviewsToday(now: Long = System.currentTimeMillis()): Long =
-        q.reviewCountSince(startOfDay(now)).executeAsOne()
+        q.reviewCountSince(startOfLocalDay(now)).executeAsOne()
+
+    /** Distinct items reviewed on each local day from [days] midnights ago through [now]. */
+    fun activity(
+        now: Long = System.currentTimeMillis(),
+        days: Int,
+        tz: TimeZone = TimeZone.getDefault(),
+    ): Map<Long, Int> {
+        // 24h steps back from local midnight, not civil midnights: the same clock as
+        // the new-card budget, so a review is "today" in both places.
+        val since = startOfLocalDay(now, tz) - days * DAY_MS
+        val rows = q.reviewItemsSince(since).executeAsList().map { ActivityRow(it.ts, it.item_id) }
+        return dailyActivity(rows, tz)
+    }
+
+    /** The streak as of [now]. A year-plus of history holds both the current run and
+     * the longest one, without reading every review ever logged. */
+    fun streakState(
+        now: Long = System.currentTimeMillis(),
+        tz: TimeZone = TimeZone.getDefault(),
+    ): StreakState = streak(activity(now, STREAK_LOOKBACK_DAYS, tz).keys, localDay(now, tz))
 
     /** When the newest grading happened, whatever surface it came from; null if never. */
     fun lastReviewAt(): Long? = q.lastReviewTs().executeAsOne().MAX
@@ -486,13 +506,6 @@ class StudyRepository(
             }
             undo.addedToListId?.let { q.removeListItem(it, undo.item.itemId) }
         }
-    }
-
-    /** Local midnight. Computed from the raw offset rather than java.time so this module
-     * stays as close to plain Kotlin as the rest of `core`. */
-    private fun startOfDay(now: Long): Long {
-        val offset = TimeZone.getDefault().getOffset(now)
-        return ((now + offset) / DAY_MS) * DAY_MS - offset
     }
 
     private fun answerCandidate(item: StudyItem, swipe: FinalCheckSwipe, now: Long): FinalCheckUndo? {
@@ -700,6 +713,10 @@ class StudyRepository(
         /** Anki's default is 20/day; 15 suits a dictionary that is not primarily a
          * flashcard app, where new items arrive from lookups all day anyway. */
         const val NEW_PER_DAY = 15L
+
+        /** History read for [streakState]. Long enough for the current run and the longest. */
+        private const val STREAK_LOOKBACK_DAYS = 400
+
         const val DEFAULT_LIST_NAME = "Saved"
         const val ORIGIN_APP = "app"
         const val ORIGIN_WIDGET = "widget"

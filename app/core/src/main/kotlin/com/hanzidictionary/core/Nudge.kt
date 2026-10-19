@@ -66,7 +66,7 @@ fun shouldNudge(
     return when (settings.mode) {
         NudgeMode.ADAPTIVE -> {
             // Studied today with cards still owed: the habit happened, but the work didn't finish.
-            val gap = if (lastReviewAt != null && sameLocalDay(lastReviewAt, now, tz)) interval else ADAPTIVE_GAP_HOURS * HOUR_MS
+            val gap = if (lastReviewAt != null && localDay(lastReviewAt, tz) == localDay(now, tz)) interval else ADAPTIVE_GAP_HOURS * HOUR_MS
             (sinceReview == null || sinceReview >= gap) && (sinceNudge == null || sinceNudge >= gap)
         }
         NudgeMode.INTERVAL ->
@@ -96,9 +96,6 @@ internal fun inWindow(now: Long, settings: NudgeSettings, tz: TimeZone): Boolean
     // A window that wraps midnight (e.g. 22:00–06:00).
     else minuteOfDay >= start || minuteOfDay < end
 }
-
-private fun sameLocalDay(a: Long, b: Long, tz: TimeZone): Boolean =
-    (a + tz.getOffset(a)) / DAY_MS == (b + tz.getOffset(b)) / DAY_MS
 
 /** The card just graded in a notification session, kept so the next render can show what the
  * answer was — a ✗ should still teach you something. */

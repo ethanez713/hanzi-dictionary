@@ -263,6 +263,13 @@ WHERE ts >= :since
 reviewCountSince:
 SELECT COUNT(*) FROM review_log WHERE ts >= :since;
 
+-- One row per grading since :since, for the activity streak. Triage is a claim, not a
+-- review, so it must not paint a day as studied.
+reviewItemsSince:
+SELECT ts, item_id
+FROM review_log
+WHERE ts >= :since AND origin <> 'triage';
+
 -- The latest real reviews' ratings, newest first — the "is the current deck manageable?" gate
 -- on suggesting new words. Triage self-reports are claims, not reviews, so they don't count.
 -- Final-check and archive spot-check grades are retrievals, so this filter leaves them in.

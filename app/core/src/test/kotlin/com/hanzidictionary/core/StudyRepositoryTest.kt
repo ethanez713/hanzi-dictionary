@@ -3,6 +3,7 @@ package com.hanzidictionary.core
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.hanzidictionary.core.userdb.UserDatabase
+import java.util.TimeZone
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -276,6 +277,32 @@ class StudyRepositoryTest {
         assertEquals(1L, study.reviewsToday(now))
         assertEquals(null, study.deckLoad(now).recentSuccess, "a claim must not feed the accuracy gate")
         assertEquals(0, study.masteryFor(listOf(nihao.itemId)).getValue(nihao.itemId).spacedStreak)
+    }
+
+    @Test
+    fun activityCountsDistinctStudiedItemsPerLocalDayAndSkipsTriage() {
+        val tz = TimeZone.getTimeZone("UTC")
+        study.grade(hao, Rating.GOOD, now = now)
+        study.grade(hao, Rating.AGAIN, now = now + 60_000)
+        study.grade(ni, Rating.GOOD, StudyRepository.ORIGIN_FINAL, now = now + 120_000)
+        study.triage(nihao, TriageVerdict.KNOW, now + 180_000)
+        study.grade(StudyItem.character("U+4E00"), Rating.GOOD, now = now - 30 * day)
+
+        assertEquals(mapOf(localDay(now, tz) to 2), study.activity(now + 180_000, days = 7, tz = tz))
+    }
+
+    @Test
+    fun streakStateTreatsAnEmptyTodayAsAtRiskAndIgnoresTriage() {
+        val tz = TimeZone.getTimeZone("UTC")
+        val midnight = startOfLocalDay(now, tz)
+        study.grade(hao, Rating.GOOD, now = midnight - 2 * day + 3_600_000)
+        study.grade(ni, Rating.GOOD, now = midnight - day + 3_600_000)
+        study.triage(nihao, TriageVerdict.KNOW, midnight + 3_600_000)
+
+        assertEquals(
+            StreakState(current = 2, longest = 2, studiedToday = false, frozenDays = emptySet()),
+            study.streakState(midnight + 3_600_000, tz),
+        )
     }
 
     @Test

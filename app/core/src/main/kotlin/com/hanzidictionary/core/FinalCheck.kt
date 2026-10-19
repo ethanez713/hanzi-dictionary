@@ -268,15 +268,10 @@ private fun elapsedSinceReview(lastReview: Long, now: Long): Double =
 
 private fun gapMillis(days: Double): Long = (days * DAY_MS.toDouble()).toLong()
 
-private fun localDay(ts: Long, tz: TimeZone): Long =
-    (ts + tz.getOffset(ts)) / DAY_MS
-
 private fun startOfNextLocalDay(ts: Long, tz: TimeZone): Long {
-    val offset = tz.getOffset(ts)
-    val day = (ts + offset) / DAY_MS
+    val day = localDay(ts, tz)
     // The offset at the next midnight can differ across a DST change. Recompute once
     // so the unlock is that local midnight rather than an hour either side of it.
-    val firstGuess = (day + 1) * DAY_MS - offset
-    val offsetThen = tz.getOffset(firstGuess)
-    return (day + 1) * DAY_MS - offsetThen
+    val firstGuess = (day + 1) * DAY_MS - tz.getOffset(ts)
+    return (day + 1) * DAY_MS - tz.getOffset(firstGuess)
 }
