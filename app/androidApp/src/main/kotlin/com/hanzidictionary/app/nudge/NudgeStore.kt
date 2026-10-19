@@ -11,8 +11,9 @@ import com.hanzidictionary.core.WidgetCardInfo
 
 /**
  * What the reminder remembers between its hourly job and the taps on the notification: when it
- * last opened, whether it is still open (cards owed), when the user last swiped it away, and the
- * in-notification session (the card on screen and the one just graded).
+ * last opened, whether it is still open (cards owed, or a streak reminder waiting on today's
+ * review), when the user last swiped it away, and the in-notification session (the card on
+ * screen and the one just graded).
  *
  * SharedPreferences rather than user.db, same as the widget: this is throwaway UI state that
  * must survive the process being killed between two taps, not study history. The history
@@ -28,10 +29,17 @@ internal class NudgeStore(context: Context) {
             prefs.edit().apply { if (value == null) remove(KEY_LAST_NUDGE) else putLong(KEY_LAST_NUDGE, value) }.apply()
         }
 
-    /** True from the moment a reminder first posts until nothing is owed. */
+    /** True from the moment a reminder first posts until nothing is owed — or, for a streak
+     * reminder, until a review lands today. See [holdsStreak]. */
     var open: Boolean
         get() = prefs.getBoolean(KEY_OPEN, false)
         set(value) = prefs.edit().putBoolean(KEY_OPEN, value).apply()
+
+    /** This open reminder is the evening streak nudge. Nothing is owed, so the usual
+     * "close when the deck is clear" rule would dismiss it at once; it stays until a
+     * review is logged today. */
+    val holdsStreak: Boolean
+        get() = prefs.getBoolean(KEY_STREAK_HOLD, false)
 
     var dismissedAt: Long?
         get() = prefs.getLong(KEY_DISMISSED, -1L).takeIf { it >= 0 }
@@ -39,13 +47,18 @@ internal class NudgeStore(context: Context) {
             prefs.edit().apply { if (value == null) remove(KEY_DISMISSED) else putLong(KEY_DISMISSED, value) }.apply()
         }
 
-    fun openReminder(now: Long) {
-        prefs.edit().putBoolean(KEY_OPEN, true).putLong(KEY_LAST_NUDGE, now).remove(KEY_DISMISSED).commit()
+    fun openReminder(now: Long, holdsStreak: Boolean = false) {
+        prefs.edit()
+            .putBoolean(KEY_OPEN, true)
+            .putLong(KEY_LAST_NUDGE, now)
+            .putBoolean(KEY_STREAK_HOLD, holdsStreak)
+            .remove(KEY_DISMISSED)
+            .commit()
     }
 
-    /** Nothing is owed: forget the reminder and its session. */
+    /** Nothing is owed, or today's streak is kept: forget the reminder and its session. */
     fun closeReminder() {
-        val editor = prefs.edit().putBoolean(KEY_OPEN, false).remove(KEY_DISMISSED)
+        val editor = prefs.edit().putBoolean(KEY_OPEN, false).remove(KEY_DISMISSED).remove(KEY_STREAK_HOLD)
         for (key in CARD_KEYS + PREV_KEYS + KEY_GRADED) editor.remove(key)
         editor.commit()
     }
@@ -112,6 +125,7 @@ internal class NudgeStore(context: Context) {
         const val PREFS = "nudge"
         const val KEY_LAST_NUDGE = "last_nudge_at"
         const val KEY_OPEN = "open"
+        const val KEY_STREAK_HOLD = "streak_hold"
         const val KEY_DISMISSED = "dismissed_at"
         const val KEY_TITLE = "title"
         const val KEY_ITEM = "item"

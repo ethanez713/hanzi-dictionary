@@ -13,14 +13,18 @@ import com.hanzidictionary.core.DeckEntry
 import com.hanzidictionary.core.nudgeTitle
 import com.hanzidictionary.core.shouldNudge
 import com.hanzidictionary.core.shouldReshow
+import com.hanzidictionary.core.shouldStreakNudge
 import com.hanzidictionary.core.startNudgeSession
+import com.hanzidictionary.core.startStreakNudgeSession
+import com.hanzidictionary.core.streakNudgeTitle
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
  * The hourly tick behind the study reminder. It only *asks* — every rule about whether now is
- * a good moment (waking window, partial day, interval since a swipe-away) is the pure
- * [shouldNudge] / [shouldReshow] in `core`; this class gathers their inputs and posts the result.
+ * a good moment (waking window, partial day, interval since a swipe-away, the evening streak
+ * hold) is the pure [shouldNudge] / [shouldReshow] / [shouldStreakNudge] in `core`; this class
+ * gathers their inputs and posts the result.
  *
  * Hourly rather than scheduled-for-the-exact-minute on purpose: WorkManager periodic work is
  * deferrable and inexact, and "roughly the hour you usually study" is all the adaptive mode
@@ -40,7 +44,30 @@ class NudgeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         val owed = deck.count { it.bucket != DeckBucket.AHEAD }
 
         if (owed == 0) {
-            if (store.open) NudgeScheduler.close(applicationContext)
+            // Nothing is owed, which is also when a streak reminder lives. The usual close
+            // would dismiss it on the tick that posted it; it stays until a review lands today.
+            if (store.open) {
+                val held = heldStreakDays(app, store, now)
+                if (held != null) {
+                    if (deck.isNotEmpty() &&
+                        !app.inForeground &&
+                        !NudgeNotifier.isShowing(applicationContext) &&
+                        shouldReshow(now, settings, store.dismissedAt)
+                    ) {
+                        NudgeScheduler.postFresh(app, deck, owed, streakDays = held)
+                    }
+                    return Result.success()
+                }
+                NudgeScheduler.close(applicationContext)
+            }
+            if (deck.isNotEmpty()) {
+                val streak = app.studyRepository.streakState(now)
+                if (shouldStreakNudge(now, settings, streak, store.lastNudgeAt) &&
+                    NudgeScheduler.postFresh(app, deck, owed, streakDays = streak.current)
+                ) {
+                    store.openReminder(now, holdsStreak = true)
+                }
+            }
             return Result.success()
         }
         if (store.open) {
@@ -80,14 +107,26 @@ object NudgeScheduler {
         }
     }
 
-    /** Deals a fresh session from [deck] and posts it. False if nothing could be posted. */
-    internal fun postFresh(app: HanziApp, deck: List<DeckEntry>, owed: Int): Boolean {
-        val session = startNudgeSession(deck, { cardInfo(app, it) })
+    /**
+     * Deals a fresh session from [deck] and posts it. False if nothing could be posted.
+     * [streakDays] selects the evening streak reminder: the top ahead card and the streak
+     * title, instead of an owed card. An empty deck posts nothing.
+     */
+    internal fun postFresh(app: HanziApp, deck: List<DeckEntry>, owed: Int, streakDays: Int? = null): Boolean {
+        val session = if (streakDays == null) {
+            startNudgeSession(deck, { cardInfo(app, it) })
+        } else {
+            startStreakNudgeSession(deck, { cardInfo(app, it) })
+        }
         if (session.card == null) return false
         val store = NudgeStore(app)
         val now = System.currentTimeMillis()
         val dayIndex = TimeUnit.MILLISECONDS.toDays(now + TimeZone.getDefault().getOffset(now))
-        val title = nudgeTitle(dayIndex, owed)
+        val title = if (streakDays == null) {
+            nudgeTitle(dayIndex, owed)
+        } else {
+            streakNudgeTitle(dayIndex.toInt(), streakDays)
+        }
         store.title = title
         store.saveSession(session)
         NudgeNotifier.post(app, title, session)
@@ -101,19 +140,28 @@ object NudgeScheduler {
         NudgeStore(context).clearSession()
     }
 
-    /** The app went to the background: if cards are still owed, put the reminder back (silently)
-     * rather than leaving the user with nothing to pull them back in. */
+    /** The app went to the background: if cards are still owed — or a streak reminder is still
+     * waiting on today's review — put the reminder back (silently). */
     fun reshowOnLeave(app: HanziApp) {
         val settings = app.settings.nudgeSettings()
         val store = NudgeStore(app)
         if (!settings.enabled || !store.open || !NudgeNotifier.canPost(app)) return
+        val now = System.currentTimeMillis()
         val deck = nudgeDeck(app)
         val owed = deck.count { it.bucket != DeckBucket.AHEAD }
-        when {
-            owed == 0 -> close(app)
-            app.inForeground -> Unit
-            shouldReshow(System.currentTimeMillis(), settings, store.dismissedAt) -> postFresh(app, deck, owed)
+        if (owed == 0) {
+            val held = heldStreakDays(app, store, now)
+            if (held != null) {
+                if (!app.inForeground && shouldReshow(now, settings, store.dismissedAt)) {
+                    postFresh(app, deck, owed, streakDays = held)
+                }
+                return
+            }
+            close(app)
+            return
         }
+        if (app.inForeground) return
+        if (shouldReshow(now, settings, store.dismissedAt)) postFresh(app, deck, owed)
     }
 
     /** Nothing is owed (or reminders were switched off): clear the notification and its state. */
@@ -121,4 +169,13 @@ object NudgeScheduler {
         NudgeNotifier.cancel(context)
         NudgeStore(context).closeReminder()
     }
+}
+
+/** Days still at risk on an open streak reminder, or null when the hold should end
+ * (today is already studied, or the run is already gone). */
+private fun heldStreakDays(app: HanziApp, store: NudgeStore, now: Long): Int? {
+    if (!store.holdsStreak) return null
+    val streak = app.studyRepository.streakState(now)
+    if (streak.studiedToday || streak.current < 1) return null
+    return streak.current
 }

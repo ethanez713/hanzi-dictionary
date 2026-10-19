@@ -42,6 +42,8 @@ class AppSettings(private val prefs: SharedPreferences) {
         private set
     var nudgeWindowEndMin by mutableStateOf(prefs.getInt(KEY_NUDGE_TO, NudgeSettings().windowEndMin))
         private set
+    var nudgeStreakReminder by mutableStateOf(prefs.getBoolean(KEY_NUDGE_STREAK, NudgeSettings().streakReminder))
+        private set
 
     /** A plain snapshot for the background job, which runs outside Compose. */
     fun nudgeSettings() = NudgeSettings(
@@ -50,6 +52,7 @@ class AppSettings(private val prefs: SharedPreferences) {
         intervalHours = nudgeIntervalHours,
         windowStartMin = nudgeWindowStartMin,
         windowEndMin = nudgeWindowEndMin,
+        streakReminder = nudgeStreakReminder,
     )
 
     fun updateNudgeEnabled(value: Boolean) {
@@ -75,6 +78,11 @@ class AppSettings(private val prefs: SharedPreferences) {
     fun updateNudgeWindowEnd(minutes: Int) {
         nudgeWindowEndMin = minutes
         prefs.edit().putInt(KEY_NUDGE_TO, minutes).apply()
+    }
+
+    fun updateNudgeStreakReminder(value: Boolean) {
+        nudgeStreakReminder = value
+        prefs.edit().putBoolean(KEY_NUDGE_STREAK, value).apply()
     }
 
     fun updateShowSwipeHints(value: Boolean) {
@@ -134,6 +142,7 @@ class AppSettings(private val prefs: SharedPreferences) {
         private const val KEY_NUDGE_INTERVAL = "nudge_interval_hours"
         private const val KEY_NUDGE_FROM = "nudge_window_start_min"
         private const val KEY_NUDGE_TO = "nudge_window_end_min"
+        private const val KEY_NUDGE_STREAK = "nudge_streak_reminder"
 
         fun coerceDailyGoal(value: Int): Int = DAILY_GOAL_CHOICES.minBy { abs(it - value) }
     }

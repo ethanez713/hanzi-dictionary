@@ -12,6 +12,7 @@ import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.MainActivity
 import com.hanzidictionary.app.R
 import com.hanzidictionary.app.widget.PracticeWidgetProvider
@@ -19,6 +20,7 @@ import com.hanzidictionary.core.NudgeGraded
 import com.hanzidictionary.core.NudgeSession
 import com.hanzidictionary.core.Rating
 import com.hanzidictionary.core.StudyItem
+import com.hanzidictionary.core.nudgeDoneTitle
 
 /**
  * Builds and posts the study-reminder notification — the practice screen in miniature, in its
@@ -91,10 +93,33 @@ internal object NudgeNotifier {
 
         if (card == null) {
             // Session over: say how it went, keep the last answer, then get out of the way.
+            // The line is a bitmap, same as the live card: a system-font title would be the
+            // only text in the shade not drawn in the app's faces.
             val last = session.previous
+            val streakDays = (context.applicationContext as? HanziApp)?.studyRepository?.streakState()?.current ?: 0
+            val headline = nudgeDoneTitle(session.graded, streakDays)
+            val art = NudgeArt(context)
+            val done = RemoteViews(context.packageName, R.layout.notification_done)
+            val width = art.contentWidthDp
+            done.setArt(
+                context, R.id.nudge_done_title,
+                art.line(headline, R.font.piazzolla_semibold, 15f, width),
+                R.color.nudge_ink, headline,
+            )
+            val detail = last?.let { "${it.front}  ${it.answer}" }
+            if (detail != null) {
+                done.setViewVisibility(R.id.nudge_done_detail, View.VISIBLE)
+                done.setArt(
+                    context, R.id.nudge_done_detail,
+                    art.line(detail, R.font.noto_sans_cjk_sc, 13f, width),
+                    R.color.nudge_text_muted, detail,
+                )
+            }
             builder
-                .setContentTitle(if (session.graded == 1) "All caught up · 1 reviewed" else "All caught up · ${session.graded} reviewed")
-                .setContentText(last?.let { "${it.front}  ${it.answer}" })
+                .setContentTitle(headline)
+                .setContentText(detail)
+                .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+                .setCustomContentView(done)
                 .setContentIntent(openIntent(context, null))
                 .setAutoCancel(true)
                 .setTimeoutAfter(DONE_TIMEOUT_MS)

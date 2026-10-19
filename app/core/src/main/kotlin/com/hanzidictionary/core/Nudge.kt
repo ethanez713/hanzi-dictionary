@@ -14,6 +14,10 @@ import kotlin.random.Random
  * comes back. The opening cadence follows Yancey & Settles (KDD 2020, Duolingo): send around the
  * hour the learner last studied. Persisting until the deck is clear is a deliberate choice of
  * this app's user over that study's caution about repeated nudges.
+ *
+ * [shouldStreakNudge] is the exception to "open until nothing is owed": with the deck already
+ * clear, one ahead card still keeps a live streak, and that reminder stays up until a review
+ * lands today rather than closing on the same tick that posted it.
  */
 
 enum class NudgeMode {
@@ -34,9 +38,15 @@ data class NudgeSettings(
     /** Waking window, minutes after local midnight. Nothing is posted outside it. */
     val windowStartMin: Int = 9 * 60,
     val windowEndMin: Int = 21 * 60,
+    /** Evening "your streak is at risk" reminder. Defaults on; [enabled] is still the master
+     * switch and still ships off, so this never posts until reminders themselves are opted into. */
+    val streakReminder: Boolean = true,
 )
 
 private const val HOUR_MS = 3_600_000L
+
+/** How close to the window's end the streak reminder may speak. */
+private const val STREAK_TAIL_MIN = 3 * 60
 
 /** Adaptive mode waits this long after the last review, so the nudge lands near the hour
  * you habitually study rather than at a fixed clock time (Duolingo uses ~23.5h). */
@@ -89,13 +99,46 @@ fun shouldReshow(
 }
 
 internal fun inWindow(now: Long, settings: NudgeSettings, tz: TimeZone): Boolean {
-    val minuteOfDay = (((now + tz.getOffset(now)) % DAY_MS) / 60_000L).toInt()
+    val minuteOfDay = minuteOfDay(now, tz)
     val start = settings.windowStartMin
     val end = settings.windowEndMin
     return if (start <= end) minuteOfDay in start until end
     // A window that wraps midnight (e.g. 22:00–06:00).
     else minuteOfDay >= start || minuteOfDay < end
 }
+
+/**
+ * Once-a-day evening nudge when a live streak has not been kept today. [shouldNudge] stays
+ * quiet here — nothing is owed — but one ahead card is still what keeps the run. Speaks only
+ * in the last three hours of the waking window, and not again after any reminder has already
+ * opened today.
+ */
+fun shouldStreakNudge(
+    now: Long,
+    settings: NudgeSettings,
+    streak: StreakState,
+    lastNudgeAt: Long?,
+    tz: TimeZone = TimeZone.getDefault(),
+): Boolean {
+    if (!settings.enabled || !settings.streakReminder) return false
+    if (streak.current < 1 || streak.studiedToday) return false
+    if (!inStreakTail(now, settings, tz)) return false
+    return lastNudgeAt == null || localDay(lastNudgeAt, tz) != localDay(now, tz)
+}
+
+/** Last [STREAK_TAIL_MIN] minutes of the waking window. A shorter window is all tail.
+ * "Last" is measured back from the window's end, so a window that wraps midnight
+ * (22:00–01:00) still ends on the far side of midnight, same as [inWindow]. */
+private fun inStreakTail(now: Long, settings: NudgeSettings, tz: TimeZone): Boolean {
+    if (!inWindow(now, settings, tz)) return false
+    val minuteOfDay = minuteOfDay(now, tz)
+    val end = settings.windowEndMin
+    val remaining = if (minuteOfDay < end) end - minuteOfDay else end + 24 * 60 - minuteOfDay
+    return remaining <= STREAK_TAIL_MIN
+}
+
+private fun minuteOfDay(now: Long, tz: TimeZone): Int =
+    (((now + tz.getOffset(now)) % DAY_MS) / 60_000L).toInt()
 
 /** The card just graded in a notification session, kept so the next render can show what the
  * answer was — a ✗ should still teach you something. */
@@ -119,6 +162,16 @@ fun startNudgeSession(
     random: Random = Random.Default,
 ): NudgeSession =
     NudgeSession(selectWidgetCard(deck.filter { it.bucket != DeckBucket.AHEAD }, random = random)?.let { summarize(it.item) })
+
+/** The card that keeps a streak when nothing is owed: the top of the ahead bucket.
+ * The deck builder already sorts that bucket by ascending predicted recall, same as practice-ahead. */
+fun startStreakNudgeSession(
+    deck: List<DeckEntry>,
+    summarize: (StudyItem) -> WidgetCardInfo?,
+): NudgeSession {
+    val top = deck.firstOrNull { it.bucket == DeckBucket.AHEAD } ?: return NudgeSession(null)
+    return NudgeSession(summarize(top.item))
+}
 
 /**
  * Advances [prev] after the card on screen was graded with [rating]. The graded card is kept
@@ -156,4 +209,25 @@ fun nudgeTitle(dayIndex: Long, dueCount: Int): String {
         "A quick pass: $cards",
     )
     return options[Math.floorMod(dayIndex, options.size.toLong()).toInt()]
+}
+
+/** Evening streak reminder, rotated by day for the same reason as [nudgeTitle]. */
+fun streakNudgeTitle(dayIndex: Int, streakDays: Int): String {
+    val n = streakDays
+    val running = if (n == 1) "1 day running — don't stop now" else "$n days running — don't stop now"
+    val options = listOf(
+        "Keep your $n-day streak",
+        "Day ${n + 1} is one card away",
+        running,
+        "One card keeps your $n-day streak",
+    )
+    return options[Math.floorMod(dayIndex, options.size)]
+}
+
+/** Closing line once the session's deck is clear. A live streak is part of "how it went";
+ * a zero streak keeps the old wording so a first day doesn't claim a run. */
+fun nudgeDoneTitle(graded: Int, streakDays: Int): String {
+    val reviewed = if (graded == 1) "1 reviewed" else "$graded reviewed"
+    return if (streakDays >= 1) "All caught up · $reviewed · $streakDays-day streak"
+    else "All caught up · $reviewed"
 }

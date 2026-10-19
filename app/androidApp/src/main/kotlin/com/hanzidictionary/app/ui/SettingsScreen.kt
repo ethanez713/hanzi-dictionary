@@ -210,6 +210,22 @@ private fun RemindersSection(settings: AppSettings, eth: EthanColors) {
     if (!settings.nudgeEnabled) return
 
     SettingsRow(
+        title = "Streak reminder",
+        subtitle = "Once a day, near the end of the window, if today's streak is still open.",
+    ) {
+        Switch(
+            checked = settings.nudgeStreakReminder,
+            onCheckedChange = { settings.updateNudgeStreakReminder(it) },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = eth.knob,
+                checkedTrackColor = eth.accent,
+                uncheckedThumbColor = eth.knob,
+                uncheckedTrackColor = eth.ink200,
+                uncheckedBorderColor = eth.borderDefault,
+            ),
+        )
+    }
+    SettingsRow(
         title = "When",
         subtitle = if (settings.nudgeMode == NudgeMode.ADAPTIVE) {
             "First one around when you usually study. It stays until today's cards are done."

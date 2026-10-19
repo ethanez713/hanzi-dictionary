@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Closing card, after the last grade. No gutters: nothing left to mark. Both lines are
+     ImageViews, as on notification_card.xml — RemoteViews TextViews can't use the bundled
+     faces, and this is the one notification that would otherwise fall back to them.
+     RemoteViews inflates a whitelist of view classes only: ImageView/LinearLayout here. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="2dp"
+    android:paddingBottom="4dp">
+
+    <ImageView
+        android:id="@+id/nudge_done_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:adjustViewBounds="true"
+        android:scaleType="fitStart" />
+
+    <ImageView
+        android:id="@+id/nudge_done_detail"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:adjustViewBounds="true"
+        android:scaleType="fitStart"
+        android:visibility="gone" />
+</LinearLayout>
