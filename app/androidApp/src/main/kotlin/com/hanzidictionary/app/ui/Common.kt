@@ -4,10 +4,12 @@ import android.Manifest
 import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Checkbox
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -97,6 +99,9 @@ fun isCommon(freqRank: Long?): Boolean = freqRank != null && freqRank <= COMMON_
  * them.
  *
  * [trailing] is where a screen adds its own state (a ✓ for archived, a due badge).
+ *
+ * [ownClick] is false when a parent handles the press. A clickable child consumes it,
+ * so a [SwipeRow] long-press wrapped around this row would never fire.
  */
 @Composable
 fun ItemRow(
@@ -107,11 +112,14 @@ fun ItemRow(
     secondaryText: String? = null,
     glossLines: Int = 2,
     dimmed: Boolean = false,
+    ownClick: Boolean = true,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     val alpha = if (dimmed) 0.45f else 1f
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp),
+        Modifier.fillMaxWidth()
+            .then(if (ownClick) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -138,6 +146,25 @@ fun ItemRow(
             }
         }
         trailing?.invoke()
+    }
+}
+
+/** A row that grows a leading checkbox in edit mode; outside it the row is untouched, so
+ * browsing keeps its full width. Tapping the checkbox or the row toggles the same selection. */
+@Composable
+fun SelectableRow(
+    editing: Boolean,
+    checked: Boolean,
+    onToggle: () -> Unit,
+    row: @Composable () -> Unit,
+) {
+    if (!editing) {
+        row()
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = checked, onCheckedChange = { onToggle() })
+        Box(Modifier.weight(1f)) { row() }
     }
 }
 

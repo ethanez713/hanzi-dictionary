@@ -3,9 +3,14 @@ package com.hanzidictionary.app.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -72,11 +77,72 @@ val SkipAction = SwipeAction("Skip", "↑", Color(0xFF9E9E9E))
 // so it can be unit-tested; see its KDoc for why a flat threshold was unreachable.
 
 /**
+ * Clicks and long-presses for a swipeable child.
+ *
+ * Nested *under* the drag detector, not on its pointerInput. The drag claims a gesture
+ * only after the finger moves past the touch slop, so a still long-press lands here, and
+ * that movement cancels the press so the swipe can finish. The content must not be
+ * clickable itself: a clickable child consumes the press and the long-press never fires.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PressableContent(
+    onClick: (() -> Unit)?,
+    onLongClick: (() -> Unit)?,
+    rippleOnTop: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val click by rememberUpdatedState(onClick)
+    val longClick by rememberUpdatedState(onLongClick)
+    val interaction = remember { MutableInteractionSource() }
+    val ripple = LocalIndication.current
+    if (onClick == null && onLongClick == null) {
+        content()
+        return
+    }
+    // invoke() on a nullable lambda is Unit?, which is not a () -> Unit body.
+    val press = { click?.invoke(); Unit }
+    val longPress: (() -> Unit)? = if (onLongClick == null) null else {
+        { longClick?.invoke(); Unit }
+    }
+    Box(
+        Modifier.fillMaxWidth().then(
+            if (rippleOnTop) {
+                Modifier.combinedClickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onLongClickLabel = if (longPress != null) "Select" else null,
+                    onLongClick = longPress,
+                    onClick = press,
+                )
+            } else {
+                Modifier.combinedClickable(
+                    onLongClickLabel = if (longPress != null) "Select" else null,
+                    onLongClick = longPress,
+                    onClick = press,
+                )
+            },
+        ),
+    ) {
+        content()
+        if (rippleOnTop) {
+            // The tile is an opaque card, so a ripple painted behind the content never shows.
+            Box(
+                Modifier.matchParentSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .indication(interaction, ripple),
+            )
+        }
+    }
+}
+
+/**
  * A list row that fires [onSwipeRight]/[onSwipeLeft] once dragged past a threshold, then
  * springs back. Either action may be null, in which case that direction resists.
  *
  * Also exposes both as TalkBack custom actions — a swipe-only affordance is invisible to
- * a screen reader (spec §15 a11y).
+ * a screen reader (spec §15 a11y). [onLongClick] joins them as "Select". Pass [onClick]
+ * alongside it; see [PressableContent] for why the content then can't handle its own taps.
  */
 @Composable
 fun SwipeRow(
@@ -84,6 +150,8 @@ fun SwipeRow(
     leftAction: SwipeAction? = null,
     onSwipeRight: (() -> Unit)? = null,
     onSwipeLeft: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -99,6 +167,7 @@ fun SwipeRow(
     var leftThreshold by remember { mutableFloatStateOf(base) }
     val right by rememberUpdatedState(onSwipeRight)
     val left by rememberUpdatedState(onSwipeLeft)
+    val longClick by rememberUpdatedState(onLongClick)
 
     val actions = buildList {
         if (right != null && rightAction != null) {
@@ -106,6 +175,9 @@ fun SwipeRow(
         }
         if (left != null && leftAction != null) {
             add(CustomAccessibilityAction(leftAction.label) { left?.invoke(); true })
+        }
+        if (longClick != null) {
+            add(CustomAccessibilityAction("Select") { longClick?.invoke(); true })
         }
     }
 
@@ -139,39 +211,49 @@ fun SwipeRow(
         Box(
             Modifier
                 .graphicsLayer { translationX = offset.value }
-                // Keyed on Unit, never on the callbacks: callers pass fresh lambdas every
-                // recomposition, so keying on them would tear down the gesture detector
-                // mid-drag. rememberUpdatedState keeps the reads below current instead.
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { start ->
-                            val x = originX + start.x
-                            rightThreshold = commitDistance(base, screenWidth - x)
-                            leftThreshold = commitDistance(base, x)
-                        },
-                        onDragEnd = {
-                            val fired = when {
-                                offset.value >= rightThreshold -> right
-                                offset.value <= -leftThreshold -> left
-                                else -> null
+                .then(
+                    if (onSwipeRight != null || onSwipeLeft != null) {
+                        // Keyed on Unit, never on the callbacks: callers pass fresh lambdas every
+                        // recomposition, so keying on them would tear down the gesture detector
+                        // mid-drag. rememberUpdatedState keeps the reads below current instead.
+                        // Absent entirely when neither swipe is set, so a selection tap isn't
+                        // competing with a drag that can never commit.
+                        Modifier.pointerInput(Unit) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { start ->
+                                    val x = originX + start.x
+                                    rightThreshold = commitDistance(base, screenWidth - x)
+                                    leftThreshold = commitDistance(base, x)
+                                },
+                                onDragEnd = {
+                                    val fired = when {
+                                        offset.value >= rightThreshold -> right
+                                        offset.value <= -leftThreshold -> left
+                                        else -> null
+                                    }
+                                    fired?.invoke()
+                                    scope.launch { offset.animateTo(0f, tween(180)) }
+                                },
+                                onDragCancel = { scope.launch { offset.animateTo(0f, tween(180)) } },
+                            ) { change, dragAmount ->
+                                val allowed = when {
+                                    dragAmount > 0 && right == null -> 0f
+                                    dragAmount < 0 && left == null -> 0f
+                                    else -> dragAmount
+                                }
+                                if (allowed != 0f) {
+                                    change.consume()
+                                    scope.launch { offset.snapTo(offset.value + allowed) }
+                                }
                             }
-                            fired?.invoke()
-                            scope.launch { offset.animateTo(0f, tween(180)) }
-                        },
-                        onDragCancel = { scope.launch { offset.animateTo(0f, tween(180)) } },
-                    ) { change, dragAmount ->
-                        val allowed = when {
-                            dragAmount > 0 && right == null -> 0f
-                            dragAmount < 0 && left == null -> 0f
-                            else -> dragAmount
                         }
-                        if (allowed != 0f) {
-                            change.consume()
-                            scope.launch { offset.snapTo(offset.value + allowed) }
-                        }
-                    }
-                },
-        ) { content() }
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
+            PressableContent(onClick, onLongClick, rippleOnTop = false, content)
+        }
     }
 }
 
@@ -324,6 +406,9 @@ private const val TILE_COMMIT_FRACTION = 0.42f
  *
  * Undo (the caller's snackbar) is the fourth. Vertical scrolling is untouched: this reads
  * horizontal drags only.
+ *
+ * [onLongClick] is a TalkBack "Select" action next to the swipes. Same press rules as
+ * [SwipeRow]: pass [onClick] with it and keep the tile content itself non-clickable.
  */
 @Composable
 fun SwipeTile(
@@ -332,6 +417,8 @@ fun SwipeTile(
     leftAction: SwipeAction? = null,
     onSwipeRight: (() -> Unit)? = null,
     onSwipeLeft: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -351,6 +438,7 @@ fun SwipeTile(
     var leftThreshold by remember { mutableFloatStateOf(base) }
     val right by rememberUpdatedState(onSwipeRight)
     val left by rememberUpdatedState(onSwipeLeft)
+    val longClick by rememberUpdatedState(onLongClick)
 
     // A new tile in this slot starts centred — otherwise a dismissed find leaves the next
     // one already half-dragged.
@@ -371,6 +459,9 @@ fun SwipeTile(
         if (left != null && leftAction != null) {
             add(CustomAccessibilityAction(leftAction.label) { left?.invoke(); true })
         }
+        if (longClick != null) {
+            add(CustomAccessibilityAction("Select") { longClick?.invoke(); true })
+        }
     }
 
     Box(
@@ -390,37 +481,43 @@ fun SwipeTile(
                     scaleY = lift
                     rotationZ = (offset.value / 60f).coerceIn(-10f, 10f)
                 }
-                .pointerInput(key) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { start ->
-                            val x = originX + start.x
-                            rightThreshold = commitDistance(base, screenWidth - x)
-                            leftThreshold = commitDistance(base, x)
-                        },
-                        onDragEnd = {
-                            val fired = when {
-                                offset.value >= rightThreshold -> right
-                                offset.value <= -leftThreshold -> left
-                                else -> null
+                .then(
+                    if (onSwipeRight != null || onSwipeLeft != null) {
+                        Modifier.pointerInput(key) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { start ->
+                                    val x = originX + start.x
+                                    rightThreshold = commitDistance(base, screenWidth - x)
+                                    leftThreshold = commitDistance(base, x)
+                                },
+                                onDragEnd = {
+                                    val fired = when {
+                                        offset.value >= rightThreshold -> right
+                                        offset.value <= -leftThreshold -> left
+                                        else -> null
+                                    }
+                                    fired?.invoke()
+                                    scope.launch { offset.animateTo(0f, tween(220)) }
+                                },
+                                onDragCancel = { scope.launch { offset.animateTo(0f, tween(220)) } },
+                            ) { change, dragAmount ->
+                                val allowed = when {
+                                    dragAmount > 0 && right == null -> 0f
+                                    dragAmount < 0 && left == null -> 0f
+                                    else -> dragAmount
+                                }
+                                if (allowed != 0f) {
+                                    change.consume()
+                                    scope.launch { offset.snapTo(offset.value + allowed) }
+                                }
                             }
-                            fired?.invoke()
-                            scope.launch { offset.animateTo(0f, tween(220)) }
-                        },
-                        onDragCancel = { scope.launch { offset.animateTo(0f, tween(220)) } },
-                    ) { change, dragAmount ->
-                        val allowed = when {
-                            dragAmount > 0 && right == null -> 0f
-                            dragAmount < 0 && left == null -> 0f
-                            else -> dragAmount
                         }
-                        if (allowed != 0f) {
-                            change.consume()
-                            scope.launch { offset.snapTo(offset.value + allowed) }
-                        }
-                    }
-                },
+                    } else {
+                        Modifier
+                    },
+                ),
         ) {
-            content()
+            PressableContent(onClick, onLongClick, rippleOnTop = true, content)
             if (hint != null && travelled > 0f) {
                 val progress = (travelled / threshold).coerceIn(0f, 1f)
                 Box(

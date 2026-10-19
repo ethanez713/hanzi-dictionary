@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -473,25 +472,6 @@ fun ListDetailScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
-    }
-}
-
-/** A row that grows a leading checkbox in edit mode; outside it the row is untouched, so
- * browsing keeps its full width. Tapping the checkbox or the row toggles the same selection. */
-@Composable
-private fun SelectableRow(
-    editing: Boolean,
-    checked: Boolean,
-    onToggle: () -> Unit,
-    row: @Composable () -> Unit,
-) {
-    if (!editing) {
-        row()
-        return
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = checked, onCheckedChange = { onToggle() })
-        Box(Modifier.weight(1f)) { row() }
     }
 }
 

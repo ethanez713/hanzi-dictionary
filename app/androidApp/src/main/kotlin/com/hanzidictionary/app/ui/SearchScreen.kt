@@ -1,13 +1,16 @@
 package com.hanzidictionary.app.ui
 
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -20,10 +23,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -39,6 +46,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -60,6 +68,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -120,7 +132,7 @@ fun SearchScreen(
 
     // Back with an active query clears it instead of exiting the app — mid-search the
     // user's mental "back" is "leave these results", not "leave the dictionary".
-    androidx.activity.compose.BackHandler(enabled = query.isNotBlank()) { onQueryChange("") }
+    BackHandler(enabled = query.isNotBlank()) { onQueryChange("") }
 
     // Paste-on-open (spec §9 capture): if the clipboard holds hanzi when the window
     // gains focus (clipboard is only readable while focused on API 29+), offer it as a
@@ -170,6 +182,10 @@ fun SearchScreen(
     // Photo finds that have been triaged but are still on screen, holding their slot until
     // the feed settles. See [TRIAGE_SETTLE_MS] for why the removal is deferred at all.
     var pending by remember { mutableStateOf<Map<String, PendingTriage>>(emptyMap()) }
+    // Long-press selection over the photo feed. Kept apart from [pending]: a tile still
+    // holding its own undo and a bulk selection never share the screen (see onPhotoLongPress).
+    var selecting by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     // (scanned, total) of the current OCR pass, for a determinate progress bar; null before
     // the batch size is known.
     var scanProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -180,6 +196,8 @@ fun SearchScreen(
         repository.glyphSummaries(rows.map { it.glyphId }).filter { glyphPaint.hasGlyph(it.char) }
     }
     LaunchedEffect(photosGranted, rescans) {
+        selecting = false
+        selected = emptySet()
         if (!photosGranted) return@LaunchedEffect
         photoFinds = null
         scanProgress = null
@@ -212,7 +230,11 @@ fun SearchScreen(
     // screen of tombstones under a timer that has been running the whole time you were
     // reading a definition.
     LaunchedEffect(query.isBlank()) {
-        if (query.isNotBlank()) settleTriage()
+        if (query.isNotBlank()) {
+            settleTriage()
+            selecting = false
+            selected = emptySet()
+        }
     }
     // Leaving the app does the same. Navigating *within* it — opening a character page,
     // starting Practice — needs no observer: the destination is disposed, `pending` goes with
@@ -347,6 +369,113 @@ fun SearchScreen(
         scope.launch { triage.undo() }
     }
 
+    fun exitSelect() {
+        selecting = false
+        selected = emptySet()
+    }
+
+    fun toggleSelected(glyphId: String) {
+        selected = if (glyphId in selected) selected - glyphId else selected + glyphId
+    }
+
+    // Tombstones carry their own undo. Drop them before a selection exists so a bulk
+    // undo isn't racing a tile that's still holding its slot.
+    fun onPhotoLongPress(find: SearchResult) {
+        if (selecting) {
+            toggleSelected(find.glyphId)
+            return
+        }
+        settleTriage()
+        selecting = true
+        selected = setOf(find.glyphId)
+    }
+
+    // Only the photo feed. Recently viewed is a way back, not part of this queue.
+    fun toggleSelectAll() {
+        val visible = photoFinds.orEmpty().map { it.glyphId }
+        val all = visible.isNotEmpty() && visible.all { it in selected }
+        selected = if (all) emptySet() else visible.toSet()
+    }
+
+    fun describeFinds(verb: String, items: List<SearchResult>) =
+        if (items.size == 1) "$verb ${items[0].char}" else "$verb ${items.size} items"
+
+    fun currentSelection(): List<SearchResult> =
+        photoFinds.orEmpty().filter { it.glyphId in selected }
+
+    fun beginBulk(items: List<SearchResult>) {
+        val ids = items.map { it.glyphId }.toSet()
+        selecting = false
+        selected = emptySet()
+        photoFinds = photoFinds?.filterNot { it.glyphId in ids }
+    }
+
+    fun addSelected() {
+        val items = currentSelection()
+        if (items.isEmpty()) return
+        beginBulk(items)
+        scope.launch {
+            val list = withContext(Dispatchers.IO) {
+                app.studyRepository.ensureActiveList().also { list ->
+                    for (f in items) {
+                        app.studyRepository.addToList(list.id, StudyItem.character(f.glyphId))
+                    }
+                }
+            }
+            photoFinds = loadPhotoFinds()
+            listRefresh++
+            PracticeWidgetUpdater.refresh(context)
+            if (snackbar.snack(describeFinds("Added", items), "Undo")) {
+                withContext(Dispatchers.IO) {
+                    for (f in items) app.studyRepository.removeFromList(list.id, f.glyphId)
+                }
+                photoFinds = loadPhotoFinds()
+                listRefresh++
+                PracticeWidgetUpdater.refresh(context)
+            }
+        }
+    }
+
+    fun archiveSelected() {
+        val items = currentSelection()
+        if (items.isEmpty()) return
+        beginBulk(items)
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                for (f in items) app.userRepository.setKnown(f.glyphId, true, StudyItem.KIND_CHARACTER)
+            }
+            photoFinds = loadPhotoFinds()
+            PracticeWidgetUpdater.refresh(context)
+            if (snackbar.snack(describeFinds("Archived", items), "Undo")) {
+                withContext(Dispatchers.IO) {
+                    for (f in items) app.userRepository.setKnown(f.glyphId, false, StudyItem.KIND_CHARACTER)
+                }
+                photoFinds = loadPhotoFinds()
+                PracticeWidgetUpdater.refresh(context)
+            }
+        }
+    }
+
+    fun dismissSelected() {
+        val items = currentSelection()
+        if (items.isEmpty()) return
+        beginBulk(items)
+        scope.launch {
+            val stamps = withContext(Dispatchers.IO) {
+                items.map { it.glyphId to app.userRepository.dismissPhotoWord(it.glyphId) }
+            }
+            photoFinds = loadPhotoFinds()
+            PracticeWidgetUpdater.refresh(context)
+            if (snackbar.snack(describeFinds("Dismissed", items), "Undo")) {
+                withContext(Dispatchers.IO) {
+                    for ((id, ts) in stamps) app.userRepository.undismissPhotoWord(id, ts)
+                }
+                photoFinds = loadPhotoFinds()
+                PracticeWidgetUpdater.refresh(context)
+            }
+        }
+    }
+
     // Component-compose mode (spec §9 / M3.7): the query's CJK characters are read as
     // PARTS and results are the characters containing all of them (氵青 → 清).
     var composeMode by remember { mutableStateOf(false) }
@@ -371,8 +500,20 @@ fun SearchScreen(
         }
     }.value
 
+    val bulkCount = photoFinds.orEmpty().count { it.glyphId in selected }
     Scaffold(
         snackbarHost = { AppSnackbarHost(snackbar) },
+        bottomBar = {
+            if (selecting && query.isBlank()) {
+                // Already laid out above the nav bar by the tab scaffold, so the default
+                // bar insets would pad for a system bar that isn't behind this one.
+                BottomAppBar(windowInsets = WindowInsets(0, 0, 0, 0)) {
+                    BulkBarButton(AddAction, "Add", bulkCount, ::addSelected)
+                    BulkBarButton(ArchiveAction, "Archive", bulkCount, ::archiveSelected)
+                    BulkBarButton(RemoveAction, "Dismiss", bulkCount, ::dismissSelected)
+                }
+            }
+        },
         topBar = {
             val eth = EthanTheme.colors
             TopAppBar(
@@ -456,6 +597,12 @@ fun SearchScreen(
                     onAdd = ::triageAdd,
                     onDismiss = ::triageDismiss,
                     onUndo = ::undoTriage,
+                    selecting = selecting,
+                    selected = selected,
+                    onLongPress = ::onPhotoLongPress,
+                    onToggle = ::toggleSelected,
+                    onExitSelect = ::exitSelect,
+                    onToggleSelectAll = ::toggleSelectAll,
                 )
             } else if (results.isEmpty() && wordHits.isEmpty()) {
                 Text(
@@ -593,8 +740,23 @@ private fun PhotoFeed(
     onAdd: (SearchResult) -> Unit,
     onDismiss: (SearchResult) -> Unit,
     onUndo: (String) -> Unit,
+    selecting: Boolean,
+    selected: Set<String>,
+    onLongPress: (SearchResult) -> Unit,
+    onToggle: (String) -> Unit,
+    onExitSelect: () -> Unit,
+    onToggleSelectAll: () -> Unit,
 ) {
+    // Back leaves the selection first. The query-clearing handler above this feed only
+    // applies once the feed itself is gone.
+    BackHandler(enabled = selecting) { onExitSelect() }
     val orderedFinds = finds?.let { sortFinds(it, sort) }
+    val visibleIds = orderedFinds?.map { it.glyphId }.orEmpty()
+    val selectedCount = visibleIds.count { it in selected }
+    val allSelected = visibleIds.isNotEmpty() && selectedCount == visibleIds.size
+    val openFind: (SearchResult) -> Unit = { f ->
+        lookupStack.push(LookupEntry(glyphId = f.glyphId, displayText = f.char))
+    }
     val muted = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
     // Android's back-gesture strip owns the outer ~28dp of both screen edges: a drag that
     // STARTS there belongs to the system, which is why the first and last tile columns could
@@ -628,21 +790,27 @@ private fun PhotoFeed(
         stickyHeader(key = "photos-header") {
             // The sort joins this pinned header on its own row: the title row already
             // holds the definitions switch and the rescan button, and a third control
-            // doesn't fit beside them.
+            // doesn't fit beside them. The select chrome replaces that title row rather
+            // than becoming its own list item — a row inserted above the finds would
+            // shift the saved scroll anchor onto a different character.
             Column(
                 Modifier.fillMaxWidth()
-                    .background(androidx.compose.material3.MaterialTheme.colorScheme.background),
+                    .background(MaterialTheme.colorScheme.background),
             ) {
-                FeedHeader("From your photos") {
-                    // The one control that changes what every row below looks like sits in the
-                    // header that's pinned while you scroll them.
-                    FilterChip(
-                        selected = showDefinitions,
-                        onClick = onToggleDefinitions,
-                        label = { Text("Definitions", fontSize = 12.sp) },
-                    )
-                    IconButton(onClick = onRescan, enabled = granted && orderedFinds != null) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Scan photos again")
+                if (selecting && orderedFinds != null) {
+                    SelectModeHeader(selectedCount, allSelected, onExitSelect, onToggleSelectAll)
+                } else {
+                    FeedHeader("From your photos") {
+                        // The one control that changes what every row below looks like sits in the
+                        // header that's pinned while you scroll them.
+                        FilterChip(
+                            selected = showDefinitions,
+                            onClick = onToggleDefinitions,
+                            label = { Text("Definitions", fontSize = 12.sp) },
+                        )
+                        IconButton(onClick = onRescan, enabled = granted && orderedFinds != null) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Scan photos again")
+                        }
                     }
                 }
                 PhotoSortButton(sort, onSortChange)
@@ -685,11 +853,15 @@ private fun PhotoFeed(
                 item(key = "swipe-hint") {
                     val destination = activeListName?.let { "“$it”" } ?: "your list"
                     Text(
-                        if (showDefinitions) {
-                            "Swipe right to add to $destination, left to remove. Tap $UNDO_MARK to undo."
-                        } else {
-                            "Drag a character to the edge of the screen — right adds it to " +
-                                "$destination, left removes it. Tap $UNDO_MARK to undo."
+                        when {
+                            selecting -> "Tap a character to select or deselect it."
+                            showDefinitions ->
+                                "Swipe right to add to $destination, left to remove. " +
+                                    "Tap $UNDO_MARK to undo. Hold to select several."
+                            else ->
+                                "Drag a character to the edge of the screen — right adds it to " +
+                                    "$destination, left removes it. Tap $UNDO_MARK to undo. " +
+                                    "Hold to select several."
                         },
                         fontSize = 12.sp,
                         color = muted,
@@ -714,19 +886,25 @@ private fun PhotoFeed(
                                 },
                             )
                         } else {
+                            val swiping = !selecting
                             SwipeRow(
-                                rightAction = AddAction,
-                                leftAction = RemoveAction,
-                                onSwipeRight = { onAdd(f) },
-                                onSwipeLeft = { onDismiss(f) },
+                                rightAction = if (swiping) AddAction else null,
+                                leftAction = if (swiping) RemoveAction else null,
+                                onSwipeRight = if (swiping) { { onAdd(f) } } else null,
+                                onSwipeLeft = if (swiping) { { onDismiss(f) } } else null,
+                                onClick = { if (selecting) onToggle(f.glyphId) else openFind(f) },
+                                onLongClick = { onLongPress(f) },
                             ) {
-                                ItemRow(
-                                    text = f.char,
-                                    pinyin = f.primaryPinyin,
-                                    gloss = f.definition?.let { displayGloss(it) },
-                                    glossLines = 1,
-                                    onClick = { lookupStack.push(LookupEntry(glyphId = f.glyphId, displayText = f.char)) },
-                                )
+                                SelectableRow(selecting, f.glyphId in selected, { onToggle(f.glyphId) }) {
+                                    ItemRow(
+                                        text = f.char,
+                                        pinyin = f.primaryPinyin,
+                                        gloss = f.definition?.let { displayGloss(it) },
+                                        glossLines = 1,
+                                        onClick = { if (selecting) onToggle(f.glyphId) else openFind(f) },
+                                        ownClick = false,
+                                    )
+                                }
                             }
                         }
                         HorizontalDivider()
@@ -741,14 +919,26 @@ private fun PhotoFeed(
                             if (triaged != null) {
                                 TriagedTile(f.char, triaged.action) { onUndo(f.glyphId) }
                             } else {
+                                val swiping = !selecting
+                                val chosen = f.glyphId in selected
                                 SwipeTile(
                                     key = f.glyphId,
-                                    rightAction = AddAction,
-                                    leftAction = RemoveAction,
-                                    onSwipeRight = { onAdd(f) },
-                                    onSwipeLeft = { onDismiss(f) },
+                                    rightAction = if (swiping) AddAction else null,
+                                    leftAction = if (swiping) RemoveAction else null,
+                                    onSwipeRight = if (swiping) { { onAdd(f) } } else null,
+                                    onSwipeLeft = if (swiping) { { onDismiss(f) } } else null,
+                                    onClick = { if (selecting) onToggle(f.glyphId) else openFind(f) },
+                                    onLongClick = { onLongPress(f) },
+                                    modifier = if (selecting) {
+                                        Modifier.semantics { this.selected = chosen }
+                                    } else {
+                                        Modifier
+                                    },
                                 ) {
-                                    CharacterTile(f.char) { lookupStack.push(LookupEntry(glyphId = f.glyphId, displayText = f.char)) }
+                                    Box {
+                                        CharacterTile(f.char)
+                                        if (selecting) TileCheck(chosen)
+                                    }
                                 }
                             }
                         }
@@ -857,13 +1047,93 @@ private fun <T> TileRow(items: List<T>, tile: @Composable (T) -> Unit) {
     }
 }
 
-/** A character on its own — the whole tile. Square so the grid reads as a grid. */
+/** A character on its own — the whole tile. Square so the grid reads as a grid.
+ *  No [onClick] when a parent [SwipeTile] owns the press, so a long-press can reach it. */
 @Composable
-private fun CharacterTile(char: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().aspectRatio(1f).clickable(onClick = onClick)) {
+private fun CharacterTile(char: String, onClick: (() -> Unit)? = null) {
+    val base = Modifier.fillMaxWidth().aspectRatio(1f)
+    Card(if (onClick != null) base.clickable(onClick = onClick) else base) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(char, fontSize = 30.sp)
         }
+    }
+}
+
+/** Corner mark plus a wash on the chosen tiles, so a selection stays readable as glyphs. */
+@Composable
+private fun BoxScope.TileCheck(checked: Boolean) {
+    if (checked) {
+        Box(
+            Modifier.matchParentSize()
+                .clip(RoundedCornerShape(12.dp))
+                .background(AddAction.color.copy(alpha = 0.18f)),
+        )
+    }
+    Box(
+        Modifier
+            .align(Alignment.TopEnd)
+            .padding(4.dp)
+            .size(18.dp)
+            .clip(CircleShape)
+            .background(if (checked) AddAction.color else MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+            .border(
+                1.dp,
+                if (checked) AddAction.color else MaterialTheme.colorScheme.outline,
+                CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) Text("✓", color = Color.White, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun SelectModeHeader(
+    count: Int,
+    allSelected: Boolean,
+    onClose: () -> Unit,
+    onToggleAll: () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onClose) {
+            Icon(Icons.Filled.Close, contentDescription = "Done selecting")
+        }
+        Text(
+            "·  $count selected  ·",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+        Spacer(Modifier.weight(1f))
+        TextButton(
+            onClick = onToggleAll,
+            contentPadding = PaddingValues(horizontal = 8.dp),
+        ) {
+            Text(if (allSelected && count > 0) "Select none" else "Select all", maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun RowScope.BulkBarButton(
+    action: SwipeAction,
+    label: String,
+    count: Int,
+    onClick: () -> Unit,
+) {
+    val on = count > 0
+    TextButton(
+        enabled = on,
+        onClick = onClick,
+        modifier = Modifier.weight(1f),
+        contentPadding = PaddingValues(horizontal = 4.dp),
+    ) {
+        Text(
+            "${action.icon} $label" + if (on) " ($count)" else "",
+            color = if (on) action.color else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            maxLines = 1,
+        )
     }
 }
 
