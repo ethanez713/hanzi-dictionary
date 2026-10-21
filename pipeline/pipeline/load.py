@@ -5,7 +5,6 @@ Single core.db for M0 (private PoC). The GPL-layer split into core.db/ids.db
 """
 from __future__ import annotations
 
-import json
 import sqlite3
 from pathlib import Path
 

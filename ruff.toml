@@ -1,0 +1,6 @@
+# Python in this repo is the data pipeline. The app is Kotlin.
+target-version = "py312"
+extend-exclude = ["app", "docs", "LICENSES"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]

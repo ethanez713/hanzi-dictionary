@@ -37,7 +37,7 @@ def fetch(force: bool = False) -> Path:
     tmp.parent.rmdir()
 
     write_manifest("cedict", URL, version, LICENSE, out_dir, [dest])
-    print(f"cedict {version}: {sum(1 for l in text.splitlines() if not l.startswith('#'))} entries -> {out_dir}")
+    print(f"cedict {version}: {sum(1 for line in text.splitlines() if not line.startswith('#'))} entries -> {out_dir}")
     return out_dir
 
 

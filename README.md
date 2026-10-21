@@ -1,81 +1,226 @@
-# Hanzi Component Dictionary
+# Hanzi Dictionary
 
-Offline-first Android dictionary explaining how Chinese characters work — component
-breakdowns, computed phonetic-reliability scores, drift explanations, S/T mapping types,
-confusables, and component-series navigation, with per-claim provenance.
+An offline Chinese-character dictionary whose content pack is built by a small, reproducible data pipeline.
 
-Full spec: [docs/hanzi-dictionary-spec-v1.md](docs/hanzi-dictionary-spec-v1.md).
+Fetchers snapshot each source with the URL, version, license, and file hashes it was taken from. The build resolves one record per codepoint, merges the structural fields in a fixed source order, and keeps interpretive statements as claim rows attributed to the source that made them. Packaging splits the result into `core.db` and a separately licensed `ids.db`, builds FTS5 indexes, and exports JSONL. A Kotlin Android app reads that pack with no network. The product spec is [`docs/hanzi-dictionary-spec-v1.md`](docs/hanzi-dictionary-spec-v1.md).
 
-## Layout
+## Pipeline
 
-- `pipeline/` — data ingestion, normalization, merge, and compute pipeline (Python). Produces
-  the SQLite data packs the app consumes. Intended to be split out into its own publicly
-  published repo once the dataset is ready to release (spec §5, §8.7).
-- `app/` — Kotlin/Compose Android app.
-- `docs/ATTRIBUTIONS.md` — per-source license/attribution, read this before publishing anything.
-- `LICENSES/` — full text of every license the bundled data carries.
+```mermaid
+flowchart TD
+    fetch["fetchers: one module per source"]
+    snap["data/snapshots/source/version/manifest.json: url, version, license, sha256"]
+    norm["normalize.build_entities: one GlyphEntity per codepoint"]
+    merge["merge.py: structural fields by source priority; interpretations kept as claim rows"]
+    hanzi["build.py loads data/build/hanzi.db"]
+    qa["qa.py: dangling references and blocked licenses fail the run"]
+    pack["package.py: core.db, GPL ids.db, glyph_fts and word_fts, hanzi-dataset.jsonl"]
+    app["Android app reads the pack offline"]
+    fetch --> snap --> norm --> merge --> hanzi --> qa --> pack --> app
+```
 
-## Status
+`build()` keeps a codepoint when it has a decomposition and a pinyin reading (`select_t1_t2`), resolves each decomposition with `merge.resolve_decomposition`, and also loads words, example sentences, and confusable pairs into `hanzi.db`. `qa.py` prints the IDS parse rate and the diff against the previous `build_stats.json`; those two reports do not fail the run. `package.py` then splits the database.
 
-- **M0 (pipeline PoC)** — done: ingest 5 core sources, phonetic detector validated against
-  Dong Chinese's human-verified etymologies.
-- **M1 (data pack v0.1)** — engineering done: full T1/T2 coverage (~42.8k characters, ~11.8k
-  with Middle+Old Chinese data), 3-stratum phonetic detector (pinyin/MC/OC), QA gates green,
-  core.db/ids.db license-layered split + FTS5 + open JSONL dump built. **Not yet done:**
-  actually publishing the dataset repo publicly — see `docs/ATTRIBUTIONS.md` first, in
-  particular the makemeahanzi LGPL-3.0 correction, which the spec's original source table
-  didn't flag.
-- **M2 (app alpha)** — done: Kotlin/Compose app (`app/`) with search + character page +
-  component page over the offline pack. Core repository unit-tested against the real pack,
-  debug APK builds (~37.5 MB). See `app/README.md`.
-- **M3 (beta)** — mostly done. Verified in-sandbox: HSK levels (glyph.hsk + import picker),
-  confusables (Unihan kSpoofingVariant, plus shape-code look-alikes computed from
-  kCangjie/kFourCornerCode, plus pairs built around the same big distinctive component —
-  斯/期, 斯/听; see `pipeline/lookalike.py`), the known-characters model (on-device user DB,
-  "I know this", My Characters + HSK/paste import, known-first series ordering — the spec's
-  headline differentiator), and photo-library scanning (scan recent camera-roll photos for
-  hanzi via ML Kit, watermark dedup — workflow logic unit-tested with fakes). Core suite
-  15/15. Audio: device Mandarin TTS on the primary reading (the Piper syllable bank
-  failed the ear-check — inaccurate tones — and was removed; spec §16). Live camera OCR
-  dropped in favor of photo scanning. Anki .apkg import deferred (needs a sample file).
-- **M3.5 (definitions & attributions)** — done except sense↔reading pairing (needs
-  wiktextract per-pronunciation senses in the pipeline; shown unpaired for now, which
-  §15 permits): character-page glosses via Unihan `kDefinition` (radical forms like 讠
-  derive learner glosses from their parent, e.g. "words, speech"), CC-CEDICT ingested
-  (~110k words, "In words" section, tone-marked pinyin, word-level HSK), English search
-  over glosses, word search (word_fts: CJK prefix / pinyin syllables / English) with
-  word pages (both forms, senses, per-character strip, device-TTS word audio,
-  **Tatoeba example sentences** with English translations, and a **look-alikes** section —
-  phonetic-series siblings + visual confusables; tapping a word in "In words" opens its
-  page), and the in-app ⓘ attributions dialog.
-- **M3.7 (capture/search completion)** — partial: SEND share target (share text from any
-  app; one hanzi opens its page, more prefill search) and paste-on-open (clipboard hanzi
-  offered as a one-tap search when the window gains focus). Remaining: component-compose
-  search chip, fuzzy fallback.
-- **M3.56 (study system)** — done: named **study lists** holding characters and words, all
-  edited from one bottom sheet (membership checkboxes + a global archive action); "Add to
-  list" is the primary button on character and word pages. Practice is scheduled by
-  **FSRS-6** (`core/Fsrs.kt`, no dependency, checked against py-fsrs's golden interval
-  sequence): **new cards lead** (a first look is the only way to gain signal; capped per day),
-  then due cards in ascending predicted recall, then practice-ahead so the deck is never
-  empty. Swipe interaction throughout — right affirms (save / knew it / archive), left
-  negates (didn't know / remove), **up skips** a card without grading it. The intro screen
-  shows the photo feed as detailed rows (looks back up to 200 photos with a scan progress
-  bar); **swipe a row left to dismiss** an already-triaged character (Undo snackbar;
-  re-photographing brings it back). A home-screen widget serves one card from the active
-  list: two tap-zone gutters per side give the full four-grade scale (again/hard, knew/easy),
-  and the middle **flips** the card to reveal pinyin+definition, then opens it in Practice.
-  Spec §17.
-- **Learning features (beyond spec)** — practice deck sources (encountered / HSK band /
-  component series), reverse (production-recall) cards, per-HSK progress bars on the Archive.
-- **M3.55 (practice & archive)** — done: flashcard Practice screen over characters
-  encountered (lookups/photo finds) but not yet known; "I knew it" archives them, and
-  My Characters is reframed as the Archive (spec §16). No SRS scheduling (v2).
-- **M3.6** — partial: coverage-tier honesty chip (T1 full historical data / T2 modern
-  only) in Details, per-component resolution badges (✓ cross-checked / source-asserted /
-  sources disagree), function distribution + positional-variant links (水/氵/氺) on
-  component pages. Remaining: GlyphWiki script forms + scholarly tier, spoken names,
-  Wikimedia syllable recordings.
-- **M3.8–M3.9** — not started (app polish: fonts subsetting, strokes, strings;
-  pack updates — blocked on the public dataset repo decision). Spec §12 lists
-  remaining v1 work.
+## Schema
+
+The pack schema is [`pipeline/pipeline/schema.sql`](pipeline/pipeline/schema.sql). `load.py` fills the tables below. `script_form` and `audio` are declared in the same file and have no loader. `claim.subject_id` is not a foreign key; the schema comment says it is usually a glyph id. `component_use.component_id` and `phonetic_series.component_id` hold a glyph id or an `ids:` pseudo-id for a part that has no codepoint. `sentence.simp` matches `word.simp` and is not a foreign key.
+
+```mermaid
+erDiagram
+    source ||--o{ reading : source_id
+    glyph ||--o{ reading : glyph_id
+    source ||--o{ decomposition : source_id
+    glyph ||--o{ decomposition : glyph_id
+    glyph ||--o{ component_use : glyph_id
+    source ||--o{ claim : source_id
+    glyph ||--o{ variant_edge : from_glyph
+    glyph ||--o{ variant_edge : to_glyph
+    source ||--o{ variant_edge : source_id
+    word ||--o{ word_char : word_id
+    glyph ||--o{ word_char : glyph_id
+    glyph ||--o{ confusable : glyph_a
+    glyph ||--o{ confusable : glyph_b
+
+    source {
+        TEXT id PK
+        TEXT name
+        TEXT license
+        TEXT url
+        TEXT version
+        TEXT ingest_date
+    }
+    glyph {
+        TEXT id PK
+        TEXT char
+        TEXT scripts
+        INTEGER stroke_count
+        INTEGER freq_rank
+        INTEGER hsk
+        TEXT definition
+        TEXT cedict_defs
+    }
+    reading {
+        TEXT glyph_id FK
+        TEXT system
+        TEXT value
+        TEXT sense_hint
+        INTEGER freq
+        TEXT source_id FK
+    }
+    decomposition {
+        TEXT glyph_id FK
+        TEXT ids
+        TEXT region
+        TEXT source_id FK
+    }
+    component_use {
+        TEXT glyph_id FK
+        TEXT component_id
+        INTEGER position
+        TEXT function
+        TEXT match_class
+        REAL confidence
+        TEXT resolution
+    }
+    claim {
+        TEXT subject_id
+        TEXT predicate
+        TEXT value
+        TEXT source_id FK
+        TEXT source_ref
+        REAL confidence
+        TEXT retrieved_at
+    }
+    variant_edge {
+        TEXT from_glyph FK
+        TEXT to_glyph FK
+        TEXT relation
+        TEXT mapping_type
+        TEXT sense_condition
+        TEXT source_id FK
+    }
+    phonetic_series {
+        TEXT component_id PK
+        INTEGER member_count
+        REAL reliability
+        TEXT best_stratum
+    }
+    word {
+        TEXT id PK
+        TEXT simp
+        TEXT trad
+        TEXT pinyin
+        TEXT defs
+        INTEGER freq_rank
+        INTEGER hsk
+    }
+    word_char {
+        TEXT word_id FK
+        TEXT glyph_id FK
+        INTEGER position
+    }
+    sentence {
+        TEXT simp
+        TEXT zh
+        TEXT en
+        INTEGER tatoeba_id
+        INTEGER quality
+        INTEGER shown
+    }
+    component_gloss {
+        TEXT component_id PK
+        TEXT gloss
+        TEXT source_id
+        INTEGER support
+        REAL agreement
+    }
+    confusable {
+        TEXT glyph_a FK
+        TEXT glyph_b FK
+        TEXT kind
+        TEXT diff
+    }
+```
+
+## Design decisions
+
+### Two databases, two drivers
+
+`package.build_ids_db` copies cjkvi-ids decomposition rows into `ids.db`. `build_core_db` copies the other content tables into `core.db` and leaves those rows out of `decomposition` there. GPL-2.0 stays in its own file, so it does not cover the rest of the pack. `HanziRepository` and `PackManager` open one driver per file. An `ATTACH` would stick to a single pooled connection, so anything that needs both files is merged in Kotlin. SQL cannot join across the two files.
+
+### Structural fields merge; interpretations stay claims
+
+`merge.resolve_decomposition` walks a fixed order: cjkvi-ids ahead of makemeahanzi, and within cjkvi-ids a script-matching region tag ahead of an untagged row. A decomposition whose parts are all encoded characters wins over a higher-priority row that bottoms out in an unencoded shape (`is_navigable`), because the character page has to be able to open the part. Simplified/traditional edges are the union of Unihan and OpenCC, classified as `merger`, `systematic`, or `irregular (unclassified)`. Component function and etymology text are `claim` rows with a `source_id`. `merge.py` does not vote them into one value. The pack is wider, and a disagreement stays visible on `component_use.resolution`.
+
+### Snapshots are immutable and self-describing
+
+Each fetcher writes `data/snapshots/<source>/<version>/manifest.json` with url, version, license, `retrieved_at`, and a sha256 per file (`fetchers/common.py`). A version that already has a manifest is skipped unless `--force`. A rebuild does not re-download, and the license stored on the `source` row is the one recorded at fetch time. The cost is disk, and a build is only as new as the snapshots on disk. `fetch_all` does not fetch CC-CEDICT, TED2020, or the Dong lexicon. `build()` requires the CC-CEDICT snapshot (`SOURCES`) and reads the other two only when their snapshot directories exist.
+
+### The content pack is replaced; user state is migrated
+
+`package.py` sets `PRAGMA user_version = 1` and ships no migrations for the pack. `PackManager` copies `core.db` and `ids.db` out of assets and re-copies them when `BUNDLED_PACK_VERSION` changes. Learner state is a separate database; its upgrades are the numbered `.sqm` files next to `User.sq`. A pack update cannot carry a row-level delta. An archive built on the device survives a content swap.
+
+### The pipeline stays on the standard library
+
+Fetch, parse, merge, QA, and packaging import only the Python 3.12 standard library. GitHub-hosted sources are shallow-cloned by shelling out to `git` (`git_shallow_clone`). Nothing is installed before `python -m pipeline.build` or the pipeline tests. Each source's text format has a hand-written parser.
+
+### QA fails closed on integrity and license
+
+`qa.py` exits non-zero when a referenced row is missing or a source license contains `NC`, `PRIVATE`, or `UNCONFIRMED` (`BLOCKED_LICENSE_MARKERS`). The IDS parse rate and the diff against `build_stats.json` are printed and do not fail the run, so a shift in coverage of rare characters is left for a person to read. A green QA run is not a full review of the glosses.
+
+## Run it
+
+Python 3.12, from `pipeline/`. Snapshots and build output are gitignored (`pipeline/data/snapshots/`, `pipeline/data/build/`).
+
+```bash
+cd pipeline
+python3 -m fetchers.fetch_all
+python3 -m fetchers.fetch_cedict
+python3 -m pipeline.build
+python3 -m pipeline.qa
+python3 -m pipeline.package
+```
+
+`fetch_all` downloads the sources in `FETCHERS`. CC-CEDICT is separate because `build()` reads it and `fetch_all` does not fetch it. `pipeline.package` writes `core.db`, `ids.db`, `hsk-levels.json`, and `hanzi-dataset.jsonl` under `data/build/`.
+
+The Android app needs JDK 17 and an Android SDK (`ANDROID_HOME`). `:core` is pure Kotlin. `:androidApp` is the Compose UI. From the repo root, after the pack exists:
+
+```bash
+cp pipeline/data/build/core.db pipeline/data/build/ids.db pipeline/data/build/hsk-levels.json app/androidApp/src/main/assets/
+app/gradlew -p app :androidApp:assembleDebug
+```
+
+The debug APK is under `app/androidApp/build/outputs/apk/debug/`. The copied assets are gitignored.
+
+## Tests
+
+The pipeline tests are stdlib `unittest` and do not need snapshots or a built pack. Run them from `pipeline/`:
+
+```bash
+cd pipeline && python3 -m unittest discover -s tests
+```
+
+`:core` is JVM tests, run with JDK 17. Gradle still configures `:androidApp`, so `ANDROID_HOME` has to point at an Android SDK. No device:
+
+```bash
+app/gradlew -p app :core:test
+```
+
+`HanziRepositoryTest` opens `pipeline/data/build/core.db` and `ids.db`. Both files are gitignored, so on a fresh clone that test is skipped. When both files are present it runs the same checks. The other `:core` tests use in-memory SQLite.
+
+## Data licensing
+
+Per-source terms and the full texts are [`docs/ATTRIBUTIONS.md`](docs/ATTRIBUTIONS.md) and [`LICENSES/`](LICENSES/).
+
+Two sources are personal-build only and must not ship in a pack you distribute:
+
+- **TED2020** (OPUS en-zh_cn), CC BY-NC-ND 4.0. `fetchers/fetch_opus.py` is not in `fetch_all`. `build()` adds its sentences only when the snapshot is present, to fill words the Tatoeba export does not cover. A checkout without that snapshot builds a Tatoeba-only sentence table.
+- **Dong Chinese lexicon** (`peterolson/chinese-lexicon`). `fetchers/fetch_dong_chinese.py` records the license as unconfirmed for publication and is not in `fetch_all`. When the snapshot is present, `build()` uses it as the component-function override for the characters it covers. Without the snapshot, those rows stay on the detector.
+
+`qa.py` fails a build whose `source` table contains `NC`, `PRIVATE`, or `UNCONFIRMED`, which is the gate those two licenses trip. Leave the snapshots out of any pack you redistribute.
+
+`ids.db` is the cjkvi-ids decompositions (GPL-2.0) and nothing else. `core.db` is the remaining tables, including the computed phonetic layer. The JSONL export repeats a source name and license on each contributed field.
+
+## License
+
+Code in this repository is MIT, Copyright (c) 2026 Ethan Zhou ([`LICENSE`](LICENSE)). Data, fonts, the HSK word list, and the py-fsrs test vectors keep the licenses named in [`docs/ATTRIBUTIONS.md`](docs/ATTRIBUTIONS.md).

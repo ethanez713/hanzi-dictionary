@@ -89,7 +89,8 @@ class MarkUnnatural(unittest.TestCase):
     out: the same plus (quality, shown). Nothing is ever removed."""
 
     def setUp(self):
-        import tempfile, pathlib
+        import pathlib
+        import tempfile
         from pipeline import build as build_mod
         self.build = build_mod
         self.dir = pathlib.Path(tempfile.mkdtemp())
@@ -174,7 +175,8 @@ class MarkUnnatural(unittest.TestCase):
 
 class SingleCharCedictDefs(unittest.TestCase):
     def setUp(self):
-        import tempfile, pathlib
+        import pathlib
+        import tempfile
         self.dir = pathlib.Path(tempfile.mkdtemp())
         (self.dir / "cedict_ts.u8").write_text(
             "# comment\n"

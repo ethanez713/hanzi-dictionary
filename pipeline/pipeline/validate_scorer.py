@@ -18,6 +18,7 @@ import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 from pipeline import quality
 
@@ -59,7 +60,7 @@ def main() -> None:
     from_tatoeba = {zh for zh, in con.execute(
         "SELECT DISTINCT zh FROM sentence WHERE tatoeba_id IS NOT NULL")}
 
-    results = {"model": quality.MODEL, "n_bad": len(b), "n_good": len(g),
+    results: dict[str, Any] = {"model": quality.MODEL, "n_bad": len(b), "n_good": len(g),
                "mean_bad": round(sum(b) / len(b), 2), "mean_good": round(sum(g) / len(g), 2),
                "elapsed_minutes": round((time.time() - started) / 60, 1), "thresholds": {}}
 

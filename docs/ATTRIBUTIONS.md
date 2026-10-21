@@ -11,10 +11,10 @@ dataset repo's NOTICE and the in-app attributions screen (spec §9's IA item 9,
 |---|---|---|---|
 | [Unihan](http://unicode.org/charts/unihan.html) (Unicode Consortium) | Readings (Mandarin, Cantonese, Japanese), S/T variant links, radical/stroke counts, kHanyuPinlu frequency, kSpoofingVariant confusable pairs, and the kCangjie/kFourCornerCode shape encodings the look-alike pairs are computed from (the shared-component look-alike layer is derived from the same decompositions as `component_use`) | Unicode License v3 (permissive) | [Unicode-License.txt](../LICENSES/Unicode-License.txt) |
 | [Wiktionary via Wiktextract](https://github.com/tatuylonen/wiktextract) (kaikki.org) | Etymology text, Middle Chinese (Baxter) and Old Chinese (Zhengzhang, Baxter-Sagart) reconstructed readings | CC BY-SA 4.0 | [CC-BY-SA-4.0.txt](../LICENSES/CC-BY-SA-4.0.txt) |
-| [makemeahanzi](https://github.com/skishore/makemeahanzi) `dictionary.txt` (derived from Unihan + [CJKlib](https://github.com/cburgmer/cjklib)) | Character decomposition (fallback when cjkvi-ids has none), semantic/phonetic component claims, formation-type claims | **LGPL-3.0-or-later** | [LGPL-3.0.txt](../LICENSES/LGPL-3.0.txt) |
+| [makemeahanzi](https://github.com/skishore/makemeahanzi) `dictionary.txt` (derived from Unihan + [CJKlib](https://github.com/cburgmer/cjklib)) | Character decomposition (fallback when cjkvi-ids has none), semantic/phonetic component claims, formation-type claims | **LGPL-3.0-or-later** | [LGPL-3.0.txt](../LICENSES/LGPL-3.0.txt), [GPL-3.0.txt](../LICENSES/GPL-3.0.txt) |
 | [cjkvi-ids](https://github.com/cjkvi/cjkvi-ids) (CHISE) | Region-tagged IDS decomposition (primary source; shipped separately as `ids.db`, see below) | GPL-2.0 | [GPL-2.0.txt](../LICENSES/GPL-2.0.txt) |
 | [OpenCC](https://github.com/BYVoid/OpenCC) `STCharacters.txt`/`TSCharacters.txt` | Simplified/Traditional character conversion tables, cross-checked against Unihan for variant-edge classification | Apache-2.0 | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
-| [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | HSK 3.0 level assignments (glyph.hsk, word.hsk, hsk-levels.json import picker) | MIT | (short license, see upstream repo) |
+| [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | HSK 3.0 level assignments (glyph.hsk, word.hsk, hsk-levels.json import picker) | MIT | [notice](#mit-notices) |
 | [CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict) (MDBG export) | Word-level entries: `word`/`word_char` tables — simplified/traditional forms, pinyin, English definitions ("In words" on character pages) | CC BY-SA 4.0 | [CC-BY-SA-4.0.txt](../LICENSES/CC-BY-SA-4.0.txt) |
 | [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018 zh_cn) | `word.freq_rank` — word-level corpus frequency used for result ranking. Chosen over SUBTLEX-CH (research-use terms): same subtitle lineage, open license | CC BY-SA 4.0 | [CC-BY-SA-4.0.txt](../LICENSES/CC-BY-SA-4.0.txt) |
 | [Tatoeba](https://tatoeba.org) (cmn + eng sentence exports, joined via links) | `sentence` table — example Mandarin sentences with English translations shown on word pages (spec §9). Short sentences containing each word, credited in-app | CC BY 2.0 FR | [CC-BY-2.0.txt](../LICENSES/CC-BY-2.0.txt) |
@@ -25,7 +25,10 @@ dataset repo's NOTICE and the in-app attributions screen (spec §9's IA item 9,
 | Asset | Provides | License | Full text |
 |---|---|---|---|
 | [Noto Sans CJK SC](https://github.com/notofonts/noto-cjk) (`res/font/noto_sans_cjk_sc.otf`) | UI typeface — renders CJK Extension chars and IDS operators the system font shows as tofu | SIL OFL 1.1 | [OFL-1.1.txt](../LICENSES/OFL-1.1.txt) |
-| [FSRS-6](https://github.com/open-spaced-repetition) (Open Spaced Repetition) | The spaced-repetition algorithm and its 21 default parameters, used to schedule practice cards (`core/Fsrs.kt`, spec §17) | MIT | (algorithm + parameters; see note below) |
+| [Piazzolla](https://github.com/huertatipografica/piazzolla) (`res/font/piazzolla_regular.ttf`, `piazzolla_semibold.ttf`) | Screen titles and display text (`Theme.kt` `Piazzolla`; also the study-reminder headline bitmaps in `NudgeNotifier.kt`) | SIL OFL 1.1 | [OFL-1.1.txt](../LICENSES/OFL-1.1.txt) |
+| [IBM Plex Mono](https://github.com/IBM/plex) (`res/font/ibm_plex_mono_regular.ttf`) | Numeric and key-like UI text — pinyin, counts, intervals, HSK bands (`Theme.kt` `PlexMono`; gutter marks in `NudgeNotifier.kt`) | SIL OFL 1.1 | [OFL-1.1.txt](../LICENSES/OFL-1.1.txt) |
+| [Instrument Sans](https://github.com/Instrument/instrument-sans) (`res/font/instrument_sans_regular.ttf`, `instrument_sans_medium.ttf`) | Dense UI text and controls (`Theme.kt` `InstrumentSans`; reminder prose bitmaps in `NudgeNotifier.kt`) | SIL OFL 1.1 | [OFL-1.1.txt](../LICENSES/OFL-1.1.txt) |
+| [FSRS-6](https://github.com/open-spaced-repetition) (Open Spaced Repetition) | The spaced-repetition algorithm and its 21 default parameters, used to schedule practice cards (`core/Fsrs.kt`, spec §17) | MIT | [notice](#mit-notices) for the py-fsrs test vectors |
 
 **On FSRS:** `core/Fsrs.kt` is an original Kotlin implementation written from the
 published FSRS-6 formulas and verified against the reference implementation
@@ -34,6 +37,7 @@ golden interval sequence into `FsrsTest`. No FSRS code is vendored. Note that th
 community [FSRS-Kotlin](https://github.com/open-spaced-repetition/FSRS-Kotlin)
 port ships **no license file** and so was deliberately not used — the MIT-licensed
 Python and Rust implementations are the ones to reference if this is ever revisited.
+The MIT notice for the copied py-fsrs test vectors is in [MIT notices](#mit-notices).
 
 **Personal build only (not for the published dataset):** [TED2020](http://opus.nlpl.eu/TED2020-v1.php)
 (en-zh_cn, via OPUS) — professionally-translated TED-talk sentence pairs, mined by
@@ -57,6 +61,78 @@ detector-only, publishable pack). See `pipeline/fetchers/fetch_dong_chinese.py`.
 **Not currently included:** makemeahanzi's `graphics.txt`/stroke-order SVGs
 (Arphic Public License) — deferred (stroke rendering not built; spec §9/M3).
 
+## MIT notices
+
+Notices for MIT-licensed material this repository uses from other projects.
+The project's own code is MIT under [`/LICENSE`](../LICENSE), Copyright (c) 2026 Ethan Zhou.
+
+### HSK word list
+
+[complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary),
+file `complete.min.json`. `pipeline/fetchers/fetch_hsk.py` snapshots it.
+`pipeline/parsers.py` reads it in `parse_hsk_char_levels` (the lowest HSK 3.0
+level of any word containing the character; `normalize.build_entities` sets
+`GlyphEntity.hsk` and `build()` writes it to `glyph.hsk`) and
+`parse_hsk_word_levels` (`build.build_words` writes `word.hsk`). `pipeline/package.py` `export_hsk_levels` writes
+`hsk-levels.json` from `glyph.hsk` for the app's import picker.
+
+```
+MIT License
+
+Copyright (c) 2026 Yanis Zafirópulos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### py-fsrs test vectors
+
+The expected intervals in
+`app/core/src/test/kotlin/com/hanzidictionary/core/FsrsTest.kt`
+(`matchesReferenceIntervalSequence`) are the output of
+[py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) `test_review_card`
+with fuzzing off and the default parameters. No py-fsrs source is vendored.
+`core/Fsrs.kt` is an original port of the published FSRS-6 formulas.
+
+```
+MIT License
+
+Copyright (c) 2022 Open Spaced Repetition
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Why makemeahanzi matters here specifically
 
 The spec's original source table (§5) described makemeahanzi's dictionary
@@ -72,6 +148,10 @@ fully redistributable, satisfied by attribution + keeping the source
 available, which it already is on GitHub), but it's exactly the kind of thing
 spec §13's "counsel review pre-launch" line is there to catch, so flagging it
 explicitly here rather than letting the original mischaracterization stand.
+
+LGPL-3.0 is additional permissions on top of GPL-3.0. The LGPL text says it
+incorporates the terms of GPL-3.0, so both texts are bundled:
+[`LGPL-3.0.txt`](../LICENSES/LGPL-3.0.txt) and [`GPL-3.0.txt`](../LICENSES/GPL-3.0.txt).
 
 ## Computed/derived layer
 

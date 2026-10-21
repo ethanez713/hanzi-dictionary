@@ -10,12 +10,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
  * Exercises the repository against the real pipeline-built packs (not a synthetic
  * fixture) so it doubles as an integration check that the shipped schema, the FTS5
  * index, and the two-file core/ids split all line up with what the code expects.
- * Requires `python -m pipeline.build && python -m pipeline.package` to have run.
+ * The packs are gitignored. When they are absent the suite skips on a JUnit
+ * assumption; when they are present these checks run unchanged.
  */
 class HanziRepositoryTest {
     private lateinit var coreDriver: JdbcSqliteDriver
@@ -27,8 +29,12 @@ class HanziRepositoryTest {
         val buildDir = File("../../pipeline/data/build")
         val core = File(buildDir, "core.db")
         val ids = File(buildDir, "ids.db")
-        assertTrue(core.exists(), "core.db missing at ${core.absolutePath}; run pipeline.build + pipeline.package")
-        assertTrue(ids.exists(), "ids.db missing at ${ids.absolutePath}; run pipeline.package")
+        // :core runs on the JUnit Platform, so this is Jupiter's assumption,
+        // which aborts the test. org.junit.Assume would be reported as an error.
+        assumeTrue(
+            core.exists() && ids.exists(),
+            "core.db/ids.db missing at ${buildDir.absolutePath}; run pipeline.build + pipeline.package",
+        )
         coreDriver = JdbcSqliteDriver("jdbc:sqlite:${core.absolutePath}")
         idsDriver = JdbcSqliteDriver("jdbc:sqlite:${ids.absolutePath}")
         repo = HanziRepository(coreDriver, idsDriver)
@@ -36,8 +42,10 @@ class HanziRepositoryTest {
 
     @AfterTest
     fun teardown() {
-        coreDriver.close()
-        idsDriver.close()
+        // An assumption failure aborts in setup, before the drivers exist, and
+        // @AfterTest still runs.
+        if (::coreDriver.isInitialized) coreDriver.close()
+        if (::idsDriver.isInitialized) idsDriver.close()
     }
 
     @Test
