@@ -55,6 +55,7 @@ import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.CharacterPage
 import com.hanzidictionary.core.HanziRepository
+import com.hanzidictionary.core.SentenceExample
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.masterySummary
@@ -63,10 +64,6 @@ import com.hanzidictionary.core.isSoundBearing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-/** How many "in words" compounds the character sheet shows — the most frequent handful,
- * not every rare compound (the full list ran to dozens for common characters). */
-private const val IN_WORDS_LIMIT = 8
 
 /** One level in the lookup sheet's trail. Exactly one of glyphId / wordId / componentId is
  * non-null. [componentId] is the bare component character (青, 女), not a "U+" id. */
@@ -545,10 +542,11 @@ private fun CharacterSheetContent(
         // In words — the most common words this character appears in. wordsForGlyph is already
         // ordered by corpus frequency; key the dedup on simp+reading so a heteronym (便宜
         // pián yi "cheap" vs biàn yí "convenient") keeps a row for each reading, while
-        // CC-CEDICT's same-reading duplicates still collapse. Top handful, not every compound.
-        val topWords by produceState(p.words.distinctBy { it.simp to it.pinyin }.take(IN_WORDS_LIMIT), glyphId) {
+        // CC-CEDICT's same-reading duplicates still collapse. Capped like the flashcard's list,
+        // so opening a card's character never shows less than the card did.
+        val topWords by produceState(p.words.distinctBy { it.simp to it.pinyin }.take(CARD_WORDS.toInt()), glyphId) {
             value = withContext(Dispatchers.IO) {
-                repository.wordsForGlyph(glyphId, limit = 60).distinctBy { it.simp to it.pinyin }.take(IN_WORDS_LIMIT)
+                repository.wordsForGlyph(glyphId, limit = 60).distinctBy { it.simp to it.pinyin }.take(CARD_WORDS.toInt())
             }
         }
         if (topWords.isNotEmpty()) {
@@ -575,6 +573,12 @@ private fun CharacterSheetContent(
                 }
             }
         }
+
+        // The same sentences the flashcard shows for this character.
+        val sentences by produceState(emptyList<SentenceExample>(), glyphId) {
+            value = withContext(Dispatchers.IO) { repository.cardSentences(p.char) }
+        }
+        SentenceList(sentences, tts, eth)
 
         // Footer links: component / phonetic-series pages (spec: "plain mono 11px links").
         // Each carries the component id it opens (the bare char, not a "U+" id).
@@ -673,39 +677,43 @@ private fun WordSheetContent(
             }
         }
 
-        // Example sentences — the point of a word page (spec §9), dropped when the word view
-        // became a sheet. Each Mandarin line is speakable; its English gloss sits under it.
-        if (p.sentences.isNotEmpty()) {
-            SheetEyebrow("SENTENCES")
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (s in p.sentences) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                s.zh, Modifier.weight(1f),
-                                fontSize = 16.sp, lineHeight = 23.sp, color = eth.ink900, fontFamily = NotoCjk,
-                            )
-                            if (tts.available) {
-                                Text("🔊", fontSize = 14.sp, modifier = Modifier.clickable { tts.speak(s.zh) })
-                            }
-                        }
-                        s.en?.let {
-                            Text(it, fontSize = 12.5.sp, lineHeight = 17.sp, color = eth.textMuted, fontFamily = InstrumentSans)
-                        }
-                    }
-                }
-            }
-            Text(
-                "Sentences from Tatoeba (CC BY 2.0) & TED2020 (CC BY-NC-ND)",
-                fontFamily = PlexMono, fontSize = 9.5.sp, color = eth.textFaint,
-            )
-        }
+        // Example sentences — the point of a word page (spec §9).
+        SentenceList(p.sentences, tts, eth)
 
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
+}
+
+/** Each Mandarin line is speakable; its English gloss sits under it. */
+@Composable
+private fun SentenceList(sentences: List<SentenceExample>, tts: MandarinTts, eth: EthanColors) {
+    if (sentences.isEmpty()) return
+    SheetEyebrow("SENTENCES")
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (s in sentences) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        s.zh, Modifier.weight(1f),
+                        fontSize = 16.sp, lineHeight = 23.sp, color = eth.ink900, fontFamily = NotoCjk,
+                    )
+                    if (tts.available) {
+                        Text("🔊", fontSize = 14.sp, modifier = Modifier.clickable { tts.speak(s.zh) })
+                    }
+                }
+                s.en?.let {
+                    Text(it, fontSize = 12.5.sp, lineHeight = 17.sp, color = eth.textMuted, fontFamily = InstrumentSans)
+                }
+            }
+        }
+    }
+    Text(
+        "Sentences from Tatoeba (CC BY 2.0) & TED2020 (CC BY-NC-ND)",
+        fontFamily = PlexMono, fontSize = 9.5.sp, color = eth.textFaint,
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

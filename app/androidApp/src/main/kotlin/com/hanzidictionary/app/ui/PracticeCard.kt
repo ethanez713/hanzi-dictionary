@@ -110,7 +110,7 @@ private const val CARD_COMPONENTS = 4
 
 /** Words to offer on a character card. The revealed side scrolls, so this is a ceiling on
  * how much a common character (的, 一) can pour out, not a target every card reaches. */
-private const val CARD_WORDS = 24L
+internal const val CARD_WORDS = 24L
 
 /**
  * The flashcard. The glyph lives in a fixed 200dp zone and NEVER moves when the card
