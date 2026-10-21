@@ -3,8 +3,10 @@
 Offline-first Android Chinese-character dictionary + an open data pipeline that builds its
 content pack. Personal, single-user project (apply the small-project review lens: simple
 code wins; scale/availability/multi-user concerns don't apply). Remote is
-`ethanez713/hanzi-dictionary` on GitHub and it is **private** — publishing the *dataset*
-publicly is still a separate, undecided call, so don't make this repo public unprompted.
+`ethanez713/hanzi-dictionary` on GitHub. The code, schema and docs are published; built
+content packs never are — TED2020 (CC BY-NC-ND) and Dong Chinese data are personal-build-only.
+This file is published too: personal or machine-specific notes go in the gitignored
+`CLAUDE.local.md`, which Claude Code loads right after it.
 
 Authoritative spec: `docs/hanzi-dictionary-spec-v1.md`. Data provenance/licensing:
 `docs/ATTRIBUTIONS.md` + `LICENSES/`.
@@ -40,12 +42,6 @@ app/gradlew -p app :core:test :androidApp:assembleDebug   # full build + tests
   (`WidgetStateTest`, `PracticeStateTest`, `PhotoScannerTest`, `StudyRepositoryTest`,
   `HanziRepositoryTest` — the last opens the real bundled pack). Add a test for any new
   `:core` transition. Don't boot the emulator for logic checks.
-- **On-device install:** the phone is on wireless ADB at an `IP:port` that **rotates every
-  session** — the user supplies it. Use the `aconnect` helper, then
-  `adb -s <ip:port> install -r app/androidApp/build/outputs/apk/debug/androidApp-debug.apk`.
-  A launch + `logcat` crash-scan (grep `FATAL EXCEPTION|AndroidRuntime`) is the standard
-  smoke check. **Don't screenshot/drive the UI** unless the user asks — leave visual
-  verification to them.
 
 ## The data pack (core.db / ids.db)
 

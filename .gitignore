@@ -40,3 +40,6 @@ app/.cxx/
 
 # OS
 .DS_Store
+
+# Personal agent notes: kept on disk, not published
+CLAUDE.local.md
