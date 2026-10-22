@@ -23,6 +23,49 @@ The Android app on a phone.
   </tr>
 </table>
 
+### Study and capture
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/study.png" alt="Study"></td>
+    <td width="33%"><img src="docs/screenshots/study-revealed.png" alt="Revealed card"></td>
+    <td width="33%"><img src="docs/screenshots/library.png" alt="Library"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Study.</b> The deck for the active list: new cards first, then the ones due, ordered by lowest predicted recall.</td>
+    <td valign="top"><b>Revealed.</b> A tap reveals the reading, meaning, characters and example sentences below the glyph, which stays put. Swipe right for Good, left for Again, up to skip.</td>
+    <td valign="top"><b>Library.</b> Named lists of characters and words, with “Everything” pooled, plus HSK pools and the characters you have encountered.</td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/list.png" alt="List"></td>
+    <td width="33%"><img src="docs/screenshots/photo-finds.png" alt="Photo finds"></td>
+    <td width="33%"><img src="docs/screenshots/photo-finds-definitions.png" alt="Photo finds with definitions"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>List.</b> Every item's record of right and wrong answers, so the ones that keep slipping stand out.</td>
+    <td valign="top"><b>From your photos.</b> Characters read from new camera-roll photos, most common first.</td>
+    <td valign="top"><b>Triage.</b> With definitions on, each find is one swipe: right files it into the active list, left dismisses it.</td>
+  </tr>
+</table>
+
+- **Flashcards.** Each card is scheduled by FSRS-6, implemented as plain arithmetic in
+  `core/Fsrs.kt` and checked against py-fsrs's reference intervals. Grading has two outcomes,
+  Again and Good. New cards are capped at 15 a day so a big import cannot bury the reviews.
+  A missed card goes to the back of the session.
+- **Lists.** A list holds characters and words, but memory belongs to the item: a character
+  in three lists has one schedule. One list is active. Swipe-right files into it, and the
+  home-screen widget and the optional reminder notification deal from it. Archiving ("I know
+  this") applies everywhere and drops the schedule.
+- **Photo capture.** ML Kit's Chinese text recognizer reads photos added since the last scan,
+  on the device. The finds land in the Dictionary tab, where they can be filed or dismissed.
+
+The lists and study history above are demo data: three invented lists, with a month of
+reviews simulated by py-fsrs. The photo finds come from four openly licensed photos:
+["Chinese menu"](https://commons.wikimedia.org/w/index.php?curid=165202870) by Roland Tanglao (CC0),
+["A No Smoking Sign That Means Business"](https://www.flickr.com/photos/47038415@N00/306250135) by Augapfel,
+["Directions at JiShuiTan Subway"](https://www.flickr.com/photos/29509789@N00/136175286) by ianholton, and
+["Restaurant Sign Engrish"](https://www.flickr.com/photos/88175021@N00/3150260687) by rduta (the last three CC BY 2.0).
+
 ## Pipeline
 
 ```mermaid
