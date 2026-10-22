@@ -4,6 +4,25 @@ An offline Chinese-character dictionary whose content pack is built by a small, 
 
 Fetchers snapshot each source with the URL, version, license, and file hashes it was taken from. The build resolves one record per codepoint, merges the structural fields in a fixed source order, and keeps interpretive statements as claim rows attributed to the source that made them. Packaging splits the result into `core.db` and a separately licensed `ids.db`, builds FTS5 indexes, and exports JSONL. A Kotlin Android app reads that pack with no network. The product spec is [`docs/hanzi-dictionary-spec-v1.md`](docs/hanzi-dictionary-spec-v1.md).
 
+## Screenshots
+
+The Android app on a phone.
+
+<table>
+  <tr>
+    <td width="25%"><img src="docs/screenshots/search.png" alt="Search"></td>
+    <td width="25%"><img src="docs/screenshots/character.png" alt="Character"></td>
+    <td width="25%"><img src="docs/screenshots/word.png" alt="Word"></td>
+    <td width="25%"><img src="docs/screenshots/sources.png" alt="Data sources"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Search.</b> One box takes a character, pinyin or English, backed by the pack's FTS5 indexes. Traditional forms sit beside the simplified ones.</td>
+    <td valign="top"><b>Character.</b> The decomposition from the merged structural fields (meaning 日, sound 青), then frequency rank, HSK level and strokes. Interpretive notes such as this etymology are shown as claims from the source that made them.</td>
+    <td valign="top"><b>Word.</b> Definitions, links back to each character, and example sentences credited to their corpus and license.</td>
+    <td valign="top"><b>Provenance.</b> Every source in the pack, with its license and the version or commit it was snapshotted at.</td>
+  </tr>
+</table>
+
 ## Pipeline
 
 ```mermaid
