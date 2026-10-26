@@ -29,6 +29,10 @@ class AppSettings(private val prefs: SharedPreferences) {
     var dailyGoal by mutableStateOf(readDailyGoal())
         private set
 
+    /** Size of a manual new-word batch. The thin-deck prompt sizes itself. */
+    var newWordsPerBatch by mutableStateOf(readNewWordsPerBatch())
+        private set
+
     // Study reminders (the notification). Defaults match NudgeSettings, except that it ships
     // off: a notification is something you opt into, and enabling it is also what asks for
     // the POST_NOTIFICATIONS permission.
@@ -106,6 +110,12 @@ class AppSettings(private val prefs: SharedPreferences) {
         prefs.edit().putInt(KEY_DAILY_GOAL, coerced).apply()
     }
 
+    fun updateNewWordsPerBatch(count: Int) {
+        val coerced = coerceNewWordsPerBatch(count)
+        newWordsPerBatch = coerced
+        prefs.edit().putInt(KEY_NEW_WORDS_BATCH, coerced).apply()
+    }
+
     private fun readThemeMode(): ThemeMode =
         runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: ThemeMode.AUTO.name) }
             .getOrDefault(ThemeMode.AUTO)
@@ -129,14 +139,27 @@ class AppSettings(private val prefs: SharedPreferences) {
         return coerceDailyGoal(raw)
     }
 
+    /** Same fallback as [readDailyGoal]: a hand-edited pref must still light one segment. */
+    private fun readNewWordsPerBatch(): Int {
+        if (!prefs.contains(KEY_NEW_WORDS_BATCH)) return DEFAULT_NEW_WORDS_BATCH
+        val raw = runCatching { prefs.getInt(KEY_NEW_WORDS_BATCH, DEFAULT_NEW_WORDS_BATCH) }.getOrElse {
+            runCatching { prefs.getString(KEY_NEW_WORDS_BATCH, null)?.trim()?.toIntOrNull() }.getOrNull()
+                ?: return DEFAULT_NEW_WORDS_BATCH
+        }
+        return coerceNewWordsPerBatch(raw)
+    }
+
     companion object {
         const val PREFS = "app_settings"
         val DAILY_GOAL_CHOICES = listOf(10, 20, 30, 50)
         const val DEFAULT_DAILY_GOAL = 20
+        val NEW_WORDS_BATCH_CHOICES = listOf(5, 10, 15)
+        const val DEFAULT_NEW_WORDS_BATCH = 5
         private const val KEY_HINTS = "show_swipe_hints"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_PHOTO_SORT = "photo_sort"
         private const val KEY_DAILY_GOAL = "daily_goal"
+        private const val KEY_NEW_WORDS_BATCH = "new_words_per_batch"
         private const val KEY_NUDGE_ON = "nudge_enabled"
         private const val KEY_NUDGE_MODE = "nudge_mode"
         private const val KEY_NUDGE_INTERVAL = "nudge_interval_hours"
@@ -145,5 +168,7 @@ class AppSettings(private val prefs: SharedPreferences) {
         private const val KEY_NUDGE_STREAK = "nudge_streak_reminder"
 
         fun coerceDailyGoal(value: Int): Int = DAILY_GOAL_CHOICES.minBy { abs(it - value) }
+
+        fun coerceNewWordsPerBatch(value: Int): Int = NEW_WORDS_BATCH_CHOICES.minBy { abs(it - value) }
     }
 }

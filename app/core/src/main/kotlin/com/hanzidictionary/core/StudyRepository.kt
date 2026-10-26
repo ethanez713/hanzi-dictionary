@@ -368,7 +368,8 @@ class StudyRepository(
         return DeckLoad(upcoming, backlog, recentSuccessRate(ratings))
     }
 
-    /** How many new words the app may suggest right now; 0 unless the deck is thin. */
+    /** How many new words the thin-deck prompt offers; 0 unless the deck is thin.
+     * A manual add does not consult this. */
     fun newWordsWanted(now: Long = System.currentTimeMillis()): Int = newWordGap(deckLoad(now))
 
     /** Everything the user has already placed somewhere — in a list, archived, or scheduled —

@@ -87,8 +87,11 @@ private sealed interface AppOverlay {
     data object Archive : AppOverlay
     data class ListEdit(val listId: Long) : AppOverlay
 
-    /** Suggested HSK words to sort into "know / don't know" — offered only when the deck is thin. */
-    data object Triage : AppOverlay
+    /**
+     * New-word triage. A null [batch] asks the thin-deck rule how many to offer; a number
+     * is the manual batch from the Study strip, which does not wait on that rule.
+     */
+    data class Triage(val batch: Int?) : AppOverlay
 
     /** Retirement candidates, then a spot-check of the archive. */
     data object FinalCheck : AppOverlay
@@ -287,7 +290,7 @@ fun AppRoot(
                         lookupStack = studyLookupStack,
                         onSwitchToDictionary = { selectedTab = Tab.DICTIONARY },
                         onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
-                        onAddNewWords = { overlay = AppOverlay.Triage },
+                        onAddNewWords = { batch -> overlay = AppOverlay.Triage(batch) },
                         onFinalCheck = { overlay = AppOverlay.FinalCheck },
                     )
                     if (studyLookupStack.isOpen) {
@@ -355,9 +358,10 @@ fun AppRoot(
                 },
                 onBack = { overlay = null },
             )
-        AppOverlay.Triage ->
+        is AppOverlay.Triage ->
             TriageScreen(
                 repository = repository,
+                batch = o.batch,
                 // The deck changed under the Study tab; bumping the token reloads it (the
                 // pinned card, if any, stays put) so the new words are there on return.
                 onDone = {

@@ -1,7 +1,10 @@
 package com.hanzidictionary.core
 
 /**
- * "Is my deck too thin?" — the only gate on the app suggesting new words.
+ * "Is my deck too thin?" — when the Study strip prompts for new words.
+ *
+ * The rule decides when the app prompts. A quieter link on that strip always opens the same
+ * triage for a batch the user set; this function does not gate that link.
  *
  * Honest framing first: the research has no validated rule for *when* to add vocabulary. What
  * it does establish is the shape of the trade-off — spacing needs enough items in rotation to

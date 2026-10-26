@@ -68,17 +68,19 @@ private const val SKIP_BUFFER = 12
  * tab) like Settings and the list editor.
  *
  * Photos lead because those characters have already shown up in the user's life; the HSK
- * list only fills a thin deck. It is only reachable while the deck is thin (see
- * `newWordGap`), and it stops by itself once it has added that many items — the point is
- * to top the deck up, not to invite a binge. The app never tests the claim: "know" files
- * the item with a first rating that brings it back for a real recall check in about a
- * week, "don't know" files it as a plain new card, and up skips it for a while without
- * filing anything.
+ * list fills whatever the photos don't. The Study strip prompts for a sitting while the
+ * deck is thin (`newWordGap`); the quieter link on that strip opens the same sitting any
+ * time. A null [batch] asks the gate how many to add, and a number is the batch from
+ * Settings. It stops once that many are filed — a bounded sitting, not a binge. The app
+ * never tests the claim: "know" files the item with a first rating that brings it back
+ * for a real recall check in about a week, "don't know" files it as a plain new card, and
+ * up skips it for a while without filing anything.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TriageScreen(
     repository: HanziRepository,
+    batch: Int?,
     onDone: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -108,7 +110,9 @@ fun TriageScreen(
     LaunchedEffect(Unit) {
         val (want, picks, photoSet) = withContext(Dispatchers.IO) {
             val study = app.studyRepository
-            val wanted = study.newWordsWanted()
+            // Null is the prompt: the gate is judged at open, not from the count the strip
+            // showed. A set batch is the manual add, and it does not ask the gate.
+            val wanted = batch ?: study.newWordsWanted()
             val seen = study.everSeenIds() + study.recentlySkippedIds()
             val quota = wanted + SKIP_BUFFER
             // A character already met in a photo is a better suggestion than the next HSK

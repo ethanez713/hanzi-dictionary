@@ -175,10 +175,11 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   `card_state`, so an archived word's memory is rebuilt from its newest `review_log` row; keep
   that row's post-review stability trustworthy. Origins `final` and `audit` are real retrievals
   and count toward mastery. Constants are anchored in `docs/research/flashcard-retirement.md` §F.
-- **New words are suggested only through the thin-deck rule** (`newWordGap` in `DeckHealth.kt`),
-  and only from the Study deck strip. Don't add a second entry point that bypasses it — the user
-  asked for suggestions to be metric-gated. Triage "know" files a word with an Easy first rating
-  (a real recall check ~a week out), never straight to the archive.
+- **The thin-deck rule decides when the app prompts for new words** (`newWordGap` in
+  `DeckHealth.kt`). The prompt and a quieter manual "add new words" link both live on the Study
+  deck strip; the manual link is always there once the deck has loaded and opens the same triage
+  for the "New words per batch" setting (5/10/15, default 5). Triage "know" files a word with an
+  Easy first rating (a real recall check ~a week out), never straight to the archive.
 
 ### Home-screen widget — platform constraints that bite
 

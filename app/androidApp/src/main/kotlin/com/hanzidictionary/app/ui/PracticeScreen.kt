@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hanzidictionary.app.AppSettings
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
@@ -94,7 +95,7 @@ fun PracticeScreen(
     lookupStack: LookupStack,
     onSwitchToDictionary: () -> Unit,
     onEditList: (Long) -> Unit = {},
-    onAddNewWords: () -> Unit = {},
+    onAddNewWords: (Int?) -> Unit = {},
     onFinalCheck: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -107,9 +108,9 @@ fun PracticeScreen(
     var summaries by remember { mutableStateOf<Map<String, ItemSummary>>(emptyMap()) }
     var loaded by remember { mutableStateOf(false) }
     var back by remember { mutableStateOf<CardBack?>(null) }
-    // How many new words the thin-deck rule would offer right now (0 hides the prompt). Judged
-    // against all your lists, not just the one on screen: the question is whether the whole
-    // deck is running dry.
+    // How many new words the thin-deck prompt would offer (0 hides that prompt; the quieter
+    // add link stays). Judged against all your lists, not just the one on screen: the
+    // question is whether the whole deck is running dry.
     var newWordsWanted by remember { mutableIntStateOf(0) }
     var finalCheckReady by remember { mutableIntStateOf(0) }
     var reviewsToday by remember { mutableLongStateOf(0L) }
@@ -314,6 +315,8 @@ fun PracticeScreen(
                     eth = eth,
                     onClick = editableListId?.let { { onEditList(it) } },
                     newWordsWanted = if (loaded) newWordsWanted else 0,
+                    manualBatch = app.settings.newWordsPerBatch,
+                    deckLoaded = loaded,
                     onAddNewWords = onAddNewWords,
                     finalCheckReady = if (loaded) finalCheckReady else 0,
                     onFinalCheck = onFinalCheck,
@@ -545,7 +548,9 @@ private fun DeckStrip(
     eth: EthanColors,
     onClick: (() -> Unit)? = null,
     newWordsWanted: Int = 0,
-    onAddNewWords: () -> Unit = {},
+    manualBatch: Int = AppSettings.DEFAULT_NEW_WORDS_BATCH,
+    deckLoaded: Boolean = false,
+    onAddNewWords: (Int?) -> Unit = {},
     finalCheckReady: Int = 0,
     onFinalCheck: () -> Unit = {},
     reviewsToday: Long = 0,
@@ -606,15 +611,24 @@ private fun DeckStrip(
                 modifier = Modifier.clickable(onClick = onFinalCheck).padding(top = 2.dp),
             )
         }
-        // The only place the app ever suggests more vocabulary, and only while the thin-deck
-        // rule says the next sitting would run short — with the reason, not just the nudge.
+        // The thin-deck rule decides when the app prompts, and the line says why the next
+        // sitting would run short. The quieter link in the same spot stays once the deck
+        // has loaded, so adding a batch does not wait on that rule.
         if (newWordsWanted > 0) {
             Text(
                 "Not much coming up — add up to $newWordsWanted new words ›",
                 fontFamily = PlexMono,
                 fontSize = 11.sp,
                 color = eth.textLink,
-                modifier = Modifier.clickable(onClick = onAddNewWords).padding(top = 2.dp),
+                modifier = Modifier.clickable { onAddNewWords(null) }.padding(top = 2.dp),
+            )
+        } else if (deckLoaded) {
+            Text(
+                "add new words ›",
+                fontFamily = PlexMono,
+                fontSize = 11.sp,
+                color = eth.textFaint,
+                modifier = Modifier.clickable { onAddNewWords(manualBatch) }.padding(top = 2.dp),
             )
         }
     }

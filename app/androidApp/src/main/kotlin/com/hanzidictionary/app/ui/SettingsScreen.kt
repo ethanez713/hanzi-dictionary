@@ -144,6 +144,17 @@ fun SettingsScreen(
                     eth = eth,
                 )
             }
+            SettingsRow(
+                title = "New words per batch",
+                subtitle = "How many the Study strip's add link offers. The prompt when little is coming up still sizes itself.",
+            ) {
+                SegmentedChoice(
+                    options = AppSettings.NEW_WORDS_BATCH_CHOICES.map { it to it.toString() },
+                    selected = settings.newWordsPerBatch,
+                    onSelect = { settings.updateNewWordsPerBatch(it) },
+                    eth = eth,
+                )
+            }
             HorizontalDivider(color = eth.inkRule)
 
             RemindersSection(settings, eth)
