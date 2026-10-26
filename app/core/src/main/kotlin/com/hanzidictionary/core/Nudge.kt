@@ -231,3 +231,16 @@ fun nudgeDoneTitle(graded: Int, streakDays: Int): String {
     return if (streakDays >= 1) "All caught up · $reviewed · $streakDays-day streak"
     else "All caught up · $reviewed"
 }
+
+/**
+ * "5-day streak · 12/20" under the notification headline. Null when there is nothing
+ * to report — no live streak and no review today — so an empty day doesn't claim a
+ * "0-day streak". The streak half also drops when [streakInTitle]: the evening
+ * reminder's headline already names the run, and "Keep your 5-day streak" over
+ * "5-day streak · 0/20" would say it twice.
+ */
+fun nudgeStatusLine(streakDays: Int, reviews: Long, goal: Int, streakInTitle: Boolean): String? {
+    if (streakDays <= 0 && reviews <= 0L) return null
+    val progress = "$reviews/$goal"
+    return if (streakDays > 0 && !streakInTitle) "$streakDays-day streak · $progress" else progress
+}

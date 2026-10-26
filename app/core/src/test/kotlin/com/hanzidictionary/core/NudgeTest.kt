@@ -287,4 +287,22 @@ class NudgeTest {
         assertEquals("All caught up · 1 reviewed · 1-day streak", nudgeDoneTitle(1, 1))
         assertEquals("All caught up · 3 reviewed · 5-day streak", nudgeDoneTitle(3, 5))
     }
+
+    @Test
+    fun theStatusLineNamesTheStreakAndTodaysGoal() {
+        assertNull(nudgeStatusLine(0, 0L, 20, streakInTitle = false))
+        assertEquals("12/20", nudgeStatusLine(0, 12L, 20, streakInTitle = false))
+        assertEquals("1-day streak · 1/20", nudgeStatusLine(1, 1L, 20, streakInTitle = false))
+        assertEquals("5-day streak · 12/20", nudgeStatusLine(5, 12L, 20, streakInTitle = false))
+        assertEquals("5-day streak · 0/20", nudgeStatusLine(5, 0L, 20, streakInTitle = false))
+    }
+
+    @Test
+    fun theStatusLineDropsTheStreakWhenTheTitleAlreadySaysIt() {
+        // "Keep your 5-day streak" over "5-day streak · 0/20" would say the run twice.
+        assertEquals("0/20", nudgeStatusLine(5, 0L, 20, streakInTitle = true))
+        assertEquals("12/20", nudgeStatusLine(5, 12L, 20, streakInTitle = true))
+        assertEquals("3/20", nudgeStatusLine(0, 3L, 20, streakInTitle = true))
+        assertNull(nudgeStatusLine(0, 0L, 20, streakInTitle = true))
+    }
 }

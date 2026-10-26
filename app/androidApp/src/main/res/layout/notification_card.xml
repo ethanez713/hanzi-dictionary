@@ -27,6 +27,18 @@
         android:adjustViewBounds="true"
         android:scaleType="fitStart" />
 
+    <!-- Streak and today's goal, in Plex Mono. Gone until there is something to say;
+         the evening streak headline already names the run, so that half is left off
+         then. The collapsed strip stays the glyph alone. -->
+    <ImageView
+        android:id="@+id/nudge_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:adjustViewBounds="true"
+        android:scaleType="fitStart"
+        android:visibility="gone" />
+
     <!-- The card just graded: glyph (Noto), its answer (Instrument Sans, muted), and the
          verdict in the gutter colour it was graded with. -->
     <LinearLayout

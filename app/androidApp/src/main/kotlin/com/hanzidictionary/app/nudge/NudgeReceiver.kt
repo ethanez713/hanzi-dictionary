@@ -83,7 +83,9 @@ class NudgeReceiver : BroadcastReceiver() {
         if (next.card == null) store.closeReminder()
         store.saveSession(next)
         PracticeWidgetUpdater.refresh(context)
-        NudgeNotifier.post(context, store.title, next)
+        // The stored title is the one postFresh chose; holdsStreak says whether that
+        // title already names the run, so a re-post doesn't repeat it underneath.
+        NudgeNotifier.post(context, store.title, next, streakInTitle = store.holdsStreak)
     }
 
     private companion object {

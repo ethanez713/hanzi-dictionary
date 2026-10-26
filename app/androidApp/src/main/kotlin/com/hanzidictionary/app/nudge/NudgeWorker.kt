@@ -129,7 +129,8 @@ object NudgeScheduler {
         }
         store.title = title
         store.saveSession(session)
-        NudgeNotifier.post(app, title, session)
+        // streakDays != null is the evening reminder: its headline already names the run.
+        NudgeNotifier.post(app, title, session, streakInTitle = streakDays != null)
         return true
     }
 

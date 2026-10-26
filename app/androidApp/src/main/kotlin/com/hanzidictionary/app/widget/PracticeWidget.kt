@@ -7,7 +7,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.view.View
 import android.widget.RemoteViews
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.MainActivity
@@ -63,8 +62,7 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                 val editor = prefs.edit()
                 saveState(editor, widgetId, next)
                 editor.apply()
-                // Flip stays off the database; the last refresh's line is still the truth.
-                render(context, widgetId, next, cachedWidgetStatus)
+                render(context, widgetId, next)
             }
             ACTION_GRADE -> {
                 val rating = intent.getStringExtra(EXTRA_RATING)
@@ -113,9 +111,7 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                 // Committed synchronously: render() reads nothing back, but the receiver may
                 // be torn down the moment goAsync() finishes, so the write must land first.
                 editor.commit()
-                val status = readWidgetStatus(app)
-                cachedWidgetStatus = status
-                render(appContext, widgetId, next, status)
+                render(appContext, widgetId, next)
             } finally {
                 pending.finish()
             }
@@ -129,10 +125,6 @@ class PracticeWidgetProvider : AppWidgetProvider() {
         private const val INVALID_ID = AppWidgetManager.INVALID_APPWIDGET_ID
         private const val PREFS = "practice_widget"
         private val FIELDS = listOf("item", "kind", "front", "answer", "revealed")
-
-        /** Last footer line painted by a refresh. A flip redraws from memory and reuses it. */
-        @Volatile
-        private var cachedWidgetStatus: String? = null
 
         private fun prefs(context: Context): SharedPreferences =
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -170,38 +162,11 @@ class PracticeWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        /**
-         * Footer for the card. Null hides it: no live streak and nothing reviewed today,
-         * or the read itself failed (empty or unopened db must not take the widget down).
-         * Triage claims are not reviews, so the count is [StudyRepository.goalReviewsToday].
-         */
-        private fun readWidgetStatus(app: HanziApp): String? = runCatching {
-            val now = System.currentTimeMillis()
-            widgetStatusLine(
-                streakDays = app.studyRepository.streakState(now).current,
-                reviews = app.studyRepository.goalReviewsToday(now),
-                goal = app.settings.dailyGoal,
-            )
-        }.getOrNull()
-
-        /** "5-day streak · 12/20". The streak half drops out when the run is zero. */
-        private fun widgetStatusLine(streakDays: Int, reviews: Long, goal: Int): String? {
-            if (streakDays <= 0 && reviews <= 0L) return null
-            val progress = "$reviews/$goal"
-            return if (streakDays > 0) "$streakDays-day streak · $progress" else progress
-        }
-
-        private fun render(context: Context, widgetId: Int, state: WidgetState, status: String?) {
+        private fun render(context: Context, widgetId: Int, state: WidgetState) {
             val view = widgetView(state)
             val views = RemoteViews(context.packageName, R.layout.widget_practice)
             views.setTextViewText(R.id.widget_card, view.glyph)
             views.setTextViewText(R.id.widget_echo, view.detail)
-            if (status.isNullOrEmpty()) {
-                views.setViewVisibility(R.id.widget_status, View.GONE)
-            } else {
-                views.setTextViewText(R.id.widget_status, status)
-                views.setViewVisibility(R.id.widget_status, View.VISIBLE)
-            }
 
             views.setOnClickPendingIntent(R.id.zone_miss, gradeIntent(context, widgetId, Rating.AGAIN))
             views.setOnClickPendingIntent(R.id.zone_knew, gradeIntent(context, widgetId, Rating.GOOD))

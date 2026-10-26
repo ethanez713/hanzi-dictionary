@@ -21,6 +21,7 @@ import com.hanzidictionary.core.NudgeSession
 import com.hanzidictionary.core.Rating
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.nudgeDoneTitle
+import com.hanzidictionary.core.nudgeStatusLine
 
 /**
  * Builds and posts the study-reminder notification — the practice screen in miniature, in its
@@ -77,10 +78,11 @@ internal object NudgeNotifier {
 
     /**
      * Posts (or replaces) the reminder for [session]. The channel is silent, so a re-post never
-     * alerts.
+     * alerts. [streakInTitle] is true when [title] is the evening streak reminder, so the
+     * status line under it doesn't repeat the run the headline already named.
      */
     @SuppressLint("MissingPermission") // guarded by canPost(); the permission itself is requested from Settings
-    fun post(context: Context, title: String, session: NudgeSession) {
+    fun post(context: Context, title: String, session: NudgeSession, streakInTitle: Boolean) {
         if (!canPost(context)) return
         ensureChannel(context)
         val card = session.card
@@ -125,11 +127,12 @@ internal object NudgeNotifier {
                 .setTimeoutAfter(DONE_TIMEOUT_MS)
         } else {
             val art = NudgeArt(context)
+            val status = readNudgeStatus(context, streakInTitle)
             builder
                 .setContentTitle(title)
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
                 .setCustomContentView(collapsed(context, art, card.item, card.front))
-                .setCustomBigContentView(expanded(context, art, card.item, card.front, title, session.previous))
+                .setCustomBigContentView(expanded(context, art, card.item, card.front, title, session.previous, status))
                 .setContentIntent(openIntent(context, card.item))
                 .setDeleteIntent(dismissIntent(context))
         }
@@ -150,7 +153,7 @@ internal object NudgeNotifier {
     /**
      * The practice screen in miniature (see notification_card.xml). Type follows the theme's
      * roles: Piazzolla for the headline, Noto CJK for anything Chinese, Plex Mono for the gutter
-     * marks and their tracked labels, Instrument Sans for prose.
+     * marks, their tracked labels and the streak/goal line, Instrument Sans for prose.
      */
     private fun expanded(
         context: Context,
@@ -159,10 +162,20 @@ internal object NudgeNotifier {
         front: String,
         title: String,
         previous: NudgeGraded?,
+        status: String?,
     ): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.notification_card)
         val width = art.contentWidthDp
         views.setArt(context, R.id.nudge_title, art.line(title, R.font.piazzolla_semibold, 16f, width), R.color.nudge_ink, title)
+
+        if (status != null) {
+            views.setViewVisibility(R.id.nudge_status, View.VISIBLE)
+            views.setArt(
+                context, R.id.nudge_status,
+                art.line(status, R.font.ibm_plex_mono_regular, 11f, width),
+                R.color.nudge_text_muted, status,
+            )
+        }
 
         if (previous != null) {
             views.setViewVisibility(R.id.nudge_previous, View.VISIBLE)
@@ -197,6 +210,22 @@ internal object NudgeNotifier {
         bindTaps(context, views, item)
         return views
     }
+
+    /**
+     * Streak and today's goal under the headline. Null hides the line: nothing to say,
+     * or the read itself failed — an empty or unopened db must not take the post down.
+     * The count is goalReviewsToday: a triage "know" is a claim, not a review.
+     */
+    private fun readNudgeStatus(context: Context, streakInTitle: Boolean): String? = runCatching {
+        val app = context.applicationContext as HanziApp
+        val now = System.currentTimeMillis()
+        nudgeStatusLine(
+            streakDays = app.studyRepository.streakState(now).current,
+            reviews = app.studyRepository.goalReviewsToday(now),
+            goal = app.settings.dailyGoal,
+            streakInTitle = streakInTitle,
+        )
+    }.getOrNull()
 
     /** The card's share of the row: gutters 1 : card 3 : gutter 1, less the card's margins. */
     private fun cardWidthDp(art: NudgeArt) = (art.contentWidthDp - 12f) * 3f / 5f
