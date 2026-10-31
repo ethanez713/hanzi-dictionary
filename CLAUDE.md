@@ -11,20 +11,11 @@ This file is published too: personal or machine-specific notes go in the gitigno
 Authoritative spec: `docs/hanzi-dictionary-spec-v1.md`. Data provenance/licensing:
 `docs/ATTRIBUTIONS.md` + `LICENSES/`.
 
-## Layout
+## Placement
 
-- **`pipeline/`** — Python, **stdlib-only**, its own `.venv`. Fetches source snapshots and
-  builds the SQLite content packs. `fetchers/` (one per source) → `pipeline/build.py`
-  (assemble `hanzi.db`) → `pipeline/package.py` (split into shippable `core.db` + `ids.db`,
-  build FTS5, export JSONL). Schema is `pipeline/pipeline/schema.sql`.
-- **`app/`** — Gradle, two modules:
-  - **`:core`** — **pure Kotlin, no Android deps, JVM-unit-tested.** Repositories
-    (`HanziRepository` over the content pack, `StudyRepository`/`UserRepository` over user
-    state), `Fsrs.kt` (hand-written FSRS-6), and **pure state machines / rules** (`WidgetState.kt`, `FinalCheck.kt`,
-    `PracticeState.kt`, `PhotoScan.kt`, `Nudge.kt`, `Mastery.kt`, `DeckHealth.kt`). **Put logic here, not in the UI/provider**, so it can
-    be tested without a device. SQLDelight schemas live under `src/main/sqldelight/`.
-  - **`:androidApp`** — Jetpack Compose UI (`ui/`), the home-screen widget (`widget/`), the reminder notification (`nudge/`), and
-    thin Android adapters (`photo/`, `audio/`). Depends on `:core`.
+- `pipeline/` is Python and **stdlib-only**.
+- `:core` is pure Kotlin with no Android deps. **Put logic there, not in the UI or a provider**,
+  so it can be tested without a device.
 
 ## Build / test / run
 
@@ -38,10 +29,8 @@ app/gradlew -p app :core:test                       # fast, pure-JVM unit tests 
 app/gradlew -p app :core:test :androidApp:assembleDebug   # full build + tests
 ```
 
-- **Unit tests are the safety net.** `:core` tests run against real fixtures with no device
-  (`WidgetStateTest`, `PracticeStateTest`, `PhotoScannerTest`, `StudyRepositoryTest`,
-  `HanziRepositoryTest` — the last opens the real bundled pack). Add a test for any new
-  `:core` transition. Don't boot the emulator for logic checks.
+- Add a `:core` test for any new transition; they run on real fixtures with no device. Don't boot
+  the emulator for logic checks.
 
 ## The data pack (core.db / ids.db)
 
@@ -130,8 +119,6 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   reached from the plain footer links at the foot of an entry in the lookup sheet. Only a
   combining form with no character of its own (氵) opens the component page directly.
   `ComponentBreakdown.glyphId` is what makes the distinction.
-- **Comments justify _why_, not _what_.** The codebase is heavily commented in this style;
-  match it. Keep it that way.
 - **A `DeckSource` is serialised with `android.net.Uri.encode`, not `URLEncoder`**
   (URLEncoder corrupts `+` in glyph ids like `U+597D`). See `enc`/`dec` in `AppRoot.kt`.
 - **The Dictionary tab's inbox feed keeps its scroll position in its own anchor**, not in `LazyListState`'s
@@ -225,11 +212,3 @@ more than ~6 months old, compare it against <https://ollama.com/library> for a n
 generation that fits in 6 GB, then `ollama rm` whatever it supersedes. Cached scores are
 comparable only within one model: record which model produced them and re-score after a
 swap rather than mixing two models' judgements.
-
-## Reviewing this project
-
-Follow the `review` skill (strict nitpicky pass → Implement/Optional/Dismiss triage) with the
-small-personal-project lens above. Security findings are never dismissed as theoretical, but
-this app ships no secrets and takes no untrusted network input; the one injection surface to
-watch is the pipeline (SQLite inserts are parameterized — keep them that way) and any future
-CSV/spreadsheet export (guard `=+-@` formula-injection).
