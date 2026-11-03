@@ -1,7 +1,6 @@
 package com.hanzidictionary.app.ui
 
 import android.os.SystemClock
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,11 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -82,7 +77,7 @@ import kotlinx.coroutines.withContext
  *
  * The glyph is fixed in a 200dp zone and NEVER moves when the card flips — content
  * expands below the zone on reveal. Grade gutters are always visible (amber left ✗ AGAIN,
- * jade right ✓ KNEW). Deck strip at the top shows new/due/ahead counts, the daily-goal ring, and a progress bar.
+ * jade right ✓ KNEW). Deck strip at the top shows new/due/ahead counts and a progress bar.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +108,6 @@ fun PracticeScreen(
     // question is whether the whole deck is running dry.
     var newWordsWanted by remember { mutableIntStateOf(0) }
     var finalCheckReady by remember { mutableIntStateOf(0) }
-    var reviewsToday by remember { mutableLongStateOf(0L) }
     var streak by remember {
         mutableStateOf(StreakState(0, 0, studiedToday = false, frozenDays = emptySet()))
     }
@@ -135,7 +129,6 @@ fun PracticeScreen(
             PracticeChrome(
                 newWordsWanted = study.newWordsWanted(),
                 finalCheckReady = study.finalCheckStatus().eligible,
-                reviewsToday = study.goalReviewsToday(now),
                 streak = streakState,
                 milestone = newMilestone(
                     streakState.current,
@@ -146,7 +139,6 @@ fun PracticeScreen(
         }
         newWordsWanted = chrome.newWordsWanted
         finalCheckReady = chrome.finalCheckReady
-        reviewsToday = chrome.reviewsToday
         streak = chrome.streak
         state = deckOpenedAt(deck = entries, pin = app.practiceCardPin)
         summaries = found
@@ -192,7 +184,6 @@ fun PracticeScreen(
                 val now = System.currentTimeMillis()
                 val streakState = app.studyRepository.streakState(now)
                 GradeFollowUp(
-                    reviewsToday = app.studyRepository.goalReviewsToday(now),
                     streak = streakState,
                     milestone = newMilestone(
                         streakState.current,
@@ -201,7 +192,6 @@ fun PracticeScreen(
                     ),
                 )
             }
-            reviewsToday = followUp.reviewsToday
             streak = followUp.streak
             PracticeWidgetUpdater.refresh(context)
             // A further deal means this note missed its card. Leave it unrecorded so
@@ -320,8 +310,6 @@ fun PracticeScreen(
                     onAddNewWords = onAddNewWords,
                     finalCheckReady = if (loaded) finalCheckReady else 0,
                     onFinalCheck = onFinalCheck,
-                    reviewsToday = reviewsToday,
-                    dailyGoal = app.settings.dailyGoal,
                 )
 
                 val entry = state.current
@@ -415,13 +403,11 @@ private const val REVEAL_MS_CAP = 120_000L
 private data class PracticeChrome(
     val newWordsWanted: Int,
     val finalCheckReady: Int,
-    val reviewsToday: Long,
     val streak: StreakState,
     val milestone: Milestone?,
 )
 
 private data class GradeFollowUp(
-    val reviewsToday: Long,
     val streak: StreakState,
     val milestone: Milestone?,
 )
@@ -485,64 +471,6 @@ private fun StreakChip(days: Int, studiedToday: Boolean, eth: EthanColors) {
 }
 
 @Composable
-private fun DailyGoalRing(done: Long, goal: Int, eth: EthanColors) {
-    val fraction = if (goal <= 0) 0f else (done.toFloat() / goal.toFloat()).coerceIn(0f, 1f)
-    val met = goal > 0 && done >= goal
-    Box(
-        Modifier
-            .size(18.dp)
-            .semantics {
-                contentDescription = if (met) {
-                    "Daily goal reached, $done of $goal"
-                } else {
-                    "$done of $goal reviews today"
-                }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val stroke = 2.dp.toPx()
-            val inset = stroke / 2f
-            val arcSize = Size((size.width - stroke).coerceAtLeast(0f), (size.height - stroke).coerceAtLeast(0f))
-            val topLeft = Offset(inset, inset)
-            drawArc(
-                color = eth.ink200,
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = stroke),
-            )
-            if (fraction > 0f) {
-                drawArc(
-                    color = eth.jade500,
-                    startAngle = -90f,
-                    sweepAngle = 360f * fraction,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(
-                        width = stroke,
-                        cap = if (fraction >= 1f) StrokeCap.Butt else StrokeCap.Round,
-                    ),
-                )
-            }
-        }
-        if (met) {
-            Text(
-                "✓",
-                fontFamily = PlexMono,
-                fontSize = 9.sp,
-                color = eth.jade600,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.clearAndSetSemantics {},
-            )
-        }
-    }
-}
-
-@Composable
 private fun DeckStrip(
     deck: List<DeckEntry>,
     eth: EthanColors,
@@ -553,8 +481,6 @@ private fun DeckStrip(
     onAddNewWords: (Int?) -> Unit = {},
     finalCheckReady: Int = 0,
     onFinalCheck: () -> Unit = {},
-    reviewsToday: Long = 0,
-    dailyGoal: Int = 0,
 ) {
     val newCount = deck.count { it.bucket == DeckBucket.NEW }
     val dueCount = deck.count { it.bucket == DeckBucket.DUE }
@@ -575,7 +501,6 @@ private fun DeckStrip(
             Text("$newCount new", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textAccent)
             Text("$dueCount due", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textMuted)
             Text("$aheadCount ahead", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textFaint)
-            DailyGoalRing(done = reviewsToday, goal = dailyGoal, eth = eth)
             Spacer(Modifier.weight(1f))
             if (onClick != null) {
                 Text("edit ›", fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink)

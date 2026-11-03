@@ -132,7 +132,7 @@ fun SettingsScreen(
             }
             SettingsRow(
                 title = "Daily goal",
-                subtitle = "How many reviews fill the ring on Study. The streak counts the days you study.",
+                subtitle = "Reviews a day, counted on the study reminder. The streak counts the days you study.",
             ) {
                 SegmentedChoice(
                     options = AppSettings.DAILY_GOAL_CHOICES.map { it to it.toString() },
