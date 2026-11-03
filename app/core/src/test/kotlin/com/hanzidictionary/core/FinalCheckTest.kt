@@ -257,6 +257,25 @@ class FinalCheckTest {
     }
 
     @Test
+    fun practiceAheadNeverDealsACandidateButItsDueDateStillDoes() {
+        val list = study.createList("A", t0)
+        val candidate = StudyItem.character("U+7000")
+        val ordinary = StudyItem.character("U+7001")
+        plantReady(candidate, list, lastReview = t0)
+        plantReviews(ordinary, list, listOf(t0 - 10 * DAY_MS, t0), stability = 10.0)
+        val now = t0 + DAY_MS
+        setDue(candidate, now + 40 * DAY_MS)
+        setDue(ordinary, now + 5 * DAY_MS)
+
+        val ahead = study.buildDeck(listOf(candidate, ordinary), now = now)
+        assertEquals(listOf(ordinary), ahead.map { it.item }, "an early look would restart the check's gap")
+
+        setDue(candidate, now)
+        val due = study.buildDeck(listOf(candidate, ordinary), now = now)
+        assertEquals(DeckBucket.DUE, due.single { it.item == candidate }.bucket)
+    }
+
+    @Test
     fun anItemOutsideEveryListOrAlreadyArchivedIsNotACandidate() {
         val list = study.createList("A", t0)
         val loose = StudyItem.character("U+4000")
@@ -564,6 +583,10 @@ class FinalCheckTest {
                VALUES ('${item.itemId}', '${item.kind}', 'review', NULL, $stability, 5.0, $lastReview, $lastReview, $reviews, $lapses)""",
             0,
         )
+    }
+
+    private fun setDue(item: StudyItem, due: Long) {
+        driver.execute(null, "UPDATE card_state SET due = $due WHERE item_id = '${item.itemId}'", 0)
     }
 
     private fun insertReview(item: StudyItem, ts: Long, elapsed: Double?, stability: Double) {

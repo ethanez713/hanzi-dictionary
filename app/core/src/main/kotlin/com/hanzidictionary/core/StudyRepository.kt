@@ -242,6 +242,8 @@ class StudyRepository(
      *  2. **Due** — scheduled for now or earlier, *least likely to be recalled first*.
      *  3. **Ahead** — nothing left that's due, so top up with whatever you're closest to
      *     forgetting. This is what keeps the deck (and the widget) from ever being empty.
+     *     A final-check candidate is never a top-up: an early look would restart the gap
+     *     its check is waiting on, so its next look is the check or its own due date.
      *
      * The moment a new card is graded even once it has a memory state (stability +
      * difficulty) and rejoins the retrievability-sorted Due/Ahead order — "most unknown
@@ -280,7 +282,19 @@ class StudyRepository(
         ahead.sortWith(byRecall)
 
         val newCards = fresh.take(newAllowance(now)).shuffled()
-        return (newCards + due + ahead).take(limit)
+        val room = limit - newCards.size - due.size
+        val topUp = if (room > 0) withoutFinalCheckCandidates(ahead).take(room) else emptyList()
+        return (newCards + due).take(limit) + topUp
+    }
+
+    private fun withoutFinalCheckCandidates(ahead: List<DeckEntry>): List<DeckEntry> {
+        val stable = ahead.filter { (it.card?.stability ?: 0.0) >= RETIRE_MIN_STABILITY_DAYS }
+        if (stable.isEmpty()) return ahead
+        val history = reviewHistory(stable.map { it.item.itemId })
+        val candidates = stable
+            .filter { isFinalCheckCandidate(masteryOf(it.card, history[it.item.itemId].orEmpty())) }
+            .mapTo(HashSet()) { it.item.itemId }
+        return ahead.filterNot { it.item.itemId in candidates }
     }
 
     fun deckFor(source: DeckSource, limit: Int = 60, now: Long = System.currentTimeMillis()): List<DeckEntry> =

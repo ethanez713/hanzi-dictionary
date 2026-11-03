@@ -153,6 +153,7 @@ stays the user's swipe. Self-reported "I know it" from new-word triage never cou
 |---|---|---|
 | candidate | streak ≥ 3 and stability ≥ 30 d | A's ready-to-archive rule minus its gap clause |
 | final check unlocks | 30 d after the last review (or the next day, if the streak already holds a 30 d gap) | the test supplies A's 30 d proof instead of waiting for the next scheduled review; WaniKani's burn review, at a shorter gap |
+| practice-ahead | never deals a candidate; a due candidate is still reviewed | an early look would restart the 30 d gap the check waits on |
 | candidate order | lowest predicted recall first, at most 15 | FSRS / MEMORIZE |
 | archive sample | 5 per session, drawn with probability ∝ 1 − predicted recall | MEMORIZE |
 | archive eligibility | untested for ≥ 30 d | Bahrick's 30-day gap; a **judgement call** |
