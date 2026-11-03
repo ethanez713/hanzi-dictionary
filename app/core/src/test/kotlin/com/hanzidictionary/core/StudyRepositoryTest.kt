@@ -260,23 +260,22 @@ class StudyRepositoryTest {
     private val day = 86_400_000L
 
     @Test
-    fun knowFilesTheWordAndSchedulesARealCheckAboutAWeekOut() {
+    fun knowArchivesTheWordWithoutFilingOrGradingIt() {
         study.triage(nihao, TriageVerdict.KNOW, now)
 
-        val list = study.ensureActiveList(now)
-        assertEquals(listOf(nihao), study.itemsInList(list.id))
-        val card = study.cardState(nihao.itemId)!!
-        assertEquals(CardPhase.REVIEW, card.phase, "an Easy first rating skips the learning steps")
-        val days = (card.due - now) / day
-        assertTrue(days in 6..10, "expected a check in about a week, got $days days")
+        assertTrue(study.allListItems().isEmpty(), "a known word is not added to the deck")
+        assertNull(study.cardState(nihao.itemId))
+        assertEquals(0L, study.reviewsToday(now), "a claim is not a review")
+        assertTrue(nihao.itemId in UserRepository(driver).knownIds())
+        assertTrue(nihao.itemId in study.everSeenIds(), "so triage never offers it again")
     }
 
     @Test
-    fun knowIsLoggedAsATriageClaimNotAReview() {
+    fun aKnownWordIsSpotCheckedAsAnUntestedClaim() {
         study.triage(nihao, TriageVerdict.KNOW, now)
-        assertEquals(1L, study.reviewsToday(now))
-        assertEquals(null, study.deckLoad(now).recentSuccess, "a claim must not feed the accuracy gate")
-        assertEquals(0, study.masteryFor(listOf(nihao.itemId)).getValue(nihao.itemId).spacedStreak)
+        val audit = study.finalCheckSession(now + day).single()
+        assertEquals(FinalCheckKind.AUDIT, audit.kind)
+        assertEquals(AUDIT_NO_HISTORY_RETRIEVABILITY, audit.retrievability)
     }
 
     @Test
@@ -285,7 +284,7 @@ class StudyRepositoryTest {
         study.grade(hao, Rating.GOOD, now = now)
         study.grade(hao, Rating.AGAIN, now = now + 60_000)
         study.grade(ni, Rating.GOOD, StudyRepository.ORIGIN_FINAL, now = now + 120_000)
-        study.triage(nihao, TriageVerdict.KNOW, now + 180_000)
+        study.grade(nihao, Rating.EASY, StudyRepository.ORIGIN_TRIAGE, now = now + 180_000)
         study.grade(StudyItem.character("U+4E00"), Rating.GOOD, now = now - 30 * day)
 
         val at = now + 180_000
@@ -299,7 +298,7 @@ class StudyRepositoryTest {
         study.grade(hao, Rating.GOOD, now = now)
         study.grade(hao, Rating.AGAIN, now = now + 60_000)
         study.grade(ni, Rating.GOOD, StudyRepository.ORIGIN_FINAL, now = now + 120_000)
-        study.triage(nihao, TriageVerdict.KNOW, now + 180_000)
+        study.grade(nihao, Rating.EASY, StudyRepository.ORIGIN_TRIAGE, now = now + 180_000)
         study.grade(StudyItem.character("U+4E00"), Rating.GOOD, now = now - 30 * day)
 
         assertEquals(mapOf(localDay(now, tz) to 2), study.activity(now + 180_000, days = 7, tz = tz))
@@ -311,7 +310,7 @@ class StudyRepositoryTest {
         val midnight = startOfLocalDay(now, tz)
         study.grade(hao, Rating.GOOD, now = midnight - 2 * day + 3_600_000)
         study.grade(ni, Rating.GOOD, now = midnight - day + 3_600_000)
-        study.triage(nihao, TriageVerdict.KNOW, midnight + 3_600_000)
+        study.grade(nihao, Rating.EASY, StudyRepository.ORIGIN_TRIAGE, now = midnight + 3_600_000)
 
         assertEquals(
             StreakState(current = 2, longest = 2, studiedToday = false, frozenDays = emptySet()),

@@ -45,10 +45,10 @@ data class ReviewStats(val knew: Int, val missed: Int) {
 
 /** What a new-word triage swipe means (see [StudyRepository.triage]). */
 enum class TriageVerdict {
-    /** "I confidently know this": filed, with a first rating that schedules a real check soon. */
+    /** "I know this, don't add it": archived, never filed. */
     KNOW,
 
-    /** "I don't know this": filed as an ordinary new card. */
+    /** "I don't know this, add it": filed as an ordinary new card. */
     DONT_KNOW,
 
     /** "Not now": not filed, and not offered again for a while. */
@@ -417,16 +417,16 @@ class StudyRepository(
 
     /**
      * Applies a swipe on a suggested new word. Nothing here decides whether the user *really*
-     * knows it — they say so, the app takes their word, and keeps the claim honest by how it
-     * schedules it:
+     * knows it — they say so and the app takes their word:
      *
-     *  - [TriageVerdict.KNOW] files the word and records an Easy first rating. FSRS-6 reads that
-     *    as a high initial stability (~8 days), so the word comes back for a genuine recall
-     *    check in about a week instead of being trusted outright; self-rated knowledge runs high
-     *    (yes/no vocabulary tests see 5-25% false alarms), and recognising a word is easier than
-     *    recalling it. The grade is logged with [ORIGIN_TRIAGE], which mastery ignores.
+     *  - [TriageVerdict.KNOW] archives the word without filing it. The claim is tested later
+     *    rather than now: an archived item with no grading is spot-checked at
+     *    [AUDIT_NO_HISTORY_RETRIEVABILITY], since self-rated knowledge runs high.
      *  - [TriageVerdict.DONT_KNOW] files it as an ordinary never-seen card.
      *  - [TriageVerdict.SKIP] files nothing and hides it for a while.
+     *
+     * Older histories hold [ORIGIN_TRIAGE] grades from when "know" filed the word with an Easy
+     * rating; mastery, streaks and the goal count still exclude them.
      */
     fun triage(
         item: StudyItem,
@@ -436,9 +436,9 @@ class StudyRepository(
         when (verdict) {
             TriageVerdict.SKIP -> q.setPref("$PREF_TRIAGE_SKIP${item.itemId}", now.toString())
             TriageVerdict.DONT_KNOW -> addToList(ensureActiveList(now).id, item, now)
-            TriageVerdict.KNOW -> {
-                addToList(ensureActiveList(now).id, item, now)
-                grade(item, Rating.EASY, ORIGIN_TRIAGE, now)
+            TriageVerdict.KNOW -> q.transaction {
+                q.upsertKnown(item.itemId, item.kind, "known", now)
+                q.deleteCardState(item.itemId)
             }
         }
     }

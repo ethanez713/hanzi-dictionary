@@ -165,8 +165,9 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
 - **The thin-deck rule decides when the app prompts for new words** (`newWordGap` in
   `DeckHealth.kt`). The prompt and a quieter manual "add new words" link both live on the Study
   deck strip; the manual link is always there once the deck has loaded and opens the same triage
-  sized by the user's batch setting (`AppSettings`). Triage "know" files a word with an
-  Easy first rating (a real recall check ~a week out), never straight to the archive.
+  sized by the user's batch setting (`AppSettings`). Triage right is "know, don't add to deck":
+  it archives the word ungraded, and the archive spot-check tests the claim. This is the reverse
+  of the photo feed, where right adds.
 
 ### Home-screen widget — platform constraints that bite
 

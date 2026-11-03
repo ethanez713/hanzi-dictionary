@@ -119,9 +119,10 @@ stays the user's swipe. Self-reported "I know it" from new-word triage never cou
 - Koriat 1997; Dunlosky & Rawson 2012 — judgements of learning rest on fluency and familiarity;
   overconfident self-scoring leads learners to stop early and retain less.
 - Recognising a word is easier than recalling its meaning or pinyin.
-- Hence triage: **know** files the word with an Easy first rating (initial stability ≈ 8 days) so a
-  real recall check arrives in about a week; it is never archived on the claim alone. Not
-  implemented: seeding fake words to estimate the user's false-alarm rate (Meara-style).
+- Hence triage: **know** archives the word without adding it to the deck, and the claim is tested
+  afterwards rather than trusted: an archived item with no grading enters the archive spot-check
+  (F) at the 25% miss prior, the top of the Yes/No false-alarm range, and a miss sends it to study.
+  Not implemented: seeding fake words to estimate the user's false-alarm rate (Meara-style).
 
 ## F. The final check, and auditing the archive
 
