@@ -64,7 +64,7 @@ class FinalCheckTest {
     }
 
     @Test
-    fun withoutALongGapTheCheckItselfHasToSpanSixtyDays() {
+    fun withoutALongGapTheCheckItselfHasToSpanTheFullGap() {
         val last = t0
         val early = candidateGate(10.0, last, last + gapMs(RETIRE_MIN_GAP_DAYS) - 1, utc)
         assertFalse(early.eligible)
@@ -213,7 +213,7 @@ class FinalCheckTest {
 
         val tooSoon = t0 + gapMs(RETIRE_MIN_GAP_DAYS) - 1
         // The held gap unlocked on the next local day, so it is already in the sitting.
-        // The other card is one millisecond short of the 60 a grade would record.
+        // The other card is one millisecond short of the whole-day gap a grade would record.
         assertEquals(listOf(held), idsAt(tooSoon))
         val waiting = study.finalCheckStatus(tooSoon, utc)
         assertEquals(1, waiting.eligible)

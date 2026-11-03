@@ -97,7 +97,7 @@ data class RebuiltMemory(
 )
 
 /**
- * Streak and stability are what make a card worth a final check. The 60-day gap is not
+ * Streak and stability are what make a card worth a final check. The long gap is not
  * required yet: the check itself is allowed to supply it.
  */
 fun isFinalCheckCandidate(mastery: Mastery): Boolean =
@@ -112,7 +112,7 @@ fun isFinalCheckCandidate(mastery: Mastery): Boolean =
  *    The same local day is not, however large the clock gap inside it looks.
  *  - It doesn't: wait until [RETIRE_MIN_GAP_DAYS] whole days have elapsed since the last
  *    review, the same count [StudyRepository.grade] will store as `elapsed_days`. Opening
- *    the gate on a fractional day would archive a card whose logged proof was still 59.
+ *    the gate on a fractional day would archive a card whose logged proof was a day short.
  */
 fun candidateGate(
     longestGapDays: Double,

@@ -41,8 +41,9 @@ quoting them anywhere that matters.
   sessions at 14-day spacing.
 - Bahrick 1984, *JEP:General* 113:1 — school Spanish decays for ~3–6 years then plateaus
   ("permastore"). Caveat: multi-year coursework, not a single flashcard.
-- Cepeda et al. 2008, *Psychological Science* 19:1095 — the best gap is ~10–20% of the retention
-  interval wanted (about 5% for a one-year target).
+- Cepeda et al. 2008, *Psychological Science* 19:1095 (n > 1,350, trivia facts, read in the
+  original) — best review gap for a test 7 / 35 / 70 / 350 days out was 1 / 11 / 21 / 21 days
+  (fitted 3 / 8 / 12 / 27): 20–40% of a one-week delay, falling to 5–10% of a one-year delay.
 
 **Conventions, not findings.** Anki's "mature" card (interval ≥ 21 days) and "leech" (8 lapses).
 FSRS stability *S* is the days for recall to fall from 100% to 90%, so at 90% desired retention
@@ -54,10 +55,14 @@ the interval equals *S*.
 |---|---|---|
 | streak | consecutive Good answers on **distinct local days**; same-day repeats neither count nor break it; any miss (and Hard) resets it | Rawson & Dunlosky |
 | learned | streak ≥ 3 and the latest success after a ≥ 21-day gap | Anki "mature"; below Bahrick's 30 d so a weekly studier can reach it |
-| ready to archive | streak ≥ 3, FSRS stability ≥ 180 d, and one success in the streak after a ≥ 60-day gap | Bahrick 56 d spacing; the 180 d figure is a **judgement call** |
+| ready to archive | streak ≥ 3, FSRS stability ≥ 30 d, and one success in the streak after a ≥ 30-day gap | Cepeda's 21–27 d optimum for a one-year test; Bahrick's 30 d. The stability floor equals the gap so the check replaces the next scheduled review — a **judgement call** |
 | struggling / leech | ≥ 4 / ≥ 8 lapses *and* not back on a streak | Anki convention |
 
-No paper validates a specific "retire at stability ≥ N" number. The app only *suggests*; archiving
+No paper validates a specific "retire at stability ≥ N" number. What the gap costs, under FSRS-6
+defaults with every answer Good: the rule is met around day 13 and checked around day 43, after
+which FSRS predicts ~82% recall a year out with no further review. Holding out for stability
+≥ 180 d means a fourth scheduled review (~day 220) for ~92%. The archive spot-check (F) is what
+covers that difference, so a lower floor is safe only while the spot-check runs. The app only *suggests*; archiving
 stays the user's swipe. Self-reported "I know it" from new-word triage never counts as a success.
 
 ## B. Which measurements predict durable learning?
@@ -133,7 +138,7 @@ stays the user's swipe. Self-reported "I know it" from new-word triage never cou
 **What the literature supports.**
 - A retest on the day a card qualifies is the weakest evidence available (Karpicke & Roediger
   2008; the same reason same-day repeats don't extend the streak in A). The test has to follow
-  a gap to mean anything, so it is placed where the 60-day proof was already required.
+  a gap to mean anything, so it is placed where the long-gap proof was already required.
 - Tabibian et al. 2019 (*PNAS* 116:3988, "MEMORIZE") — with a forgetting-curve memory model, the
   optimal review intensity is proportional to the probability of forgetting,
   u(t) = q^(-1/2)·(1 − m(t)), sampled stochastically; on Duolingo data learners whose reviews
@@ -146,8 +151,8 @@ stays the user's swipe. Self-reported "I know it" from new-word triage never cou
 
 | Rule | Value | Anchor |
 |---|---|---|
-| candidate | streak ≥ 3 and stability ≥ 180 d | A's ready-to-archive rule minus its gap clause |
-| final check unlocks | 60 d after the last review (or the next day, if the streak already holds a 60 d gap) | the test supplies A's 60 d proof instead of waiting for the ~180 d scheduled review; WaniKani's burn review |
+| candidate | streak ≥ 3 and stability ≥ 30 d | A's ready-to-archive rule minus its gap clause |
+| final check unlocks | 30 d after the last review (or the next day, if the streak already holds a 30 d gap) | the test supplies A's 30 d proof instead of waiting for the next scheduled review; WaniKani's burn review, at a shorter gap |
 | candidate order | lowest predicted recall first, at most 15 | FSRS / MEMORIZE |
 | archive sample | 5 per session, drawn with probability ∝ 1 − predicted recall | MEMORIZE |
 | archive eligibility | untested for ≥ 30 d | Bahrick's 30-day gap; a **judgement call** |

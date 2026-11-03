@@ -145,8 +145,8 @@ class MasteryTest {
             mastery(card(stability = RETIRE_MIN_STABILITY_DAYS - 1), *history).level,
             "long gap survived, but the memory isn't durable enough yet",
         )
-        // Stable, but no single success has survived a 60-day gap.
-        val shortGaps = arrayOf(entry(0, elapsed = null), entry(30, elapsed = 30.0), entry(75, elapsed = 45.0))
+        // Stable, and the latest gap makes it learned, but none reaches the retirement gap.
+        val shortGaps = arrayOf(entry(0, elapsed = null), entry(25, elapsed = 25.0), entry(50, elapsed = 25.0))
         assertEquals(MasteryLevel.LEARNED, mastery(card(stability = 400.0), *shortGaps).level)
     }
 

@@ -50,13 +50,17 @@ const val MASTERY_STREAK = 3
  * and short of Bahrick's 30-day optimum so a once-a-week studier can still get here. */
 const val LEARNED_MIN_GAP_DAYS = 21.0
 
-/** FSRS stability (days for recall to fall to 90%) before a card is retire-ready. Half a
- * year of stability is a judgement call; no study validates a specific number. */
-const val RETIRE_MIN_STABILITY_DAYS = 180.0
+/** Within the streak, at least one success must have survived this long a gap. For a test a
+ * year out, the best-spaced review came 21 days after study (27 fitted; Cepeda et al. 2008),
+ * and Bahrick's 30-day gaps retained best — so a pass after this gap is a well-spaced review,
+ * not a premature one. */
+const val RETIRE_MIN_GAP_DAYS = 30.0
 
-/** Within the streak, at least one success must have survived this long a gap — about
- * Bahrick's 56-day spacing, the one that matched twice as many short-gap sessions. */
-const val RETIRE_MIN_GAP_DAYS = 60.0
+/** FSRS stability (days for recall to fall to 90%) before a card is retire-ready or a
+ * final-check candidate. Tied to the gap: below it an ordinary review falls due first and
+ * raises stability itself; at or above it the final check takes the place of that review.
+ * No study validates a specific number. */
+const val RETIRE_MIN_STABILITY_DAYS = RETIRE_MIN_GAP_DAYS
 
 /** Lapses before a card is flagged as struggling. A convention, tuned to be earlier than
  * Anki's leech so it surfaces cards you "consistently get wrong" before they're hopeless. */
