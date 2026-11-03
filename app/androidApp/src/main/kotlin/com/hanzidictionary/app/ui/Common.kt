@@ -235,3 +235,38 @@ fun driftSentence(matchClass: String?): String? {
         else -> null
     }
 }
+
+/**
+ * "traditional 輕" — the item's form in the other script, on the revealed card and the
+ * detail pages. [traditional] says which way it points (a traditional character shows its
+ * simplified form). A form with an [onOpen] is tappable, so a character page can step to
+ * its counterpart's page.
+ */
+@Composable
+fun ScriptFormsLine(
+    traditional: Boolean,
+    forms: List<String>,
+    onOpen: ((Int) -> Unit)? = null,
+    charSize: androidx.compose.ui.unit.TextUnit = 20.sp,
+) {
+    if (forms.isEmpty()) return
+    val eth = EthanTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            if (traditional) "traditional" else "simplified",
+            fontFamily = PlexMono, fontSize = 10.5.sp, color = eth.textFaint,
+        )
+        forms.forEachIndexed { i, form ->
+            Text(
+                form,
+                fontFamily = NotoCjk,
+                fontSize = charSize,
+                color = eth.textBody,
+                modifier = if (onOpen != null) Modifier.clickable { onOpen(i) } else Modifier,
+            )
+        }
+    }
+}

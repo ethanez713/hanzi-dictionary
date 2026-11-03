@@ -11,6 +11,7 @@ data class SearchResult(
     val freqRank: Long?,
     val hsk: Long?,            // lowest HSK level of any word containing this character
     val tradChar: String? = null, // traditional form folded into this row (輕 on 轻's row)
+    val scripts: String? = null,  // simp|trad|both — which script the character belongs to
 )
 
 data class ReadingView(

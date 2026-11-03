@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.ItemSummary
+import com.hanzidictionary.core.otherScript
 import com.hanzidictionary.core.SentenceExample
 import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.isSoundBearing
@@ -50,6 +51,10 @@ internal data class CardBack(
     val words: List<BackWord>,
     val sentences: List<SentenceExample>,
     val speakText: String,
+    /** The item in the other script (轻 → 輕); empty when both scripts write it alike.
+     * [otherIsTraditional] says which script [otherForms] are in. */
+    val otherForms: List<String> = emptyList(),
+    val otherIsTraditional: Boolean = true,
 )
 
 /** One line in the card's word list. */
@@ -77,10 +82,12 @@ internal suspend fun loadBack(repository: HanziRepository, item: StudyItem): Car
                 words = w.chars.map { BackWord(it.char, null, it.definition?.let(::shortGloss)) },
                 sentences = repository.cardSentences(w.simp),
                 speakText = w.simp,
+                otherForms = listOfNotNull(w.trad.takeIf { it != w.simp }),
             )
         }
     } else {
         repository.characterPage(item.itemId)?.let { c ->
+            val other = otherScript(item.itemId, c.variants)
             CardBack(
                 pinyin = c.readings.filter { it.system == "pinyin" }
                     .distinctBy { it.value }
@@ -102,6 +109,8 @@ internal suspend fun loadBack(repository: HanziRepository, item: StudyItem): Car
                     .map { BackWord(it.simp, it.pinyin, it.gloss) },
                 sentences = repository.cardSentences(c.char),
                 speakText = c.char,
+                otherForms = other?.forms?.map { it.char }.orEmpty(),
+                otherIsTraditional = other?.traditional ?: true,
             )
         }
     }
@@ -201,6 +210,10 @@ internal fun PracticeCard(
                                 ) { Text("🔊", fontSize = 16.sp) }
                             }
                         }
+
+                        // The other script's form rides in the answer band, under the
+                        // reading — part of "what is this", not a section of its own.
+                        back?.let { ScriptFormsLine(it.otherIsTraditional, it.otherForms) }
 
                         Text(
                             gloss,

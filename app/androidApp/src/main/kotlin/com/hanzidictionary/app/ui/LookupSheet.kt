@@ -61,6 +61,7 @@ import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.masterySummary
 import com.hanzidictionary.core.WordPage
 import com.hanzidictionary.core.isSoundBearing
+import com.hanzidictionary.core.otherScript
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -428,6 +429,13 @@ private fun CharacterSheetContent(
                         fontFamily = PlexMono, fontSize = 10.5.sp, color = eth.textFaint,
                     )
                 }
+                // The other script's form; tapping it steps to that character's page.
+                otherScript(glyphId, p.variants)?.let { o ->
+                    ScriptFormsLine(o.traditional, o.forms.map { it.char }, onOpen = { i ->
+                        val f = o.forms[i]
+                        onLookup(LookupEntry(glyphId = f.glyphId, displayText = f.char))
+                    })
+                }
                 // Study actions
                 val charItem = StudyItem.character(glyphId)
                 MasteryLine(charItem, eth)
@@ -640,6 +648,7 @@ private fun WordSheetContent(
                             modifier = Modifier.clickable { tts.speak(p.simp) })
                     }
                 }
+                if (p.trad != p.simp) ScriptFormsLine(traditional = true, forms = listOf(p.trad))
                 for ((i, sense) in p.senses.take(2).withIndex()) {
                     Text("${i + 1}. $sense", fontSize = 14.5.sp, color = eth.ink700, fontFamily = InstrumentSans)
                 }

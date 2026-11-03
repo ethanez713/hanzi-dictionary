@@ -25,6 +25,10 @@ class AppSettings(private val prefs: SharedPreferences) {
     var photoSort by mutableStateOf(readPhotoSort())
         private set
 
+    /** Whether the photo feed lists traditional-only characters (輕, 後). */
+    var showTraditionalFinds by mutableStateOf(prefs.getBoolean(KEY_PHOTO_TRADITIONAL, true))
+        private set
+
     /** Reviews that fill the Study ring. Display only — the streak counts days. */
     var dailyGoal by mutableStateOf(readDailyGoal())
         private set
@@ -104,6 +108,11 @@ class AppSettings(private val prefs: SharedPreferences) {
         prefs.edit().putString(KEY_PHOTO_SORT, sort.name).apply()
     }
 
+    fun updateShowTraditionalFinds(value: Boolean) {
+        showTraditionalFinds = value
+        prefs.edit().putBoolean(KEY_PHOTO_TRADITIONAL, value).apply()
+    }
+
     fun updateDailyGoal(goal: Int) {
         val coerced = coerceDailyGoal(goal)
         dailyGoal = coerced
@@ -158,6 +167,7 @@ class AppSettings(private val prefs: SharedPreferences) {
         private const val KEY_HINTS = "show_swipe_hints"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_PHOTO_SORT = "photo_sort"
+        private const val KEY_PHOTO_TRADITIONAL = "photo_show_traditional"
         private const val KEY_DAILY_GOAL = "daily_goal"
         private const val KEY_NEW_WORDS_BATCH = "new_words_per_batch"
         private const val KEY_NUDGE_ON = "nudge_enabled"

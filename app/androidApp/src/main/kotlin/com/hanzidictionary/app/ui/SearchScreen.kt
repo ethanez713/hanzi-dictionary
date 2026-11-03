@@ -102,6 +102,8 @@ import com.hanzidictionary.core.charOfGlyphId
 import com.hanzidictionary.core.displayGloss
 import com.hanzidictionary.core.extractComposeParts
 import com.hanzidictionary.core.extractHanzi
+import com.hanzidictionary.core.filterScripts
+import com.hanzidictionary.core.isTraditionalOnly
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -390,9 +392,15 @@ fun SearchScreen(
         selected = setOf(find.glyphId)
     }
 
+    // What the feed actually shows: the Traditional toggle hides traditional-only characters
+    // without touching them, so every bulk verb works on this, never on the hidden ones.
+    val showTraditional = app.settings.showTraditionalFinds
+    val visibleFinds = photoFinds?.let { filterScripts(it, showTraditional) }
+    val hiddenTraditional = photoFinds.orEmpty().size - visibleFinds.orEmpty().size
+
     // Only the photo feed. Recently viewed is a way back, not part of this queue.
     fun toggleSelectAll() {
-        val visible = photoFinds.orEmpty().map { it.glyphId }
+        val visible = visibleFinds.orEmpty().map { it.glyphId }
         val all = visible.isNotEmpty() && visible.all { it in selected }
         selected = if (all) emptySet() else visible.toSet()
     }
@@ -401,7 +409,7 @@ fun SearchScreen(
         if (items.size == 1) "$verb ${items[0].char}" else "$verb ${items.size} items"
 
     fun currentSelection(): List<SearchResult> =
-        photoFinds.orEmpty().filter { it.glyphId in selected }
+        visibleFinds.orEmpty().filter { it.glyphId in selected }
 
     fun beginBulk(items: List<SearchResult>) {
         val ids = items.map { it.glyphId }.toSet()
@@ -500,7 +508,7 @@ fun SearchScreen(
         }
     }.value
 
-    val bulkCount = photoFinds.orEmpty().count { it.glyphId in selected }
+    val bulkCount = visibleFinds.orEmpty().count { it.glyphId in selected }
     Scaffold(
         snackbarHost = { AppSnackbarHost(snackbar) },
         bottomBar = {
@@ -568,7 +576,7 @@ fun SearchScreen(
                 PhotoFeed(
                     listState = feedState,
                     granted = photosGranted,
-                    finds = photoFinds,
+                    finds = visibleFinds,
                     pending = pending,
                     scanProgress = scanProgress,
                     recentlyViewed = recentlyViewed,
@@ -584,6 +592,21 @@ fun SearchScreen(
                             anchorOffset = 0
                             scrollPhotoFeedToTop = true
                         }
+                    },
+                    showTraditional = showTraditional,
+                    hiddenTraditional = hiddenTraditional,
+                    onToggleTraditional = {
+                        // Same as a re-sort: the saved anchor indexes a list that just
+                        // changed, and a hidden character can't stay selected.
+                        settleTriage()
+                        app.settings.updateShowTraditionalFinds(!showTraditional)
+                        if (showTraditional) {
+                            val hidden = photoFinds.orEmpty().filter { it.isTraditionalOnly }.map { it.glyphId }
+                            selected = selected - hidden.toSet()
+                        }
+                        anchorIndex = 0
+                        anchorOffset = 0
+                        scrollPhotoFeedToTop = true
                     },
                     repository = repository,
                     tts = tts,
@@ -730,6 +753,9 @@ private fun PhotoFeed(
     onToggleDefinitions: () -> Unit,
     sort: PhotoSort,
     onSortChange: (PhotoSort) -> Unit,
+    showTraditional: Boolean,
+    hiddenTraditional: Int,
+    onToggleTraditional: () -> Unit,
     repository: HanziRepository,
     tts: MandarinTts,
     lookupStack: LookupStack,
@@ -813,7 +839,23 @@ private fun PhotoFeed(
                         }
                     }
                 }
-                PhotoSortButton(sort, onSortChange)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PhotoSortButton(sort, onSortChange)
+                    Spacer(Modifier.weight(1f))
+                    // Checked = traditional-only characters are listed. Off, the count says
+                    // how many are being held back, so nothing vanishes without a trace.
+                    FilterChip(
+                        selected = showTraditional,
+                        onClick = onToggleTraditional,
+                        label = {
+                            Text(
+                                if (showTraditional || hiddenTraditional == 0) "Traditional"
+                                else "Traditional · $hiddenTraditional hidden",
+                                fontSize = 12.sp,
+                            )
+                        },
+                    )
+                }
             }
         }
         when {
