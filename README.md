@@ -1,5 +1,7 @@
 # Hanzi Dictionary
 
+[![CI](https://github.com/ethanez713/hanzi-dictionary/actions/workflows/ci.yml/badge.svg)](https://github.com/ethanez713/hanzi-dictionary/actions/workflows/ci.yml)
+
 An offline Chinese-character dictionary whose content pack is built by a small, reproducible data pipeline.
 
 Fetchers snapshot each source with the URL, version, license, and file hashes it was taken from. The build resolves one record per codepoint, merges the structural fields in a fixed source order, and keeps interpretive statements as claim rows attributed to the source that made them. Packaging splits the result into `core.db` and a separately licensed `ids.db`, builds FTS5 indexes, and exports JSONL. A Kotlin Android app reads that pack with no network. The product spec is [`docs/hanzi-dictionary-spec-v1.md`](docs/hanzi-dictionary-spec-v1.md).
