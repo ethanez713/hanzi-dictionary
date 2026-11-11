@@ -2,64 +2,72 @@
 
 [![CI](https://github.com/ethanez713/hanzi-dictionary/actions/workflows/ci.yml/badge.svg)](https://github.com/ethanez713/hanzi-dictionary/actions/workflows/ci.yml)
 
-An offline Chinese-character dictionary whose content pack is built by a small, reproducible data pipeline.
+**An offline Chinese dictionary for Android that teaches characters through their parts.**
+Look up 晴 and it shows the sun radical that gives the meaning and the 青 that gives the
+sound, then every other character built the same way.
 
-Fetchers snapshot each source with the URL, version, license, and file hashes it was taken from. The build resolves one record per codepoint, merges the structural fields in a fixed source order, and keeps interpretive statements as claim rows attributed to the source that made them. Packaging splits the result into `core.db` and a separately licensed `ids.db`, builds FTS5 indexes, and exports JSONL. A Kotlin Android app reads that pack with no network. The product spec is [`docs/hanzi-dictionary-spec-v1.md`](docs/hanzi-dictionary-spec-v1.md).
-
-## Screenshots
-
-The Android app on a phone.
+Search by character, pinyin or English. Save what you look up into lists, study it with
+spaced-repetition flashcards, and pull new characters straight out of the photos on your
+phone. Everything runs on the device with no network, from a content pack that the
+pipeline in this repo builds out of open datasets.
 
 <table>
   <tr>
     <td width="25%"><img src="docs/screenshots/search.png" alt="Search"></td>
     <td width="25%"><img src="docs/screenshots/character.png" alt="Character"></td>
-    <td width="25%"><img src="docs/screenshots/word.png" alt="Word"></td>
-    <td width="25%"><img src="docs/screenshots/sources.png" alt="Data sources"></td>
+    <td width="25%"><img src="docs/screenshots/study-revealed.png" alt="Flashcard"></td>
+    <td width="25%"><img src="docs/screenshots/photo-finds-definitions.png" alt="Photo finds"></td>
   </tr>
   <tr>
-    <td valign="top"><b>Search.</b> One box takes a character, pinyin or English, backed by the pack's FTS5 indexes. Traditional forms sit beside the simplified ones.</td>
-    <td valign="top"><b>Character.</b> The decomposition from the merged structural fields (meaning 日, sound 青), then frequency rank, HSK level and strokes. Interpretive notes such as this etymology are shown as claims from the source that made them.</td>
-    <td valign="top"><b>Word.</b> Definitions, links back to each character, and example sentences credited to their corpus and license.</td>
-    <td valign="top"><b>Provenance.</b> Every source in the pack, with its license and the version or commit it was snapshotted at.</td>
+    <td valign="top"><b>Search.</b> One box for characters, pinyin and English.</td>
+    <td valign="top"><b>Character.</b> Meaning and sound components, etymology with its source, and the words it appears in.</td>
+    <td valign="top"><b>Study.</b> Swipe right if you knew it, left if you didn't. The schedule does the rest.</td>
+    <td valign="top"><b>From your photos.</b> Characters read from a menu or a sign, one swipe to file each.</td>
   </tr>
 </table>
 
-### Study and capture
+## What it does
+
+- **Explains characters, not just translates them.** Each entry breaks into components
+  with their roles, and links to the phonetic series: the other characters that share
+  its sound part.
+- **Words and sentences.** Definitions, example sentences with their corpus credited, and
+  a tap through to any character inside a word.
+- **Flashcards that schedule themselves.** FSRS-6 decides when each card is due. Two
+  grades, swipe-only, with a home-screen widget and an optional reminder that are graded
+  in place.
+- **Photo capture.** On-device text recognition reads new photos and queues the
+  characters it finds, most common first.
+- **Lists.** Group what you are learning, with HSK levels built in. A character in three
+  lists still has one memory.
+- **Offline and private.** No account and no network. Your lists and review history stay
+  in a database on the phone.
+
+<details>
+<summary>More screens</summary>
 
 <table>
   <tr>
-    <td width="33%"><img src="docs/screenshots/study.png" alt="Study"></td>
-    <td width="33%"><img src="docs/screenshots/study-revealed.png" alt="Revealed card"></td>
+    <td width="33%"><img src="docs/screenshots/word.png" alt="Word"></td>
     <td width="33%"><img src="docs/screenshots/library.png" alt="Library"></td>
-  </tr>
-  <tr>
-    <td valign="top"><b>Study.</b> The deck for the active list: new cards first, then the ones due, ordered by lowest predicted recall.</td>
-    <td valign="top"><b>Revealed.</b> A tap reveals the reading, meaning, characters and example sentences below the glyph, which stays put. Swipe right for Good, left for Again, up to skip.</td>
-    <td valign="top"><b>Library.</b> Named lists of characters and words, with “Everything” pooled, plus HSK pools and the characters you have encountered.</td>
-  </tr>
-  <tr>
     <td width="33%"><img src="docs/screenshots/list.png" alt="List"></td>
-    <td width="33%"><img src="docs/screenshots/photo-finds.png" alt="Photo finds"></td>
-    <td width="33%"><img src="docs/screenshots/photo-finds-definitions.png" alt="Photo finds with definitions"></td>
   </tr>
   <tr>
-    <td valign="top"><b>List.</b> Every item's record of right and wrong answers, so the ones that keep slipping stand out.</td>
-    <td valign="top"><b>From your photos.</b> Characters read from new camera-roll photos, most common first.</td>
-    <td valign="top"><b>Triage.</b> With definitions on, each find is one swipe: right files it into the active list, left dismisses it.</td>
+    <td valign="top"><b>Word.</b> Definitions, its characters, and example sentences.</td>
+    <td valign="top"><b>Library.</b> Your lists, the HSK pools, and everything you have encountered.</td>
+    <td valign="top"><b>List.</b> Each item's record of right and wrong answers.</td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/study.png" alt="Study"></td>
+    <td width="33%"><img src="docs/screenshots/photo-finds.png" alt="Photo finds"></td>
+    <td width="33%"><img src="docs/screenshots/sources.png" alt="Data sources"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Study.</b> New cards first, then the ones due, lowest predicted recall first.</td>
+    <td valign="top"><b>Photo finds.</b> The grid before definitions are switched on.</td>
+    <td valign="top"><b>Provenance.</b> Every source in the pack, with its license and version.</td>
   </tr>
 </table>
-
-- **Flashcards.** Each card is scheduled by FSRS-6, implemented as plain arithmetic in
-  `core/Fsrs.kt` and checked against py-fsrs's reference intervals. Grading has two outcomes,
-  Again and Good. New cards are capped at 15 a day so a big import cannot bury the reviews.
-  A missed card goes to the back of the session.
-- **Lists.** A list holds characters and words, but memory belongs to the item: a character
-  in three lists has one schedule. One list is active. Swipe-right files into it, and the
-  home-screen widget and the optional reminder notification deal from it. Archiving ("I know
-  this") applies everywhere and drops the schedule.
-- **Photo capture.** ML Kit's Chinese text recognizer reads photos added since the last scan,
-  on the device. The finds land in the Dictionary tab, where they can be filed or dismissed.
 
 The lists and study history above are demo data: three invented lists, with a month of
 reviews simulated by py-fsrs. The photo finds come from four openly licensed photos:
@@ -68,169 +76,33 @@ reviews simulated by py-fsrs. The photo finds come from four openly licensed pho
 ["Directions at JiShuiTan Subway"](https://www.flickr.com/photos/29509789@N00/136175286) by ianholton, and
 ["Restaurant Sign Engrish"](https://www.flickr.com/photos/88175021@N00/3150260687) by rduta (the last three CC BY 2.0).
 
-## Pipeline
+</details>
+
+## The data pipeline
+
+The content pack is the other half of the project: a reproducible build that turns open
+sources (Unihan, CC-CEDICT, Wiktionary, Make Me a Hanzi, Tatoeba and others) into two
+SQLite files.
 
 ```mermaid
-flowchart TD
-    fetch["fetchers: one module per source"]
-    snap["data/snapshots/source/version/manifest.json: url, version, license, sha256"]
-    norm["normalize.build_entities: one GlyphEntity per codepoint"]
-    merge["merge.py: structural fields by source priority; interpretations kept as claim rows"]
-    hanzi["build.py loads data/build/hanzi.db"]
-    qa["qa.py: dangling references and blocked licenses fail the run"]
-    pack["package.py: core.db, GPL ids.db, glyph_fts and word_fts, hanzi-dataset.jsonl"]
-    app["Android app reads the pack offline"]
-    fetch --> snap --> norm --> merge --> hanzi --> qa --> pack --> app
+flowchart LR
+    fetch["fetch: one module per source"] --> snap["immutable snapshots: url, version, license, sha256"]
+    snap --> merge["merge: one record per character"]
+    merge --> qa["QA: integrity and license gate"]
+    qa --> pack["package: core.db + ids.db, FTS5 indexes"]
+    pack --> app["Android app, offline"]
 ```
 
-`build()` keeps a codepoint when it has a decomposition and a pinyin reading (`select_t1_t2`), resolves each decomposition with `merge.resolve_decomposition`, and also loads words, example sentences, and confusable pairs into `hanzi.db`. `qa.py` prints the IDS parse rate and the diff against the previous `build_stats.json`; those two reports do not fail the run. `package.py` then splits the database.
+- **Provenance is data.** Every snapshot records where it came from and under what
+  license, and the app shows it.
+- **Facts merge; opinions stay attributed.** Structural fields are merged by source
+  priority. Etymologies and component roles are stored as claims from the source that
+  made them, so disagreements stay visible.
+- **Licenses are enforced by the build.** GPL data ships in its own database file, and QA
+  fails a pack that contains a source not cleared for redistribution.
+- **No dependencies.** The pipeline is Python standard library only.
 
-## Schema
-
-The pack schema is [`pipeline/pipeline/schema.sql`](pipeline/pipeline/schema.sql). `load.py` fills the tables below. `script_form` and `audio` are declared in the same file and have no loader. `claim.subject_id` is not a foreign key; the schema comment says it is usually a glyph id. `component_use.component_id` and `phonetic_series.component_id` hold a glyph id or an `ids:` pseudo-id for a part that has no codepoint. `sentence.simp` matches `word.simp` and is not a foreign key.
-
-```mermaid
-erDiagram
-    source ||--o{ reading : source_id
-    glyph ||--o{ reading : glyph_id
-    source ||--o{ decomposition : source_id
-    glyph ||--o{ decomposition : glyph_id
-    glyph ||--o{ component_use : glyph_id
-    source ||--o{ claim : source_id
-    glyph ||--o{ variant_edge : from_glyph
-    glyph ||--o{ variant_edge : to_glyph
-    source ||--o{ variant_edge : source_id
-    word ||--o{ word_char : word_id
-    glyph ||--o{ word_char : glyph_id
-    glyph ||--o{ confusable : glyph_a
-    glyph ||--o{ confusable : glyph_b
-
-    source {
-        TEXT id PK
-        TEXT name
-        TEXT license
-        TEXT url
-        TEXT version
-        TEXT ingest_date
-    }
-    glyph {
-        TEXT id PK
-        TEXT char
-        TEXT scripts
-        INTEGER stroke_count
-        INTEGER freq_rank
-        INTEGER hsk
-        TEXT definition
-        TEXT cedict_defs
-    }
-    reading {
-        TEXT glyph_id FK
-        TEXT system
-        TEXT value
-        TEXT sense_hint
-        INTEGER freq
-        TEXT source_id FK
-    }
-    decomposition {
-        TEXT glyph_id FK
-        TEXT ids
-        TEXT region
-        TEXT source_id FK
-    }
-    component_use {
-        TEXT glyph_id FK
-        TEXT component_id
-        INTEGER position
-        TEXT function
-        TEXT match_class
-        REAL confidence
-        TEXT resolution
-    }
-    claim {
-        TEXT subject_id
-        TEXT predicate
-        TEXT value
-        TEXT source_id FK
-        TEXT source_ref
-        REAL confidence
-        TEXT retrieved_at
-    }
-    variant_edge {
-        TEXT from_glyph FK
-        TEXT to_glyph FK
-        TEXT relation
-        TEXT mapping_type
-        TEXT sense_condition
-        TEXT source_id FK
-    }
-    phonetic_series {
-        TEXT component_id PK
-        INTEGER member_count
-        REAL reliability
-        TEXT best_stratum
-    }
-    word {
-        TEXT id PK
-        TEXT simp
-        TEXT trad
-        TEXT pinyin
-        TEXT defs
-        INTEGER freq_rank
-        INTEGER hsk
-    }
-    word_char {
-        TEXT word_id FK
-        TEXT glyph_id FK
-        INTEGER position
-    }
-    sentence {
-        TEXT simp
-        TEXT zh
-        TEXT en
-        INTEGER tatoeba_id
-        INTEGER quality
-        INTEGER shown
-    }
-    component_gloss {
-        TEXT component_id PK
-        TEXT gloss
-        TEXT source_id
-        INTEGER support
-        REAL agreement
-    }
-    confusable {
-        TEXT glyph_a FK
-        TEXT glyph_b FK
-        TEXT kind
-        TEXT diff
-    }
-```
-
-## Design decisions
-
-### Two databases, two drivers
-
-`package.build_ids_db` copies cjkvi-ids decomposition rows into `ids.db`. `build_core_db` copies the other content tables into `core.db` and leaves those rows out of `decomposition` there. GPL-2.0 stays in its own file, so it does not cover the rest of the pack. `HanziRepository` and `PackManager` open one driver per file. An `ATTACH` would stick to a single pooled connection, so anything that needs both files is merged in Kotlin. SQL cannot join across the two files.
-
-### Structural fields merge; interpretations stay claims
-
-`merge.resolve_decomposition` walks a fixed order: cjkvi-ids ahead of makemeahanzi, and within cjkvi-ids a script-matching region tag ahead of an untagged row. A decomposition whose parts are all encoded characters wins over a higher-priority row that bottoms out in an unencoded shape (`is_navigable`), because the character page has to be able to open the part. Simplified/traditional edges are the union of Unihan and OpenCC, classified as `merger`, `systematic`, or `irregular (unclassified)`. Component function and etymology text are `claim` rows with a `source_id`. `merge.py` does not vote them into one value. The pack is wider, and a disagreement stays visible on `component_use.resolution`.
-
-### Snapshots are immutable and self-describing
-
-Each fetcher writes `data/snapshots/<source>/<version>/manifest.json` with url, version, license, `retrieved_at`, and a sha256 per file (`fetchers/common.py`). A version that already has a manifest is skipped unless `--force`. A rebuild does not re-download, and the license stored on the `source` row is the one recorded at fetch time. The cost is disk, and a build is only as new as the snapshots on disk. `fetch_all` does not fetch CC-CEDICT, TED2020, or the Dong lexicon. `build()` requires the CC-CEDICT snapshot (`SOURCES`) and reads the other two only when their snapshot directories exist.
-
-### The content pack is replaced; user state is migrated
-
-`package.py` sets `PRAGMA user_version = 1` and ships no migrations for the pack. `PackManager` copies `core.db` and `ids.db` out of assets and re-copies them when `BUNDLED_PACK_VERSION` changes. Learner state is a separate database; its upgrades are the numbered `.sqm` files next to `User.sq`. A pack update cannot carry a row-level delta. An archive built on the device survives a content swap.
-
-### The pipeline stays on the standard library
-
-Fetch, parse, merge, QA, and packaging import only the Python 3.12 standard library. GitHub-hosted sources are shallow-cloned by shelling out to `git` (`git_shallow_clone`). Nothing is installed before `python -m pipeline.build` or the pipeline tests. Each source's text format has a hand-written parser.
-
-### QA fails closed on integrity and license
-
-`qa.py` exits non-zero when a referenced row is missing or a source license contains `NC`, `PRIVATE`, or `UNCONFIRMED` (`BLOCKED_LICENSE_MARKERS`). The IDS parse rate and the diff against `build_stats.json` are printed and do not fail the run, so a shift in coverage of rare characters is left for a person to read. A green QA run is not a full review of the glosses.
+The stages, schema and design decisions are in [docs/PIPELINE.md](docs/PIPELINE.md).
 
 ## Run it
 
