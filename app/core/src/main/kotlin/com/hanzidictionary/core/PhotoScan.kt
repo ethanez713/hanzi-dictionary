@@ -19,9 +19,12 @@ interface PhotoSource {
 }
 
 interface ImageTextRecognizer {
-    /** All text recognized in the photo, or "" if none/unreadable. Must not throw for a
-     * merely-unreadable image; the scanner treats "" as "no characters found". */
-    fun recognize(photo: PhotoRef): String
+    /** All text recognized in the photo; "" if it holds none or is unreadable; null when
+     * recognition could not run at all right now (the OCR model is still downloading). The
+     * difference matters: "" lets the scanner move past the photo for good, null makes it
+     * stop there and come back, so a first scan before the model arrives doesn't write off
+     * the whole backlog as empty. Must not throw for a merely-unreadable image. */
+    fun recognize(photo: PhotoRef): String?
 }
 
 data class PhotoFind(val glyphId: String, val char: String, val photoId: String, val timestampMillis: Long)
@@ -39,8 +42,9 @@ class PhotoScanner(
 ) {
     /**
      * Scan photos newer than the stored watermark (bounded to the most recent [maxPhotos]),
-     * oldest-new first so the watermark advances monotonically even if scanning is
-     * interrupted. Idempotent: with no new photos it does nothing.
+     * oldest-new first, saving the watermark after every photo, so an interrupted scan
+     * (a tab switch, a kill, OCR not ready) resumes where it stopped instead of re-reading
+     * and re-recording what it already has. Idempotent: with no new photos it does nothing.
      *
      * Also garbage-collects photo-feed dismissals older than the retention window — we only
      * need to remember "recently evicted" words, not forever.
@@ -56,22 +60,22 @@ class PhotoScanner(
             .sortedBy { it.timestampMillis }
 
         val finds = mutableListOf<PhotoFind>()
-        var newWatermark = watermark
+        var scanned = 0
         // Report the batch size up front so a progress bar can go determinate immediately,
         // then tick after each photo's OCR. On a normal open toScan is tiny (or empty).
         onProgress(0, toScan.size)
         for ((index, photo) in toScan.withIndex()) {
-            val text = recognizer.recognize(photo)
+            val text = recognizer.recognize(photo) ?: break
             for (ch in extractHanzi(text)) {
                 val gid = glyphIdOfChar(ch)
                 user.recordPhotoFind(gid, photo.id, photo.timestampMillis)
                 finds += PhotoFind(gid, ch, photo.id, photo.timestampMillis)
             }
-            if (photo.timestampMillis > newWatermark) newWatermark = photo.timestampMillis
-            onProgress(index + 1, toScan.size)
+            user.setLastScanTimestamp(photo.timestampMillis)
+            scanned = index + 1
+            onProgress(scanned, toScan.size)
         }
-        if (newWatermark > watermark) user.setLastScanTimestamp(newWatermark)
-        return ScanResult(photosScanned = toScan.size, finds = finds)
+        return ScanResult(photosScanned = scanned, finds = finds)
     }
 
     companion object {

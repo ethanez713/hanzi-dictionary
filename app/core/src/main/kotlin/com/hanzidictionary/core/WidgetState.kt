@@ -51,8 +51,11 @@ const val WIDGET_EMPTY_GLYPH = "字"
  * Picks the widget's card the way the practice screen orders its deck. On a plain redraw
  * [keepId] holds the current card in place so it can't shuffle out from under a thumb;
  * otherwise a never-seen card (`card == null`) wins — a first look is the only way to gain
- * any signal on it — and failing that a *random* entry, so the widget doesn't march the same
- * fixed order every grade. [avoid] is the card just graded, kept off the next draw.
+ * any signal on it — then a *random* card that is actually due, and only when nothing is due
+ * a random practice-ahead one. Random within the bucket so the widget doesn't march the same
+ * order every grade; bucket by bucket because an "ahead" card is a top-up, and dealing one
+ * while a review is overdue is the opposite of what the deck order says.
+ * [avoid] is the card just graded, kept off the next draw.
  */
 fun selectWidgetCard(
     deck: List<DeckEntry>,
@@ -63,8 +66,30 @@ fun selectWidgetCard(
     deck.firstOrNull { keepId != null && it.item.itemId == keepId }?.let { return it }
     val available = deck.filterNot { it.item.itemId == avoid }
     return available.firstOrNull { it.card == null }
+        ?: available.filter { it.bucket == DeckBucket.DUE }.randomOrNull(random)
         ?: available.randomOrNull(random)
         ?: deck.firstOrNull()
+}
+
+/**
+ * [selectWidgetCard], resolved to something drawable. An item the pack can no longer
+ * summarise (a list can outlive a pack update) is passed over rather than dealt: picked
+ * first and deterministically, one such never-seen item used to leave the widget and the
+ * reminder showing "nothing to practise" with real cards owed behind it.
+ */
+fun pickWidgetCard(
+    deck: List<DeckEntry>,
+    summarize: (StudyItem) -> WidgetCardInfo?,
+    avoid: String? = null,
+    random: Random = Random.Default,
+): WidgetCardInfo? {
+    var pool = deck
+    while (true) {
+        val picked = selectWidgetCard(pool, avoid = avoid, random = random) ?: return null
+        if (picked.item.itemId == avoid) return null  // only the just-graded card is left
+        summarize(picked.item)?.let { return it }
+        pool = pool.filterNot { it.item.itemId == picked.item.itemId }
+    }
 }
 
 /**
@@ -83,17 +108,17 @@ fun nextWidgetState(
     WidgetEvent.Flip -> if (prev.card == null) prev else prev.copy(revealed = true)
 
     WidgetEvent.Update -> {
-        val picked = selectWidgetCard(deck, keepId = prev.card?.item?.itemId, random = random)
-        when {
-            picked == null -> WidgetState(null)
-            picked.item.itemId == prev.card?.item?.itemId -> prev // same card: keep the flip
-            else -> WidgetState(summarize(picked.item), revealed = false)
-        }
+        val current = prev.card?.item?.itemId
+        if (current != null && deck.any { it.item.itemId == current }) prev // same card: keep the flip
+        else WidgetState(pickWidgetCard(deck, summarize, random = random), revealed = false)
     }
 
     WidgetEvent.Grade -> {
-        val picked = selectWidgetCard(deck, avoid = prev.card?.item?.itemId, random = random)
-        WidgetState(picked?.let { summarize(it.item) }, revealed = false)
+        val graded = prev.card?.item?.itemId
+        // The graded card comes back only when it is the whole deck.
+        val next = pickWidgetCard(deck, summarize, avoid = graded, random = random)
+            ?: deck.firstOrNull { it.item.itemId == graded }?.let { summarize(it.item) }
+        WidgetState(next, revealed = false)
     }
 }
 

@@ -60,6 +60,11 @@ enum class DeckBucket { DUE, NEW, AHEAD }
 
 data class DeckEntry(val item: StudyItem, val card: CardState?, val bucket: DeckBucket)
 
+/** What [StudyRepository.archive] replaced, for an Undo. [card] is the schedule it discarded
+ * (null if there was none); [wasKnown] means the item was already archived, so undo must
+ * leave it archived. */
+data class ArchiveUndo(val item: StudyItem, val card: CardState?, val wasKnown: Boolean, val knownAddedAt: Long)
+
 /** Where a practice deck's candidates come from. Real lists and the pooled "everything"
  * resolve entirely inside this repository; the HSK/series/encountered sources need the
  * content pack, so the caller resolves those to candidate ids first. */
@@ -93,10 +98,13 @@ class StudyRepository(
     fun lists(): List<StudyList> =
         q.allLists().executeAsList().map { StudyList(it.id, it.name, it.created_at) }
 
-    fun createList(name: String, now: Long = System.currentTimeMillis()): Long {
-        q.insertList(name, now)
-        return q.lastListId().executeAsOne()
-    }
+    fun createList(name: String, now: Long = System.currentTimeMillis()): Long =
+        // One transaction: last_insert_rowid() is per connection, and a widget or reminder
+        // grade landing between the insert and the read would hand back its row instead.
+        q.transactionWithResult {
+            q.insertList(name, now)
+            q.lastListId().executeAsOne()
+        }
 
     fun renameList(listId: Long, name: String) = q.renameList(name, listId)
 
@@ -110,6 +118,37 @@ class StudyRepository(
 
     fun addToList(listId: Long, item: StudyItem, now: Long = System.currentTimeMillis()) =
         q.addListItem(listId, item.itemId, item.kind, now)
+
+    /** [addToList], saying whether it actually added anything. An "Added — Undo" that follows
+     * a no-op add would otherwise remove a membership the user already had. */
+    fun addToListIfAbsent(listId: Long, item: StudyItem, now: Long = System.currentTimeMillis()): Boolean =
+        q.transactionWithResult {
+            val absent = listId !in listIdsContaining(item.itemId)
+            if (absent) q.addListItem(listId, item.itemId, item.kind, now)
+            absent
+        }
+
+    /**
+     * Archives [item] and returns what that replaced. Archiving discards the FSRS schedule
+     * by design, but an Undo offered seconds later has to put the schedule back: without
+     * this a mis-tapped Archive (or a bulk one) returned every card as never-studied.
+     */
+    fun archive(item: StudyItem, now: Long = System.currentTimeMillis()): ArchiveUndo =
+        q.transactionWithResult {
+            val addedAt = q.knownAddedAt(item.itemId).executeAsOneOrNull()
+            val undo = ArchiveUndo(item, cardState(item.itemId), wasKnown = addedAt != null, knownAddedAt = addedAt ?: 0L)
+            if (addedAt == null) q.upsertKnown(item.itemId, item.kind, "known", now)
+            q.deleteCardState(item.itemId)
+            undo
+        }
+
+    /** Puts back exactly what [archive] replaced: the archive row as it was, and the schedule. */
+    fun undoArchive(undo: ArchiveUndo) {
+        q.transaction {
+            if (!undo.wasKnown) q.deleteKnown(undo.item.itemId)
+            undo.card?.let { persistCard(it) }
+        }
+    }
 
     fun removeFromList(listId: Long, itemId: String) = q.removeListItem(listId, itemId)
 
@@ -179,7 +218,11 @@ class StudyRepository(
 
     fun cardStates(itemIds: Collection<String>): Map<String, CardState> {
         if (itemIds.isEmpty()) return emptyMap()
-        return q.cardStatesFor(itemIds).executeAsList().associate { it.item_id to it.toCardState() }
+        // Chunked: user.db runs on the framework SQLite, which caps bound variables at 999
+        // before Android 12, and an HSK deck is bigger than that.
+        return itemIds.chunked(500)
+            .flatMap { q.cardStatesFor(it).executeAsList() }
+            .associate { it.item_id to it.toCardState() }
     }
 
     fun retrievability(card: CardState, now: Long = System.currentTimeMillis()): Double =
@@ -199,13 +242,15 @@ class StudyRepository(
         now: Long = System.currentTimeMillis(),
         revealMs: Long? = null,
     ): CardState {
-        val before = cardState(item.itemId) ?: CardState(item.itemId, item.kind, due = now)
-        val after = fsrs.review(before, rating, now)
-        q.transaction {
+        // Read inside the transaction: two grades of one card racing (a double tap on a
+        // widget gutter) must each build on the other, not both on the same "before".
+        return q.transactionWithResult {
+            val before = cardState(item.itemId) ?: CardState(item.itemId, item.kind, due = now)
+            val after = fsrs.review(before, rating, now)
             persistCard(after)
             persistReview(item.itemId, rating, before, after, origin, now, revealMs)
+            after
         }
-        return after
     }
 
     /** Past gradings of [itemIds], oldest first, for [masteryOf]. */
@@ -278,7 +323,11 @@ class StudyRepository(
         }
         val byRecall = compareBy<DeckEntry> { fsrs.retrievability(it.card!!, now) }
             .thenBy { it.card!!.due }
-        due.sortWith(byRecall)
+        // A card still on its (re)learning steps leads the due bucket. Retrievability counts
+        // whole days, so anything graded today reads 1.0 and would sort after every overdue
+        // review — a card missed ten minutes ago came back last, or not at all on the
+        // widget's 12-card deck, and its ten-minute step meant nothing.
+        due.sortWith(compareBy<DeckEntry> { it.card!!.phase == CardPhase.REVIEW }.then(byRecall))
         ahead.sortWith(byRecall)
 
         val newCards = fresh.take(newAllowance(now)).shuffled()

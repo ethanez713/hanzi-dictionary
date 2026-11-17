@@ -155,4 +155,23 @@ class PhotoScannerTest {
         user.undismissPhotoWord(qing, ts)
         assertTrue(user.recentPhotoFinds().none { it.glyphId == qing }, "GC did not drop the aged dismissal")
     }
+
+    private class FlakyRecognizer(private val texts: Map<String, String?>) : ImageTextRecognizer {
+        val asked = mutableListOf<String>()
+        override fun recognize(photo: PhotoRef): String? { asked += photo.id; return texts[photo.id] }
+    }
+
+    @Test
+    fun ocrThatCannotRunStopsTheScanWithoutWritingThePhotoOff() {
+        val source = FakePhotoSource(listOf(PhotoRef("p1", 1000), PhotoRef("p2", 2000), PhotoRef("p3", 3000)))
+        // p2: the model isn't there yet. That is not the same as "no text in this photo".
+        val result = PhotoScanner(source, FlakyRecognizer(mapOf("p1" to "请", "p2" to null, "p3" to "谢")), user).scanNewPhotos()
+        assertEquals(1, result.photosScanned)
+        assertEquals(1000, user.lastScanTimestamp(), "p2 and p3 are still to do")
+
+        val retry = FlakyRecognizer(mapOf("p1" to "请", "p2" to "好", "p3" to "谢"))
+        PhotoScanner(source, retry, user).scanNewPhotos()
+        assertEquals(listOf("p2", "p3"), retry.asked, "p1 is not read again")
+        assertEquals(3000, user.lastScanTimestamp())
+    }
 }

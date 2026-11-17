@@ -76,8 +76,15 @@ fun shouldNudge(
     return when (settings.mode) {
         NudgeMode.ADAPTIVE -> {
             // Studied today with cards still owed: the habit happened, but the work didn't finish.
-            val gap = if (lastReviewAt != null && localDay(lastReviewAt, tz) == localDay(now, tz)) interval else ADAPTIVE_GAP_HOURS * HOUR_MS
-            (sinceReview == null || sinceReview >= gap) && (sinceNudge == null || sinceNudge >= gap)
+            val studiedToday = lastReviewAt != null && localDay(lastReviewAt, tz) == localDay(now, tz)
+            val gap = if (studiedToday) interval else ADAPTIVE_GAP_HOURS * HOUR_MS
+            // The worker ticks hourly. Someone who studied late yesterday (21:30, window to
+            // 21:00) reaches the day-long gap only after today's window has shut, and used to
+            // hear nothing until tomorrow morning — a whole day skipped. So the last tick
+            // inside the window speaks for a day with no study in it, gap or no gap.
+            val lastChanceToday = !studiedToday && !inWindow(now + HOUR_MS, settings, tz)
+            (sinceReview == null || sinceReview >= gap || lastChanceToday) &&
+                (sinceNudge == null || sinceNudge >= gap || (lastChanceToday && sinceNudge >= interval))
         }
         NudgeMode.INTERVAL ->
             (sinceReview == null || sinceReview >= interval) && (sinceNudge == null || sinceNudge >= interval)
@@ -161,7 +168,7 @@ fun startNudgeSession(
     summarize: (StudyItem) -> WidgetCardInfo?,
     random: Random = Random.Default,
 ): NudgeSession =
-    NudgeSession(selectWidgetCard(deck.filter { it.bucket != DeckBucket.AHEAD }, random = random)?.let { summarize(it.item) })
+    NudgeSession(pickWidgetCard(deck.filter { it.bucket != DeckBucket.AHEAD }, summarize, random = random))
 
 /** The card that keeps a streak when nothing is owed: the top of the ahead bucket.
  * The deck builder already sorts that bucket by ascending predicted recall, same as practice-ahead. */
@@ -191,9 +198,7 @@ fun nextNudgeSession(
     // Only cards that actually need a look: a notification that dealt "ahead" cards would
     // pad the session with reviews nobody was owed.
     val live = deck.filter { it.bucket != DeckBucket.AHEAD }
-    val next = selectWidgetCard(live, avoid = done.item.itemId, random = random)
-        ?.takeIf { it.item.itemId != done.item.itemId }
-        ?.let { summarize(it.item) }
+    val next = pickWidgetCard(live, summarize, avoid = done.item.itemId, random = random)
     return NudgeSession(next, previous, graded)
 }
 

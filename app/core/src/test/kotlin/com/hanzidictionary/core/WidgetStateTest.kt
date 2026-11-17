@@ -118,4 +118,29 @@ class WidgetStateTest {
         assertEquals("Tap to open", empty.detail)
         assertTrue(empty.cardTapOpensApp)
     }
+
+    private fun aheadEntry(id: String) =
+        DeckEntry(StudyItem.character(id), CardState(itemId = id, kind = "character", due = Long.MAX_VALUE), DeckBucket.AHEAD)
+
+    @Test
+    fun anOverdueCardIsDealtBeforeAnyPracticeAheadCard() {
+        val deck = listOf(dueEntry("due")) + (1..11).map { aheadEntry("ahead$it") }
+        repeat(50) { seed ->
+            assertEquals("due", selectWidgetCard(deck, random = kotlin.random.Random(seed))?.item?.itemId)
+        }
+        // Nothing due: an ahead card is the top-up it is meant to be.
+        assertEquals("ahead1", selectWidgetCard(listOf(aheadEntry("ahead1")))?.item?.itemId)
+    }
+
+    @Test
+    fun anItemThePackCannotDrawIsPassedOver() {
+        // A never-seen item removed by a pack update is picked first and deterministically;
+        // it must not blank the widget while a real card is due behind it.
+        val drawable: (StudyItem) -> WidgetCardInfo? = { if (it.itemId == "gone") null else summarize(it) }
+        val deck = listOf(newEntry("gone"), dueEntry("real"))
+        assertEquals(card("real"), nextWidgetState(WidgetState(null), WidgetEvent.Update, deck, drawable).card)
+        assertEquals(card("real"), nextWidgetState(WidgetState(card("x")), WidgetEvent.Grade, deck, drawable).card)
+        assertEquals(card("real"), startNudgeSession(deck, drawable).card)
+        assertEquals(null, nextWidgetState(WidgetState(null), WidgetEvent.Update, listOf(newEntry("gone")), drawable).card)
+    }
 }

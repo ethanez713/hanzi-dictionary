@@ -305,4 +305,16 @@ class NudgeTest {
         assertEquals("3/20", nudgeStatusLine(0, 3L, 20, streakInTitle = true))
         assertNull(nudgeStatusLine(0, 0L, 20, streakInTitle = true))
     }
+
+    @Test
+    fun aLateStudierIsNotSkippedForAWholeDay() {
+        // Studied at 21:30 on day 0, window 09:00-21:00. The day-long gap is reached at 20:30
+        // on day 1, but hourly ticks at :05 next qualify at 21:05 — outside the window.
+        val lastReview = at(0, 21, 30)
+        assertFalse(should(at(1, 19, 5), lastReview = lastReview), "not yet: there is another tick inside the window")
+        assertTrue(should(at(1, 20, 5), lastReview = lastReview), "the last tick inside the window speaks for the day")
+        assertFalse(should(at(1, 21, 5), lastReview = lastReview), "and nothing is posted outside it")
+        // Someone who did study today is left alone by this rule.
+        assertFalse(should(at(1, 20, 5), lastReview = at(1, 19, 0)))
+    }
 }
