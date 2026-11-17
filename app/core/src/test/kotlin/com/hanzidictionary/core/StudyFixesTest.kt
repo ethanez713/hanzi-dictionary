@@ -169,4 +169,22 @@ class StudyFixesTest {
         assertEquals(0, migrateWordIds(HanziRepository(pack), study))
         assertEquals(listOf("w000123"), study.itemsInList(list).map { it.itemId })
     }
+
+    @Test
+    fun theLongestStreakOutlivesTheLookback() {
+        // A 10-day run long ago, then nothing: past the 400-day window it must still count.
+        val t0 = now - 900 * DAY_MS
+        for (d in 0 until 10) study.grade(StudyItem.character("U+%04X".format(0x4E00 + d)), Rating.GOOD, now = t0 + d * DAY_MS)
+        assertEquals(10, study.streakState(t0 + 10 * DAY_MS).longest)
+        assertEquals(10, study.streakState(now).longest, "remembered, not recomputed from 400 days")
+    }
+
+    @Test
+    fun pinyinSegmentationGivesUpQuicklyOnNonsense() {
+        val syllables = setOf("a", "ai", "an", "ang", "ba", "ban", "bang")
+        val started = System.nanoTime()
+        assertNull(segmentPinyin("ba".repeat(30) + "q", syllables))
+        assertTrue(System.nanoTime() - started < 1_000_000_000L, "backtracking must not blow up")
+        assertEquals(listOf("ban", "ba"), segmentPinyin("banba", syllables))
+    }
 }

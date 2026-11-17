@@ -423,7 +423,14 @@ class StudyRepository(
     fun streakState(
         now: Long = System.currentTimeMillis(),
         tz: TimeZone = TimeZone.getDefault(),
-    ): StreakState = streak(activity(now, STREAK_LOOKBACK_DAYS, tz).keys, localDay(now, tz))
+    ): StreakState {
+        val s = streak(activity(now, STREAK_LOOKBACK_DAYS, tz).keys, localDay(now, tz))
+        // The lookback only sees 400 days, so a best run older than that used to be forgotten
+        // and "longest" shrank. Keep the best ever seen.
+        val best = q.getPref(PREF_LONGEST_STREAK).executeAsOneOrNull()?.toIntOrNull() ?: 0
+        if (s.longest > best) q.setPref(PREF_LONGEST_STREAK, s.longest.toString())
+        return s.copy(longest = maxOf(best, s.longest))
+    }
 
     /** When the newest grading happened, whatever surface it came from; null if never. */
     fun lastReviewAt(): Long? = q.lastReviewTs().executeAsOne().MAX
@@ -855,6 +862,7 @@ class StudyRepository(
         private const val HISTORY_CHUNK = 500
         private const val PREF_TRIAGE_SKIP = "triage_skip:"
         private const val PREF_MILESTONE = "milestone:"
+        private const val PREF_LONGEST_STREAK = "longest_streak"
 
         /** How long a skipped suggestion stays out of the offer. */
         const val TRIAGE_SKIP_TTL_DAYS = 14L

@@ -83,9 +83,13 @@ fun fuzzyPinyinVariants(token: String): List<String> {
 
 private fun segmentPiece(piece: String, syllables: Set<String>, allowTrailingPartial: Boolean): List<String>? {
     val maxLen = syllables.maxOf { it.length }
+    // Positions already known to lead nowhere. Without this the backtracking is exponential
+    // in the token length, and a long run of letters typed into search could stall it.
+    val deadEnds = HashSet<Int>()
 
     fun solve(pos: Int): List<String>? {
         if (pos == piece.length) return emptyList()
+        if (pos in deadEnds) return null
         for (len in minOf(piece.length - pos, maxLen) downTo 1) {
             val part = piece.substring(pos, pos + len)
             if (part in syllables) {
@@ -96,6 +100,7 @@ private fun segmentPiece(piece: String, syllables: Set<String>, allowTrailingPar
         return if (allowTrailingPartial && syllables.any { it.length > rest.length && it.startsWith(rest) }) {
             listOf(rest)
         } else {
+            deadEnds += pos
             null
         }
     }

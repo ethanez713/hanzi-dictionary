@@ -47,8 +47,10 @@ class HanziRepository(
         // degrade to the exact matches from step 1 rather than crashing the caller.
         fun addFtsGlyphs(match: String): Boolean = try {
             val ftsGlyphIds = ftsQuery(match, limit * 2)
-            val glyphs = db.hanziQueries.glyphsByIds(ftsGlyphIds).executeAsList().associateBy { it.id }
-            for (id in ftsGlyphIds) glyphs[id]?.let { g -> ordered.putIfAbsent(g.id, g.toSearchResult()) }
+            val fresh = ftsGlyphIds.filterNot { it in ordered }
+            val glyphs = db.hanziQueries.glyphsByIds(fresh).executeAsList().associateBy { it.id }
+            val primary = primaryPinyin(glyphs.keys)
+            for (id in fresh) glyphs[id]?.let { g -> ordered.putIfAbsent(g.id, g.toSearchResult(primary[id])) }
             ftsGlyphIds.isNotEmpty()
         } catch (e: Exception) {
             // Swallow: no FTS results, exact hits (if any) still returned below.
@@ -240,10 +242,16 @@ class HanziRepository(
                     j++
                     sb.append(
                         when (defsJson[j]) {
-                            'n' -> '\n'; 't' -> '\t'; 'u' -> {
-                                val code = defsJson.substring(j + 1, j + 5).toInt(16)
-                                j += 4
-                                code.toChar()
+                            'n' -> '\n'; 't' -> '\t'; 'r' -> '\r'; 'b' -> '\b'; 'f' -> '\u000C'
+                            'u' -> {
+                                // A truncated escape is kept as text rather than throwing.
+                                val code = defsJson.substring(j + 1, minOf(j + 5, defsJson.length)).toIntOrNull(16)
+                                if (code != null && j + 4 < defsJson.length) {
+                                    j += 4
+                                    code.toChar()
+                                } else {
+                                    'u'
+                                }
                             }
                             else -> defsJson[j]
                         },
@@ -774,8 +782,17 @@ class HanziRepository(
         val byId = ids.chunked(500)
             .flatMap { db.hanziQueries.glyphsByIds(it).executeAsList() }
             .associateBy { it.id }
-        return ids.mapNotNull { byId[it]?.toSearchResult() }
+        val primary = primaryPinyin(byId.keys)
+        return ids.mapNotNull { id -> byId[id]?.let { it.toSearchResult(primary[id]) } }
     }
+
+    /** Each glyph's commonest pinyin reading, in one query per 500 ids — not one per glyph,
+     * which made a 600-item list 600 queries and search hundreds per keystroke. */
+    private fun primaryPinyin(ids: Collection<String>): Map<String, String> =
+        ids.chunked(500)
+            .flatMap { db.hanziQueries.pinyinReadingsFor(it).executeAsList() }
+            .groupBy { it.glyph_id }
+            .mapValues { (_, rows) -> rows.maxBy { it.freq ?: 0L }.value_ }
 
     /**
      * Display text for study items of either kind, in the order given (spec §17). Lists,
@@ -835,12 +852,9 @@ class HanziRepository(
         return result
     }
 
-    private fun com.hanzidictionary.core.db.Glyph.toSearchResult(): SearchResult {
-        val py = db.hanziQueries.readingsForGlyph(id).executeAsList()
-            .filter { it.system == "pinyin" }
-            .maxByOrNull { it.freq ?: 0L }?.value_
-        return SearchResult(id, char, py, definition, freq_rank, hsk, scripts = scripts)
-    }
+    private fun com.hanzidictionary.core.db.Glyph.toSearchResult(
+        py: String? = primaryPinyin(listOf(id))[id],
+    ): SearchResult = SearchResult(id, char, py, definition, freq_rank, hsk, scripts = scripts)
 }
 
 /** First sense only — drill cards and component hints want "clear, pure", not the
