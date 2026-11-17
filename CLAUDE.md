@@ -143,6 +143,16 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   is non-null, and only records the position after that — don't "simplify" it back.
 - **After any user-state mutation that changes what's due, poke the widget**
   (`PracticeWidgetUpdater.refresh(context)`) — otherwise a placed widget goes stale.
+- **An Undo must undo exactly what the tap did.** Archive through `StudyRepository.archive` /
+  `archiveAll` and undo with `undoArchive(s)` (they keep the schedule `setKnown` discards); add
+  with `addToListIfAbsent` and offer no Undo when it added nothing. `setKnown(false)` is the
+  deliberate Unarchive, which starts the item fresh.
+- **Study re-reads its deck** (bumps `studyResumeToken`; the pin keeps the card) on return to
+  the foreground, when its lookup sheet closes, on the stale reset, and when any overlay closes
+  — every overlay closes through `closeOverlay()` in `AppRoot`, which also refreshes Library.
+- **Widget and reminder grade taps carry the item they were drawn beside** (in the PendingIntent's
+  data URI, so `FLAG_UPDATE_CURRENT` can't rewrite it) and are dropped if the card has moved on;
+  neither grades an item archived since it was dealt.
 
 - **The study-reminder notification is the widget, enlarged — same verbs, same hand-off.** Two
   grade gutters (Again/Good, no Hard/Easy) either side of the card, graded in place by
