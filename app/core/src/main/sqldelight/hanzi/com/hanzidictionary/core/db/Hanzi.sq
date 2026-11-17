@@ -198,6 +198,11 @@ JOIN glyph g ON g.id = cu.glyph_id
 WHERE cu.component_id IN :componentIds
   AND (g.hsk IS NOT NULL OR g.id = :keepId);
 
+-- Every pinyin reading of :ids, for filing a polyphonic character under the reading its
+-- sound part actually explains.
+pinyinReadingsFor:
+SELECT glyph_id, value, freq FROM reading WHERE system = 'pinyin' AND glyph_id IN :ids;
+
 -- What the meaning part lends each of :ids — makemeahanzi's per-character hint, as
 -- {"component": "月", "hint": "flesh"}. A pack built before these claims existed simply has
 -- none, and the meaning family falls back to one plain list.
@@ -243,8 +248,8 @@ SELECT zh, en FROM sentence WHERE simp = :simp AND shown = 1 LIMIT :limit;
 -- (请/清/晴/情 all carry 青), common ones first. Self-exclusion is done by the caller.
 seriesSiblings:
 SELECT DISTINCT g.id, g.char, g.definition, g.freq_rank,
-    (SELECT r.value FROM reading r WHERE r.glyph_id = g.id AND r.system = 'pinyin'
-     ORDER BY (r.freq IS NULL), r.freq DESC LIMIT 1) AS pinyin
+    COALESCE((SELECT r.value FROM reading r WHERE r.glyph_id = g.id AND r.system = 'pinyin'
+     ORDER BY (r.freq IS NULL), r.freq DESC LIMIT 1), '') AS pinyin
 FROM component_use cu_self
 JOIN component_use cu_other ON cu_other.component_id = cu_self.component_id
 JOIN glyph g ON g.id = cu_other.glyph_id
@@ -255,10 +260,12 @@ WHERE cu_self.glyph_id IN :ids
 ORDER BY g.freq_rank
 LIMIT :limit;
 
+-- '' when the glyph has no pinyin reading: SQLDelight types a scalar subselect NOT NULL, so a
+-- bare one throws in the generated mapper the day a readingless glyph reaches it.
 glyphWithPinyin:
 SELECT g.id, g.char, g.definition,
-    (SELECT r.value FROM reading r WHERE r.glyph_id = g.id AND r.system = 'pinyin'
-     ORDER BY (r.freq IS NULL), r.freq DESC LIMIT 1) AS pinyin
+    COALESCE((SELECT r.value FROM reading r WHERE r.glyph_id = g.id AND r.system = 'pinyin'
+     ORDER BY (r.freq IS NULL), r.freq DESC LIMIT 1), '') AS pinyin
 FROM glyph g WHERE g.id = :glyphId;
 
 wordById:

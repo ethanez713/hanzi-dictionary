@@ -1,5 +1,7 @@
 package com.hanzidictionary.core
 
+import java.text.Normalizer
+
 /**
  * A component's family: the common characters built on it, sorted into the different jobs
  * it does. As a sound part the groups are the syllables it stands for (青: qing, jing, cai);
@@ -36,11 +38,13 @@ data class FamilyWord(val id: String, val simp: String, val pinyin: String?, val
 data class FamilyMember(
     val glyphId: String,
     val char: String,
-    val pinyin: String?,       // primary reading, toned
+    val pinyin: String?,       // the reading shown: its commonest, or on a sound-series row the
+                               // one the component explains (传 is zhuàn under 专, not chuán)
     val gloss: String?,
     val word: FamilyWord?,     // its commonest multi-character word, when it has one
     val wordRank: Long?,       // corpus rank of its commonest word of any length (1 = most common)
     val hint: String? = null,  // meaning family only: what the part lends *this* character
+    val readings: List<String> = emptyList(),  // every pinyin reading, commonest first
 )
 
 /** How a group's syllable sits against the component's own reading, nearest first. The
@@ -66,39 +70,64 @@ data class ComponentFamily(
 /** How many rows of a group show before "show all". The request was 5–10 per use. */
 const val FAMILY_GROUP_SHOWN = 8
 
-/** A meaning needs this many characters behind it to stand as a use of its own. */
-const val MIN_USE_GROUP = 2
+/** A meaning needs this many characters behind it to stand as a use of its own. Two is not
+ * enough: makemeahanzi's hints are written by hand, and a wording only two characters share
+ * (辶 "walk" 51 / "foot" 2, 日 "sun" 28 / "day" 2) is the annotator, not the component. */
+const val MIN_USE_GROUP = 3
+
+// In RADICAL_PARENT for the pipeline's gloss derivation, but not the same part as the parent
+// for a family: 廴 is its own radical (建 延 廷 are not 辶 characters), and 冫's "parent" 冰 is
+// just a character that contains it.
+private val STANDS_ALONE = setOf("廴", "冫")
 
 /** Every shape of [componentId] that counts as the same meaning part: 氵 ↔ 水 ↔ 氺. */
 fun componentForms(componentId: String): List<String> {
+    if (componentId in STANDS_ALONE) return listOf(componentId)
     val parent = radicalParentOf(componentId) ?: componentId
-    return (listOf(componentId, parent) + radicalFormsOf(parent)).distinct()
+    return (listOf(componentId, parent) + radicalFormsOf(parent)).distinct().filterNot { it in STANDS_ALONE }
 }
 
 /** Most common first; a character with no ranked word sorts last. */
 val byFrequency: Comparator<FamilyMember> =
     compareBy({ it.wordRank == null }, { it.wordRank ?: Long.MAX_VALUE }, { it.glyphId })
 
-private val TONE_MARKS: Map<Char, Char> = buildMap {
-    for ((base, marked) in listOf(
-        'a' to "āáǎà", 'e' to "ēéěè", 'i' to "īíǐì", 'o' to "ōóǒò", 'u' to "ūúǔù", 'ü' to "ǖǘǚǜ",
-    )) for (m in marked) put(m, base)
+/** "qǐng" → "qing", "lǜ" → "lü". Unlike [stripTones] this keeps the ü: lu and lü are
+ * different sounds, and a sound series is exactly where that difference is the point. Tone
+ * marks on anything (ń, ḿ) go; a multi-syllable value is read by its first syllable. */
+fun tonelessSyllable(pinyin: String): String {
+    val first = pinyin.trim().lowercase().substringBefore(' ')
+    val bare = Normalizer.normalize(first, Normalizer.Form.NFD)
+        .filter { Character.getType(it) != Character.NON_SPACING_MARK.toInt() || it == '\u0308' }
+    return Normalizer.normalize(bare, Normalizer.Form.NFC)
 }
 
-/** "qǐng" → "qing", "lǜ" → "lü". Unlike [stripTones] this keeps the ü: lu and lü are
- * different sounds, and a sound series is exactly where that difference is the point. */
-fun tonelessSyllable(pinyin: String): String =
-    pinyin.trim().lowercase().map { TONE_MARKS[it] ?: it }.joinToString("")
-
-// Longest first, so zh/ch/sh are tried before z/c/s. Same inventory as pipeline/pinyin.py.
+// Longest first, so zh/ch/sh are tried before z/c/s. y and w are absent on purpose: they
+// spell a syllable that *starts* with i, u or ü, and are not initials.
 private val INITIALS = listOf(
     "zh", "ch", "sh", "b", "p", "m", "f", "d", "t", "n", "l", "g", "k", "h",
-    "j", "q", "x", "r", "z", "c", "s", "y", "w",
+    "j", "q", "x", "r", "z", "c", "s",
 )
 
+/**
+ * (initial, final) by sound rather than by spelling, so that what rhymes compares equal:
+ * yang is iang (rhymes with xiang), you is iu (xiu), wei is ui (gui), wen is un (lun), yu is
+ * ü (lü), and the u after j/q/x is ü (ju rhymes with lü, not with shu).
+ */
 private fun splitSyllable(syllable: String): Pair<String, String> {
-    val initial = INITIALS.firstOrNull { syllable.startsWith(it) && syllable.length > it.length } ?: ""
-    return initial to syllable.removePrefix(initial)
+    val spelled = when {
+        syllable.startsWith("yu") -> "ü" + syllable.drop(2)   // yu yue yuan yun
+        syllable == "you" -> "iu"
+        syllable.startsWith("yi") -> syllable.drop(1)          // yi yin ying
+        syllable.startsWith("y") -> "i" + syllable.drop(1)     // ya ye yao yan yang yong
+        syllable == "wu" -> "u"
+        syllable == "wei" -> "ui"
+        syllable == "wen" -> "un"
+        syllable.startsWith("w") -> "u" + syllable.drop(1)     // wa wo wai wan wang weng
+        else -> syllable
+    }
+    val initial = INITIALS.firstOrNull { spelled.startsWith(it) && spelled.length > it.length } ?: ""
+    val final = spelled.removePrefix(initial)
+    return initial to if (initial in "jqx" && initial.isNotEmpty() && final.startsWith("u")) "ü" + final.drop(1) else final
 }
 
 /** The closest [syllable] comes to any of the component's [own] toneless readings, or null
@@ -117,6 +146,15 @@ fun soundRelation(syllable: String, own: List<String>): SoundRelation? {
     }
 }
 
+/** The reading of [m] the component best explains — its commonest wins a tie, and is the
+ * answer outright when the component has no reading to compare. A character with two
+ * readings usually owes only one of them to its sound part (传: zhuàn from 专, chuán not). */
+private fun filedReading(m: FamilyMember, own: List<String>): String? {
+    val all = (listOfNotNull(m.pinyin) + m.readings).distinct()
+    if (own.isEmpty()) return all.firstOrNull()
+    return all.minByOrNull { soundRelation(tonelessSyllable(it), own)!!.ordinal }
+}
+
 /**
  * [members] sorted into the syllables the component stands for, nearest to its own reading
  * first. Tone is ignored for grouping — each row still shows its own — because "does 青
@@ -125,20 +163,22 @@ fun soundRelation(syllable: String, own: List<String>): SoundRelation? {
  * A syllable only one character has is noise as a heading, so those are gathered into one
  * leftovers group — unless it is the component's own sound, which is worth a heading even
  * for one character, or there is only one such stray, which reads better under its own name
- * than under "other".
+ * than under "other". And when *every* sound is a one-off there is nothing for them to be
+ * "other" than: each keeps its own heading, which is the range the page exists to show.
  */
 fun soundSeries(componentReadings: List<String>, members: List<FamilyMember>): List<FamilyGroup> {
     val own = componentReadings.map(::tonelessSyllable).distinct()
     val named = mutableListOf<FamilyGroup>()
     val strays = mutableListOf<FamilyGroup>()
     val silent = mutableListOf<FamilyMember>()
-    for ((syllable, group) in members.sortedWith(byFrequency).groupBy { it.pinyin?.let(::tonelessSyllable) }) {
+    val filed = members.map { it.copy(pinyin = filedReading(it, own)) }
+    for ((syllable, group) in filed.sortedWith(byFrequency).groupBy { it.pinyin?.let(::tonelessSyllable) }) {
         if (syllable == null) { silent += group; continue }
         val relation = soundRelation(syllable, own)
         val g = FamilyGroup(syllable, relation, group)
         if (group.size == 1 && relation != SoundRelation.SAME) strays += g else named += g
     }
-    if (strays.size == 1 && silent.isEmpty()) { named += strays; strays.clear() }
+    if (named.isEmpty() || (strays.size == 1 && silent.isEmpty())) { named += strays; strays.clear() }
 
     val ordered = named.sortedWith(
         compareBy(
@@ -179,8 +219,8 @@ fun canonicalHint(hint: String): String = HINT_SYNONYMS[hint] ?: hint
  *
  * Most components mean one thing, and for those the honest page is a single plain list
  * headed by that meaning — inventing sub-uses would be worse than none. Groups appear only
- * when at least two meanings each have [MIN_USE_GROUP] characters behind them (月: moon,
- * flesh). Whatever is left — a meaning only one character has, or a character no source
+ * when at least two meanings each have [MIN_USE_GROUP] characters behind them (木: tree,
+ * wood). Whatever is left — a meaning only one character has, or a character no source
  * gives a hint for — goes in a leftovers group, where a row shows its own hint if it has one.
  */
 fun meaningFamily(members: List<FamilyMember>): List<FamilyGroup> {
@@ -189,7 +229,13 @@ fun meaningFamily(members: List<FamilyMember>): List<FamilyGroup> {
     val uses = sorted.filter { it.hint != null }
         .groupBy { canonicalHint(it.hint!!) }
         .filterValues { it.size >= MIN_USE_GROUP }
-    if (uses.size < 2) return listOf(FamilyGroup(uses.keys.singleOrNull(), null, sorted))
+    if (uses.size < 2) {
+        // One list for everyone, named by its commonest hint only when most of the hinted
+        // characters agree on it — otherwise the name would speak for a minority.
+        val byHint = sorted.mapNotNull { it.hint?.let(::canonicalHint) }.groupingBy { it }.eachCount()
+        val name = byHint.maxByOrNull { it.value }?.takeIf { it.value * 2 > byHint.values.sum() }?.key
+        return listOf(FamilyGroup(name, null, sorted))
+    }
 
     val groups = uses.map { (use, group) -> FamilyGroup(use, null, group) }
         .sortedWith(compareBy({ -it.members.size }, { it.members.first().wordRank ?: Long.MAX_VALUE }, { it.label }))

@@ -70,6 +70,46 @@ class ComponentFamilyTest {
     }
 
     @Test
+    fun aPolyphonicCharacterIsFiledUnderTheReadingItsSoundPartExplains() {
+        // 传 is mostly chuán, but it is zhuàn that 专 zhuān lends it.
+        val chuan = m("传", "chuán", 20).copy(readings = listOf("chuán", "zhuàn"))
+        val groups = soundSeries(listOf("zhuān"), listOf(m("转", "zhuǎn", 10), m("砖", "zhuān", 500), chuan))
+        assertEquals(listOf("zhuan"), groups.map { it.label })
+        assertEquals("zhuàn", groups.single().members.single { it.char == "传" }.pinyin, "and the row shows that reading")
+
+        // With nothing to compare against, a character keeps its commonest reading.
+        assertEquals("chuán", soundSeries(emptyList(), listOf(chuan, chuan.copy(glyphId = "x", char = "x")))
+            .flatMap { it.members }.first().pinyin)
+    }
+
+    @Test
+    fun rhymeIsJudgedBySoundNotSpelling() {
+        // y and w spell a syllable that starts with i/u/ü; the u after j/q/x is ü.
+        for ((a, b) in listOf("xiang" to "yang", "xiu" to "you", "gui" to "wei", "xie" to "ye", "lun" to "wen", "ju" to "lü", "yu" to "lü")) {
+            assertEquals(SoundRelation.RHYME, soundRelation(a, listOf(b)), "$a / $b")
+            assertEquals(SoundRelation.RHYME, soundRelation(b, listOf(a)), "$b / $a")
+        }
+        assertEquals(SoundRelation.DIFFERENT, soundRelation("shu", listOf("qu")), "u and ü are different vowels")
+        assertEquals(SoundRelation.DIFFERENT, soundRelation("yi", listOf("yuan")), "y is not an initial")
+        assertEquals(SoundRelation.SAME_INITIAL, soundRelation("zhi", listOf("zhe")))
+    }
+
+    @Test
+    fun aSeriesOfOneOffSoundsKeepsEachSoundsName() {
+        // Nothing for them to be "other" than: the range of sounds is the whole point.
+        val groups = soundSeries(listOf("zhě"), listOf(m("都", "dōu", 5), m("猪", "zhū", 300), m("暑", "shǔ", 900)))
+        assertEquals(listOf("zhu", "dou", "shu"), groups.map { it.label }, "nearest to zhe first")
+        assertTrue(groups.none { it.leftovers })
+    }
+
+    @Test
+    fun charactersWithNoReadingAreStillListed() {
+        val groups = soundSeries(listOf("qīng"), listOf(m("清", "qīng", 1), m("请", "qǐng", 2), m("甲", null, 3)))
+        assertEquals(listOf("qing", null), groups.map { it.label })
+        assertEquals("甲", groups.last().members.single().char)
+    }
+
+    @Test
     fun aPolyphonicComponentIsComparedOnItsClosestReading() {
         // 乐 is lè and yuè; 烁 shuò is near neither, but a yue-member matches the second.
         assertEquals(SoundRelation.SAME, soundRelation("yue", listOf("le", "yue")))
@@ -83,6 +123,8 @@ class ComponentFamilyTest {
     fun tonelessKeepsTheUmlaut() {
         assertEquals("lü", tonelessSyllable("lǜ"))
         assertEquals("lu", tonelessSyllable("lù"))
+        assertEquals("ng", tonelessSyllable("ńg"), "a tone mark on a consonant goes too")
+        assertEquals("wo", tonelessSyllable("wō guā"), "a two-syllable value is read by its first")
         assertEquals("qing", tonelessSyllable("Qǐng"))
     }
 
@@ -97,11 +139,11 @@ class ComponentFamilyTest {
     fun aComponentWithTwoMeaningsIsSplitByThem() {
         val groups = meaningFamily(listOf(
             m("脑", "nǎo", 50, "flesh"), m("胖", "pàng", 60, "flesh"), m("脸", "liǎn", 20, "flesh"),
-            m("期", "qī", 10, "moon"), m("朗", "lǎng", 700, "moon"),
+            m("期", "qī", 10, "moon"), m("朗", "lǎng", 700, "moon"), m("朝", "cháo", 300, "moon"),
             m("朋", "péng", 5, null), m("服", "fú", 15, "boat"),
         ))
-        assertEquals(listOf("flesh", "moon", null), groups.map { it.label })
-        assertEquals(listOf("脸脑胖", "期朗", "朋服"), groups.chars())
+        assertEquals(listOf("moon", "flesh", null), groups.map { it.label }, "equal in size: the one with the commoner character leads")
+        assertEquals(listOf("期朝朗", "脸脑胖", "朋服"), groups.chars())
         assertTrue(groups.last().leftovers, "a one-off hint and an unhinted character are not uses")
     }
 
@@ -115,6 +157,25 @@ class ComponentFamilyTest {
         assertEquals("water", groups.single().label)
         assertFalse(groups.single().leftovers)
         assertEquals("法洗河酒", groups.chars().single(), "everyone is in it, hinted or not")
+    }
+
+    @Test
+    fun aWordingOnlyTwoCharactersShareIsNotAUse() {
+        // 辶 is "walk" 51 times and "foot" twice in makemeahanzi: the annotator, not the part.
+        val groups = meaningFamily(
+            (1..6).map { m(('一' + it).toString(), "x", it.toLong(), "walk") } +
+                listOf(m("甲", "x", 50, "foot"), m("乙", "x", 60, "foot")),
+        )
+        assertEquals("walk", groups.single().label)
+        assertEquals(8, groups.single().members.size)
+    }
+
+    @Test
+    fun aLoneUseNamesTheListOnlyWhenMostHintsAgree() {
+        // Three "roof" among eight differently-hinted characters must not caption all of them.
+        val members = (1..3).map { m(('一' + it).toString(), "x", it.toLong(), "roof") } +
+            (4..8).map { m(('一' + it).toString(), "x", it.toLong(), "hint$it") }
+        assertNull(meaningFamily(members).single().label)
     }
 
     @Test
@@ -155,6 +216,10 @@ class ComponentFamilyTest {
         assertEquals(componentForms("氵").toSet(), componentForms("水").toSet())
         assertEquals("氵", componentForms("氵").first(), "the shape asked for leads")
         assertEquals(listOf("青"), componentForms("青"))
+        // 廴 is its own radical, and 冰 merely contains 冫: neither is another shape of its "parent".
+        assertEquals(listOf("廴"), componentForms("廴"))
+        assertFalse("廴" in componentForms("辶"))
+        assertEquals(listOf("冫"), componentForms("冫"))
     }
 
     @Test
@@ -226,6 +291,19 @@ class ComponentFamilyTest {
     }
 
     @Test
+    fun everyReadingOfAMemberReachesTheGrouping() {
+        val repo = miniPack { d ->
+            d.glyph("专", "zhuān"); d.glyph("转", "zhuǎn"); d.glyph("传", null)
+            d.execute(null, "INSERT INTO reading VALUES ('${glyphIdOfChar("传")}', 'pinyin', 'zhuàn', NULL, 100, 'unihan')", 0)
+            d.execute(null, "INSERT INTO reading VALUES ('${glyphIdOfChar("传")}', 'pinyin', 'chuán', NULL, 500, 'unihan')", 0)
+            d.uses("转", "专", "phonetic"); d.uses("传", "专", "phonetic")
+        }
+        val group = repo.componentFamily("专").sound.single()
+        assertEquals("zhuan", group.label)
+        assertEquals("zhuàn", group.members.single { it.char == "传" }.pinyin)
+    }
+
+    @Test
     fun theOriginCharacterJoinsItsFamilyWithoutAnHskLevel() {
         val repo = miniPack { d ->
             d.glyph("青", "qīng"); d.glyph("清", "qīng"); d.glyph("鲭", "qīng", hsk = null)
@@ -238,7 +316,7 @@ class ComponentFamilyTest {
     @Test
     fun aMeaningFamilyPoolsEveryShapeAndSplitsOnTheHints() {
         val repo = miniPack { d ->
-            for ((c, hint) in listOf("脑" to "flesh", "脸" to "flesh", "期" to "moon", "朗" to "moon")) {
+            for ((c, hint) in listOf("脑" to "flesh", "脸" to "flesh", "胖" to "flesh", "期" to "moon", "朗" to "moon", "朝" to "moon")) {
                 d.glyph(c, "x"); d.uses(c, "月", "semantic"); d.hint(c, "月", hint)
             }
             d.glyph("朋", "péng"); d.uses("朋", "月", "semantic"); d.uses("朋", "月", "semantic")
@@ -250,7 +328,7 @@ class ComponentFamilyTest {
             d.glyph("泉", "quán"); d.uses("泉", "水", "semantic"); d.hint("泉", "水", "water")
         }
         val yue = repo.componentFamily("月")
-        assertEquals(listOf("flesh", "moon", null), yue.meaning.map { it.label })
+        assertEquals(setOf("flesh", "moon", null), yue.meaning.map { it.label }.toSet())
         assertEquals(setOf("朋", "胡"), yue.meaning.last().members.map { it.char }.toSet(),
             "朋 carries 月 twice and is still one row")
         assertTrue(yue.meaning.last().members.all { it.hint == null })

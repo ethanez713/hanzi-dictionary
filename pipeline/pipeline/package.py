@@ -85,8 +85,11 @@ def build_core_db(src: sqlite3.Connection) -> None:
     core = sqlite3.connect(CORE_DB)
     # definition joins the index so English search works (spec §9 ranking "English FTS");
     # unicode61's diacritic folding is what lets toneless "qing" match "qǐng" in pinyin.
+    # remove_diacritics must be 2: the default (1) leaves code points carrying two marks
+    # alone, which is exactly the toned ü (ǖ ǘ ǚ ǜ) — "nv"/"lv" then never find 女 or 绿.
     core.executescript("""
-        CREATE VIRTUAL TABLE glyph_fts USING fts5(glyph_id UNINDEXED, char, pinyin, definition);
+        CREATE VIRTUAL TABLE glyph_fts USING fts5(
+            glyph_id UNINDEXED, char, pinyin, definition, tokenize="unicode61 remove_diacritics 2");
     """)
     rows = core.execute("""
         SELECT g.id, g.char, COALESCE(GROUP_CONCAT(DISTINCT r.value), ''), COALESCE(g.definition, '')
@@ -99,7 +102,8 @@ def build_core_db(src: sqlite3.Connection) -> None:
     # CJK as one token, so prefix queries like simp:说* match 说话; diacritic folding
     # lets "shuo hua" match the tone-marked pinyin column.
     core.executescript("""
-        CREATE VIRTUAL TABLE word_fts USING fts5(word_id UNINDEXED, simp, trad, pinyin, defs);
+        CREATE VIRTUAL TABLE word_fts USING fts5(
+            word_id UNINDEXED, simp, trad, pinyin, defs, tokenize="unicode61 remove_diacritics 2");
     """)
     word_rows = core.execute(
         "SELECT id, simp, trad, COALESCE(pinyin,''), COALESCE(defs,'') FROM word"

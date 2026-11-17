@@ -40,21 +40,21 @@ class HanziRepository(
             }
         }
 
-        // 2. FTS: pinyin prefix and/or char, then rank by frequency (nulls last).
+        // 2. FTS, one clause at a time in the spec's order (char, then pinyin, then English),
+        // each ranked by frequency over its whole match set.
         // The FTS index is a search enhancement, not load-bearing: if the query engine
         // rejects it (e.g. a SQLite build without the fts5 module, or a malformed match)
         // degrade to the exact matches from step 1 rather than crashing the caller.
         fun addFtsGlyphs(match: String): Boolean = try {
-            val ftsGlyphIds = ftsQuery(match, limit * 4)
-            val glyphs = db.hanziQueries.glyphsByIds(ftsGlyphIds).executeAsList()
-                .sortedWith(compareBy({ it.freq_rank == null }, { it.freq_rank }))
-            for (g in glyphs) ordered.putIfAbsent(g.id, g.toSearchResult())
+            val ftsGlyphIds = ftsQuery(match, limit * 2)
+            val glyphs = db.hanziQueries.glyphsByIds(ftsGlyphIds).executeAsList().associateBy { it.id }
+            for (id in ftsGlyphIds) glyphs[id]?.let { g -> ordered.putIfAbsent(g.id, g.toSearchResult()) }
             ftsGlyphIds.isNotEmpty()
         } catch (e: Exception) {
             // Swallow: no FTS results, exact hits (if any) still returned below.
             false
         }
-        buildFtsMatch(q)?.let { addFtsGlyphs(it) }
+        for (clause in ftsClauses(q)) addFtsGlyphs(clause)
 
         // 3. Fuzzy fallback (spec §9 "… > English FTS > fuzzy"): a single pinyin-ish
         // token with zero hits retries typo/fuzzy-pinyin variants, first match wins.
@@ -88,32 +88,40 @@ class HanziRepository(
         return tokens.singleOrNull()?.takeIf { t -> t.all { it in 'a'..'z' } }
     }
 
-    private fun buildFtsMatch(q: String): String? {
+    /** The FTS clauses for [q], best kind of match first (spec §9: exact char > pinyin >
+     * English). Run separately so a pinyin query is never outranked by a character that
+     * merely has the letters in its English gloss ("he" must lead with 和, not "heart"). */
+    private fun ftsClauses(q: String): List<String> {
         val hasCjk = q.any { isCjkChar(it) }
         val latinTokens = q.lowercase().split(" ")
             .map { sanitizeFts(it) }
             .filter { t -> t.isNotEmpty() && t.any { it in 'a'..'z' } }
 
         val clauses = mutableListOf<String>()
+        if (hasCjk) clauses += "char:${sanitizeFts(q)}"
         // A character has one pinyin syllable, so the pinyin clause only makes sense
         // for a single token; English glosses are multi-word, so the definition clause
-        // ANDs all tokens (spec §9 ranking: pinyin and English FTS both feed search).
+        // ANDs all tokens.
         // 'v' is not valid pinyin — learners type it for ü ("lv" → 律), and the FTS
-        // tokenizer strips ü's diaeresis to plain u.
+        // tokenizer (remove_diacritics 2) folds ü, toned or not, to plain u.
         if (latinTokens.size == 1) clauses += "pinyin:${latinTokens[0].replace('v', 'u')}*"
-        if (latinTokens.isNotEmpty()) {
-            val defClause = latinTokens.joinToString(" AND ") { "definition:$it*" }
-            clauses += if (latinTokens.size > 1) "($defClause)" else defClause
-        }
-        if (hasCjk) clauses += "char:${sanitizeFts(q)}"
-        return clauses.joinToString(" OR ").ifEmpty { null }
+        if (latinTokens.isNotEmpty()) clauses += latinTokens.joinToString(" AND ") { "definition:$it*" }
+        return clauses
     }
 
     private fun ftsQuery(match: String, limit: Int): Collection<String> {
         val ids = LinkedHashSet<String>()
         driver.executeQuery(
             identifier = null,
-            sql = "SELECT glyph_id FROM glyph_fts WHERE glyph_fts MATCH ? LIMIT ?",
+            // Ranked in SQL over the whole match set: a LIMIT taken first keeps whatever
+            // comes first by rowid, which is code-point order, and drops common characters
+            // from any big match ("yi", "shi").
+            sql = """
+                SELECT glyph_fts.glyph_id FROM glyph_fts JOIN glyph ON glyph.id = glyph_fts.glyph_id
+                WHERE glyph_fts MATCH ?
+                ORDER BY (glyph.freq_rank IS NULL), glyph.freq_rank, glyph.id
+                LIMIT ?
+            """.trimIndent(),
             mapper = { cursor: SqlCursor ->
                 while (cursor.next().value) {
                     cursor.getString(0)?.let { ids.add(it) }
@@ -290,11 +298,16 @@ class HanziRepository(
             }
         }
         if (latinTokens.isNotEmpty()) {
+            // 'v' stands in for ü ("lv", "nv") and never appears in real pinyin; fold it first
+            // so "lvyou" segments like "luyou".
+            val typed = latinTokens.map { it.replace('v', 'u') }
             val syllables =
-                if (latinTokens.size == 1) segmentPinyin(latinTokens[0], pinyinSyllables) ?: latinTokens
-                else latinTokens
-            // 'v' stands in for ü ("lv", "nv") and never appears in real pinyin.
-            collect("(" + syllables.joinToString(" AND ") { "pinyin:${it.replace('v', 'u')}*" } + ")")
+                if (typed.size == 1) segmentPinyin(typed[0], pinyinSyllables) ?: typed
+                else typed
+            // The syllables in the order typed come first ("yisheng" is 医生, not 生意 or 应声);
+            // the any-order, every-syllable-a-prefix form then fills in behind it.
+            if (syllables.size > 1) collect("pinyin:\"" + syllables.joinToString(" ") + "\"*")
+            collect("(" + syllables.joinToString(" AND ") { "pinyin:$it*" } + ")")
             // English-gloss matches demote proper nouns: "qing" must not surface
             // Qinghai counties. Sound matches don't — 中国 is capitalized AND common.
             collect("(" + latinTokens.joinToString(" AND ") { "defs:$it*" } + ")", demoteProperNouns = true)
@@ -423,7 +436,7 @@ class HanziRepository(
                 if (out.size >= limit) return out
                 if (!seen.add(id)) continue
                 db.hanziQueries.glyphWithPinyin(id).executeAsOneOrNull()?.let {
-                    out.add(LookAlike(it.id, it.char, it.pinyin, it.definition?.let(::firstSense), component))
+                    out.add(LookAlike(it.id, it.char, it.pinyin.ifEmpty { null }, it.definition?.let(::firstSense), component))
                 }
             }
         }
@@ -451,7 +464,7 @@ class HanziRepository(
         fun enrich(glyphId: String): LookAlike? {
             if (glyphId in self || glyphId in out) return null
             val g = db.hanziQueries.glyphWithPinyin(glyphId).executeAsOneOrNull() ?: return null
-            return LookAlike(g.id, g.char, g.pinyin, g.definition?.let(::firstSense))
+            return LookAlike(g.id, g.char, g.pinyin.ifEmpty { null }, g.definition?.let(::firstSense))
         }
 
         // Visual confusables of each character first (rare, so high-signal).
@@ -468,7 +481,7 @@ class HanziRepository(
         for (row in db.hanziQueries.seriesSiblings(glyphIds, maxRank, pool).executeAsList()) {
             if (out.size >= limit) break
             if (row.id in self || row.id in out) continue
-            out[row.id] = LookAlike(row.id, row.char, row.pinyin, row.definition?.let(::firstSense))
+            out[row.id] = LookAlike(row.id, row.char, row.pinyin.ifEmpty { null }, row.definition?.let(::firstSense))
         }
         return out.values.take(limit)
     }
@@ -608,6 +621,16 @@ class HanziRepository(
         val words = rows.map { it.anchorWordId }.filter { it.isNotEmpty() }.distinct().chunked(500)
             .flatMap { db.hanziQueries.wordsByIds(it).executeAsList() }
             .associateBy { it.id }
+        // A character can carry the same part twice (林 = 木 + 木): one row per character.
+        val soundRows = rows.filter { it.componentId == componentId && isSoundBearing(it.function) }
+            .distinctBy { it.glyphId }
+        val meaningRows = rows.filter { isMeaningBearing(it.function) }.distinctBy { it.glyphId }
+
+        val readings = soundRows.map { it.glyphId }.chunked(500)
+            .flatMap { db.hanziQueries.pinyinReadingsFor(it).executeAsList() }
+            .sortedWith(compareBy({ it.freq == null }, { -(it.freq ?: 0L) }))
+            .groupBy({ it.glyph_id }, { it.value_ })
+
         fun member(r: com.hanzidictionary.core.db.FamilyMembers, hint: String? = null) = FamilyMember(
             glyphId = r.glyphId,
             char = r.char,
@@ -617,12 +640,8 @@ class HanziRepository(
             word = words[r.anchorWordId]?.let { w -> FamilyWord(w.id, w.simp, w.pinyin, firstSenses(w.defs, 1)) },
             wordRank = r.wordRank.takeIf { it > 0 },
             hint = hint,
+            readings = readings[r.glyphId].orEmpty(),
         )
-
-        // A character can carry the same part twice (林 = 木 + 木): one row per character.
-        val soundRows = rows.filter { it.componentId == componentId && isSoundBearing(it.function) }
-            .distinctBy { it.glyphId }
-        val meaningRows = rows.filter { isMeaningBearing(it.function) }.distinctBy { it.glyphId }
 
         val hints = meaningRows.map { it.glyphId }.chunked(500)
             .flatMap { db.hanziQueries.roleHintsFor(it).executeAsList() }

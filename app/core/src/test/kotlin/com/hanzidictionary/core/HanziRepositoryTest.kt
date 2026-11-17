@@ -609,9 +609,13 @@ class HanziRepositoryTest {
 
     @Test
     fun pinyinVForUmlautMatches() {
+        // Assert on a ü character by name: stripTones folds lù to "lu" as well, so a check on
+        // the folded reading passes on 路 alone and proves nothing about ü.
         val results = repo.search("lv")
-        assertTrue(results.any { it.primaryPinyin?.let { p -> stripTones(p) == "lu" } == true },
-            "lv should match lü readings, got ${results.take(5).map { it.char to it.primaryPinyin }}")
+        assertTrue(results.any { it.char in setOf("绿", "律", "旅", "虑") },
+            "lv should match lü readings, got ${results.take(8).map { it.char to it.primaryPinyin }}")
+        assertTrue(repo.search("nv").any { it.char == "女" }, "nv should find 女")
+        assertTrue(repo.searchWords("lvyou").any { it.simp == "旅游" }, "lvyou should find 旅游")
     }
 
     @Test
