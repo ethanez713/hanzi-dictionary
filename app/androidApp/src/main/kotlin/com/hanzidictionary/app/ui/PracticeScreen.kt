@@ -23,6 +23,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -114,7 +115,10 @@ fun PracticeScreen(
     // Cleared by a tap, or by the next deal (the note is pinned to [ShownMilestone.dealt]).
     var banner by remember { mutableStateOf<ShownMilestone?>(null) }
 
-    LaunchedEffect(source, resumeToken) {
+    // "Keep going" after a finished session deals a fresh deck from the same source.
+    var reloadDeck by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(source, resumeToken, reloadDeck) {
         loaded = false
         val (entries, found) = withContext(Dispatchers.IO) {
             val candidates = resolveCandidates(app, repository, hskLevels, source)
@@ -150,6 +154,9 @@ fun PracticeScreen(
 
     val current = state.current
     LaunchedEffect(current?.item) {
+        // Cleared first: a card that opens already revealed (a widget or reminder pin) used to
+        // show the previous card's pinyin and words under the new glyph until this landed.
+        back = null
         back = current?.let { entry ->
             withContext(Dispatchers.IO) { loadBack(repository, entry.item) }
         }
@@ -315,6 +322,9 @@ fun PracticeScreen(
                             Text("Loading…", color = eth.textFaint, fontFamily = InstrumentSans)
                         }
                     }
+                    // A deck that had cards and has been worked through is a finished session,
+                    // not an empty list — say so, and offer the next round.
+                    entry == null && state.deck.isNotEmpty() -> SessionDone(eth) { reloadDeck++ }
                     entry == null -> EmptyDeck(source, eth)
                     else -> {
                         val summary = summaries[entry.item.itemId]
@@ -581,6 +591,22 @@ private fun GradeGutter(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SessionDone(eth: EthanColors, onKeepGoing: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "Done for now — that's every card this session dealt.",
+            textAlign = TextAlign.Center, color = eth.textMuted, fontFamily = InstrumentSans, fontSize = 14.sp,
+        )
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = onKeepGoing) { Text("Keep going", fontFamily = InstrumentSans) }
     }
 }
 

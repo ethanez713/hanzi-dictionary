@@ -108,6 +108,34 @@ fun LibraryScreen(
     var state by remember { mutableStateOf(LibraryState()) }
     var showNewList by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
+    // The row menu's Delete sits right under "Set as active": confirm, as the list's own
+    // screen already does, rather than deleting on one mis-aimed tap.
+    var confirmDelete by remember { mutableStateOf<Pair<Long, String>?>(null) }
+
+    confirmDelete?.let { (id, name) ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text("Delete “$name”?") },
+            text = {
+                Text(
+                    "The list goes away. Nothing you've archived as known is lost, and the " +
+                        "characters themselves stay in the dictionary.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = null
+                    scope.launch {
+                        withContext(Dispatchers.IO) { app.studyRepository.deleteList(id) }
+                        refresh++
+                        PracticeWidgetUpdater.refresh(context)
+                        snackbar.snack("Deleted \"$name\"")
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+        )
+    }
 
     LaunchedEffect(refresh, reloadToken) {
         state = withContext(Dispatchers.IO) {
@@ -228,15 +256,7 @@ fun LibraryScreen(
                                 PracticeWidgetUpdater.refresh(context)
                             }
                         },
-                        onDelete = {
-                            scope.launch {
-                                val name = list.name
-                                withContext(Dispatchers.IO) { app.studyRepository.deleteList(list.id) }
-                                refresh++
-                                PracticeWidgetUpdater.refresh(context)
-                                snackbar.snack("Deleted \"$name\"")
-                            }
-                        },
+                        onDelete = { confirmDelete = list.id to list.name },
                     )
                     HorizontalDivider(color = eth.inkRule)
                 }

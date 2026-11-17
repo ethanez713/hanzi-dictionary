@@ -33,8 +33,19 @@ class MainActivity : ComponentActivity() {
     // behind is stale; AppRoot watches this and starts the user back at home.
     private val staleSessionKey = mutableIntStateOf(0)
 
+    // Bumped on every return to the foreground after the first start. The Study deck reloads on
+    // it, because cards graded on the widget or the reminder while the app was away were still
+    // sitting in it, and got graded a second time.
+    private val returnKey = mutableIntStateOf(0)
+    private var startedOnce = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        // A return after a long enough gap starts fresh, saved state and all: restoring the old
+        // tab and query is exactly what a stale return should not do (the in-process reset in
+        // onStart can't see this case — the process is usually gone by then).
+        val stale = savedInstanceState != null &&
+            isStaleSession((application as HanziApp).lastActiveAt, System.currentTimeMillis())
+        super.onCreate(if (stale) null else savedInstanceState)
         // Let the window run under the system bars, then hand the *bottom* one to the app so
         // the navigation bar's background reaches the screen edge instead of stopping above a
         // black strip holding the gesture pill. The status bar deliberately keeps the theme's
@@ -76,6 +87,7 @@ class MainActivity : ComponentActivity() {
                     widgetOpensSheet = widgetOpensSheet.value,
                     onWidgetItemConsumed = { widgetItem.value = null },
                     staleSessionKey = staleSessionKey.intValue,
+                    returnKey = returnKey.intValue,
                 )
             }
         }
@@ -111,6 +123,8 @@ class MainActivity : ComponentActivity() {
         if (!arriving && isStaleSession(app.lastActiveAt, System.currentTimeMillis())) {
             staleSessionKey.intValue++
         }
+        if (startedOnce) returnKey.intValue++
+        startedOnce = true
     }
 
     override fun onStop() {

@@ -40,9 +40,17 @@ class HanziApp : Application() {
     var practiceCardPin: CardPin? = null
 
     /** When the app last went to the background, so a return can tell "I'm still doing this"
-     * from "I'm doing something else now" (see `isStaleSession`). Process-scoped like the
-     * pins, and for the same reason: a cold start already has nothing to restore. */
-    var lastActiveAt: Long? = null
+     * from "I'm doing something else now" (see `isStaleSession`). Persisted, not only held in
+     * the process: after a long absence the process is usually gone, and Android still restores
+     * the activity's saved state (tab, query) — so a process-only value read as "never left"
+     * and the stale reset never fired on exactly the return it was for. */
+    var lastActiveAt: Long?
+        get() = getSharedPreferences(SESSION_PREFS, MODE_PRIVATE).getLong(KEY_LAST_ACTIVE, -1L).takeIf { it >= 0 }
+        set(value) {
+            getSharedPreferences(SESSION_PREFS, MODE_PRIVATE).edit().apply {
+                if (value == null) remove(KEY_LAST_ACTIVE) else putLong(KEY_LAST_ACTIVE, value)
+            }.apply()
+        }
 
     /** True while an activity of the app is started; the reminder hides itself while it is. */
     @Volatile
@@ -100,5 +108,10 @@ class HanziApp : Application() {
                 put(key.toInt(), List(arr.length()) { arr.getString(it) })
             }
         }
+    }
+
+    private companion object {
+        const val SESSION_PREFS = "session"
+        const val KEY_LAST_ACTIVE = "last_active_at"
     }
 }

@@ -38,6 +38,7 @@ import com.hanzidictionary.core.UserRepository
 import com.hanzidictionary.core.extractHanzi
 import com.hanzidictionary.core.glyphIdOfChar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 import androidx.compose.material.icons.Icons
@@ -109,6 +110,7 @@ fun AppRoot(
     onWidgetItemConsumed: () -> Unit = {},
     widgetOpensSheet: Boolean = true,
     staleSessionKey: Int = 0,
+    returnKey: Int = 0,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
@@ -146,7 +148,8 @@ fun AppRoot(
         }
     }
 
-    // Stale session: clear pins, query, stacks, go to Study
+    // Stale session: clear pins, query, stacks, go to Study — and deal a fresh deck, or
+    // yesterday's would still be on screen.
     LaunchedEffect(staleSessionKey) {
         if (staleSessionKey == 0) return@LaunchedEffect
         app.practiceCardPin = null
@@ -155,6 +158,41 @@ fun AppRoot(
         dictLookupStack.dismiss()
         overlay = null
         selectedTab = Tab.STUDY
+        studyResumeToken++
+    }
+
+    // Back from the background: re-read the deck, keeping the pinned card. Cards graded on the
+    // widget or the reminder meanwhile are no longer due, and must not be dealt again.
+    LaunchedEffect(returnKey) {
+        if (returnKey > 0) studyResumeToken++
+    }
+
+    // The Study sheet closing: anything done on the pages in it (archive, add, unarchive) may
+    // have changed the deck under the suspended card, so re-read it. The pin keeps the card.
+    var studySheetWasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(studyLookupStack.isOpen) {
+        if (studySheetWasOpen && !studyLookupStack.isOpen) studyResumeToken++
+        studySheetWasOpen = studyLookupStack.isOpen
+    }
+
+    /** Every overlay closes through here. Whatever it was may have changed what is due and
+     * what the lists hold, so Study re-reads its deck and Library its lists; a Study source
+     * that names a list that was deleted or renamed meanwhile is re-resolved. */
+    fun closeOverlay() {
+        overlay = null
+        libraryReload++
+        scope.launch {
+            val src = studySource
+            if (src is DeckSource.UserList) {
+                val now = withContext(Dispatchers.IO) { app.studyRepository.lists().firstOrNull { it.id == src.listId } }
+                studySource = when {
+                    now == null -> withContext(Dispatchers.IO) { activeDeckSource(app) }
+                    now.name != src.name -> DeckSource.UserList(now.id, now.name)
+                    else -> src
+                }
+            }
+            studyResumeToken++
+        }
     }
 
     // Shared text intent → Dictionary tab with prefilled query or direct lookup
@@ -164,10 +202,16 @@ fun AppRoot(
             when {
                 hanzi.size == 1 -> {
                     val gid = glyphIdOfChar(hanzi[0])
+                    // An arriving intent wins: it closes whatever overlay was up and starts a
+                    // clean trail rather than stacking onto the one left behind.
+                    overlay = null
                     selectedTab = Tab.DICTIONARY
+                    dictLookupStack.dismiss()
                     dictLookupStack.push(LookupEntry(glyphId = gid, displayText = hanzi[0].toString()))
                 }
                 hanzi.isNotEmpty() -> {
+                    overlay = null
+                    dictLookupStack.dismiss()
                     searchQuery = hanzi.joinToString("")
                     selectedTab = Tab.DICTIONARY
                 }
@@ -193,6 +237,8 @@ fun AppRoot(
             text to src
         }
         studySource = loaded.second
+        overlay = null
+        studyLookupStack.dismiss()
         if (widgetOpensSheet) {
             // Open the character/word in a lookup sheet over Study
             val displayText = loaded.first ?: item.itemId
@@ -346,7 +392,7 @@ fun AppRoot(
     when (val o = overlay) {
         null -> {}
         AppOverlay.Settings ->
-            SettingsScreen(app.settings, repository, onBack = { overlay = null })
+            SettingsScreen(app.settings, repository, onBack = ::closeOverlay)
         AppOverlay.Archive ->
             ArchiveScreen(
                 userRepository = userRepository,
@@ -356,10 +402,10 @@ fun AppRoot(
                         if (item.isWord) LookupEntry(wordId = item.itemId, displayText = text)
                         else LookupEntry(glyphId = item.itemId, displayText = text),
                     )
-                    overlay = null
+                    closeOverlay()
                     selectedTab = Tab.DICTIONARY
                 },
-                onBack = { overlay = null },
+                onBack = ::closeOverlay,
             )
         is AppOverlay.Triage ->
             TriageScreen(
@@ -367,10 +413,7 @@ fun AppRoot(
                 batch = o.batch,
                 // The deck changed under the Study tab; bumping the token reloads it (the
                 // pinned card, if any, stays put) so the new words are there on return.
-                onDone = {
-                    studyResumeToken++
-                    overlay = null
-                },
+                onDone = ::closeOverlay,
             )
         AppOverlay.FinalCheck ->
             FinalCheckScreen(
@@ -378,29 +421,31 @@ fun AppRoot(
                 // Archiving and sending words back both change what's due. The token is
                 // what PracticeScreen reloads on; Library reads reloadToken for the same
                 // reason, because that tab stays composed under this overlay.
-                onDone = {
-                    studyResumeToken++
-                    libraryReload++
-                    overlay = null
-                },
+                onDone = ::closeOverlay,
             )
         is AppOverlay.ListEdit ->
             ListDetailScreen(
                 listId = o.listId,
                 onOpenItem = { item ->
-                    dictLookupStack.push(
-                        if (item.isWord) LookupEntry(wordId = item.itemId)
-                        else LookupEntry(glyphId = item.itemId),
-                    )
-                    overlay = null
+                    scope.launch {
+                        // The trail shows the item, not its id ("好", not "U+597D").
+                        val text = withContext(Dispatchers.IO) {
+                            repository.itemSummaries(listOf(item)).firstOrNull()?.text
+                        } ?: item.itemId
+                        dictLookupStack.push(
+                            if (item.isWord) LookupEntry(wordId = item.itemId, displayText = text)
+                            else LookupEntry(glyphId = item.itemId, displayText = text),
+                        )
+                    }
+                    closeOverlay()
                     selectedTab = Tab.DICTIONARY
                 },
                 onPractice = { src ->
+                    closeOverlay()
                     studySource = src
-                    overlay = null
                     selectedTab = Tab.STUDY
                 },
-                onBack = { overlay = null },
+                onBack = ::closeOverlay,
             )
     }
 }
