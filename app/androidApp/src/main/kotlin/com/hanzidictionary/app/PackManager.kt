@@ -54,6 +54,14 @@ object PackManager {
         return HanziRepository(coreDriver, idsDriver)
     }
 
+    /** True when opening the repository would first have to copy the pack out of the APK —
+     * a first launch, or the first after a pack update. That copy takes seconds, so callers
+     * on the main thread or in a broadcast receiver check this before touching the repository. */
+    fun needsInstall(context: Context): Boolean {
+        val installed = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_INSTALLED_VERSION, -1)
+        return !(installed == BUNDLED_PACK_VERSION && isIntact(context, CORE_DB) && isIntact(context, IDS_DB))
+    }
+
     private fun ensureInstalled(context: Context) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val installed = prefs.getInt(KEY_INSTALLED_VERSION, -1)

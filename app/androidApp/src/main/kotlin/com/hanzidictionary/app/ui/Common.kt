@@ -1,5 +1,7 @@
 package com.hanzidictionary.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
 import android.Manifest
 import android.os.Build
 import androidx.compose.foundation.clickable
@@ -310,5 +312,17 @@ private tailrec fun android.content.Context.findActivity(): android.app.Activity
     is android.app.Activity -> this
     is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+/** Shown while the first launch copies the content pack into place. */
+@androidx.compose.runtime.Composable
+fun PackInstalling() {
+    val eth = EthanTheme.colors
+    androidx.compose.foundation.layout.Box(
+        androidx.compose.ui.Modifier.fillMaxSize().background(eth.paper1),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        androidx.compose.material3.Text("Setting up the dictionary…", color = eth.textFaint, fontFamily = InstrumentSans)
+    }
 }
 

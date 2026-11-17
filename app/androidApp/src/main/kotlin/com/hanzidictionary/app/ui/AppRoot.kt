@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
@@ -135,6 +136,7 @@ fun AppRoot(
     var libraryReload by remember { mutableIntStateOf(0) }
 
     // Per-tab lookup stacks: incidental lookups open a sheet over the current tab
+    val tabStates = rememberSaveableStateHolder()
     val studyLookupStack = remember { LookupStack() }
     val dictLookupStack = remember { LookupStack() }
 
@@ -324,67 +326,72 @@ fun AppRoot(
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (selectedTab) {
-                Tab.STUDY -> {
-                    val src = studySource ?: DeckSource.Everything
-                    PracticeScreen(
-                        repository = repository,
-                        hskLevels = hskLevels,
-                        tts = tts,
-                        source = src ?: DeckSource.Everything,
-                        resumeToken = studyResumeToken,
-                        lookupStack = studyLookupStack,
-                        onSwitchToDictionary = { selectedTab = Tab.DICTIONARY },
-                        onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
-                        onAddNewWords = { batch -> overlay = AppOverlay.Triage(batch) },
-                        onFinalCheck = { overlay = AppOverlay.FinalCheck },
-                        onChooseDeck = { selectedTab = Tab.LIBRARY },
-                    )
-                    if (studyLookupStack.isOpen) {
-                        LookupSheet(
-                            stack = studyLookupStack,
+            // Each tab keeps its saveable state while another is showing. Without the holder,
+            // leaving a tab discarded its rememberSaveable values, so the Dictionary feed came
+            // back at the top, in tiles, and rescanning after a visit to Study.
+            tabStates.SaveableStateProvider(selectedTab.name) {
+                when (selectedTab) {
+                    Tab.STUDY -> {
+                        val src = studySource ?: DeckSource.Everything
+                        PracticeScreen(
                             repository = repository,
-                            userRepository = userRepository,
+                            hskLevels = hskLevels,
+                            tts = tts,
+                            source = src ?: DeckSource.Everything,
+                            resumeToken = studyResumeToken,
+                            lookupStack = studyLookupStack,
+                            onSwitchToDictionary = { selectedTab = Tab.DICTIONARY },
+                            onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
+                            onAddNewWords = { batch -> overlay = AppOverlay.Triage(batch) },
+                            onFinalCheck = { overlay = AppOverlay.FinalCheck },
+                            onChooseDeck = { selectedTab = Tab.LIBRARY },
+                        )
+                        if (studyLookupStack.isOpen) {
+                            LookupSheet(
+                                stack = studyLookupStack,
+                                repository = repository,
+                                userRepository = userRepository,
+                                tts = tts,
+                            )
+                        }
+                    }
+                    Tab.DICTIONARY -> {
+                        SearchScreen(
+                            repository = repository,
+                            query = searchQuery,
+                            onQueryChange = { searchQuery = it },
+                            lookupStack = dictLookupStack,
                             tts = tts,
                         )
+                        if (dictLookupStack.isOpen) {
+                            LookupSheet(
+                                stack = dictLookupStack,
+                                repository = repository,
+                                userRepository = userRepository,
+                                tts = tts,
+                            )
+                        }
                     }
-                }
-                Tab.DICTIONARY -> {
-                    SearchScreen(
-                        repository = repository,
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        lookupStack = dictLookupStack,
-                        tts = tts,
-                    )
-                    if (dictLookupStack.isOpen) {
-                        LookupSheet(
-                            stack = dictLookupStack,
+                    Tab.LIBRARY -> {
+                        LibraryScreen(
                             repository = repository,
                             userRepository = userRepository,
-                            tts = tts,
+                            hskLevels = hskLevels,
+                            onPractice = { src ->
+                                studySource = src
+                                selectedTab = Tab.STUDY
+                            },
+                            onLookup = { entry ->
+                                dictLookupStack.push(entry)
+                                selectedTab = Tab.DICTIONARY
+                            },
+                            onOpenSettings = { overlay = AppOverlay.Settings },
+                            onOpenArchive = { overlay = AppOverlay.Archive },
+                            onOpenFinalCheck = { overlay = AppOverlay.FinalCheck },
+                            onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
+                            reloadToken = libraryReload,
                         )
                     }
-                }
-                Tab.LIBRARY -> {
-                    LibraryScreen(
-                        repository = repository,
-                        userRepository = userRepository,
-                        hskLevels = hskLevels,
-                        onPractice = { src ->
-                            studySource = src
-                            selectedTab = Tab.STUDY
-                        },
-                        onLookup = { entry ->
-                            dictLookupStack.push(entry)
-                            selectedTab = Tab.DICTIONARY
-                        },
-                        onOpenSettings = { overlay = AppOverlay.Settings },
-                        onOpenArchive = { overlay = AppOverlay.Archive },
-                        onOpenFinalCheck = { overlay = AppOverlay.FinalCheck },
-                        onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
-                        reloadToken = libraryReload,
-                    )
                 }
             }
         }

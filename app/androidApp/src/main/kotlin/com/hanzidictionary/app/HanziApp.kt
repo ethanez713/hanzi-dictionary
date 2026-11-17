@@ -27,8 +27,16 @@ class HanziApp : Application() {
     // Opening the pack also carries user.db over to its word ids (see migrateWordIds): this is
     // the first moment both are available, and it has to happen before anything reads lists.
     val repository: HanziRepository by lazy {
-        PackManager.openRepository(this).also { migrateWordIds(it, studyRepository) }
+        PackManager.openRepository(this).also {
+            migrateWordIds(it, studyRepository)
+            packOpened = true
+        }
     }
+
+    /** True once [repository] is open, so the UI can tell whether reaching for it would block. */
+    @Volatile
+    var packOpened: Boolean = false
+        private set
 
     /**
      * The flashcard each surface is currently showing, held for the life of the *process*.

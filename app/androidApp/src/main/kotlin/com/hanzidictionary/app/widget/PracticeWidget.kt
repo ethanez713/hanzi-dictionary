@@ -10,6 +10,7 @@ import android.content.SharedPreferences
 import android.widget.RemoteViews
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.MainActivity
+import com.hanzidictionary.app.PackManager
 import com.hanzidictionary.app.R
 import com.hanzidictionary.core.DeckSource
 import com.hanzidictionary.core.Rating
@@ -113,6 +114,9 @@ class PracticeWidgetProvider : AppWidgetProvider() {
     }
 
     private fun apply(app: HanziApp, widgetId: Int, event: WidgetEvent, gradeRating: Rating?) {
+        // Never install the pack from a receiver: the copy can outlast the broadcast's time
+        // budget. The app installs it on its next open and pokes the widget then.
+        if (!app.packOpened && PackManager.needsInstall(app)) return
         val prefs = prefs(app)
         val prev = loadState(prefs, widgetId)
 

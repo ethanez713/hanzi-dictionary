@@ -72,6 +72,8 @@ class NudgeReceiver : BroadcastReceiver() {
 
     private fun grade(context: Context, rating: Rating, tappedItem: String?) {
         val app = context as HanziApp
+        // Not from a receiver: the pack copy after an app update can outlast the broadcast.
+        if (!app.packOpened && com.hanzidictionary.app.PackManager.needsInstall(app)) return
         val store = NudgeStore(context)
         val session = store.loadSession() ?: return
         val card = session.card ?: return

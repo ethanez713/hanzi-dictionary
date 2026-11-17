@@ -6,7 +6,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import com.hanzidictionary.app.nudge.NudgeScheduler
 import com.hanzidictionary.app.ui.AppRoot
@@ -75,7 +77,23 @@ class MainActivity : ComponentActivity() {
                     isAppearanceLightNavigationBars = !dark
                 }
             }
+            // The first launch (or the first after a pack update) copies the pack out of the
+            // APK. That used to happen on the main thread the moment AppRoot touched the
+            // repository, freezing a blank window for the whole copy.
+            var packReady by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(app.packOpened) }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                if (!packReady) {
+                    kotlinx.coroutines.withContext(Dispatchers.IO) { app.repository }
+                    packReady = true
+                    // The widget skipped its redraws while the pack wasn't there; catch it up.
+                    com.hanzidictionary.app.widget.PracticeWidgetUpdater.refresh(this@MainActivity)
+                }
+            }
             AppTheme(darkTheme = dark) {
+                if (!packReady) {
+                    com.hanzidictionary.app.ui.PackInstalling()
+                    return@AppTheme
+                }
                 AppRoot(
                     repository = app.repository,
                     userRepository = app.userRepository,
