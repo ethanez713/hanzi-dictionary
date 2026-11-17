@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -348,9 +349,12 @@ private fun SheetHeader(stack: LookupStack, eth: EthanColors) {
             }
         }
 
-        // Trail (center, flex)
+        // Trail (center, flex). Scrolls, and keeps its newest crumb in view: past about six
+        // levels a fixed row squeezed the *current* crumb — the one that matters — to nothing.
+        val trailScroll = rememberScrollState()
+        LaunchedEffect(stack.trail.size) { trailScroll.scrollTo(trailScroll.maxValue) }
         Row(
-            Modifier.weight(1f),
+            Modifier.weight(1f).horizontalScroll(trailScroll),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {

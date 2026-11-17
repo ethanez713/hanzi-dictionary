@@ -275,3 +275,40 @@ fun ScriptFormsLine(
         }
     }
 }
+
+/**
+ * Asks for [permission], or — when Android will no longer show the dialog (denied twice, or
+ * "don't ask again") — opens the app's system settings, where it can still be granted.
+ * Without this the Allow button and the reminders switch silently did nothing after two
+ * denials. "Asked before" is remembered because a never-asked permission also reports no
+ * rationale.
+ */
+fun requestOrOpenSettings(
+    context: android.content.Context,
+    permission: String,
+    launch: (String) -> Unit,
+) {
+    val activity = context.findActivity()
+    val prefs = context.getSharedPreferences("permissions", android.content.Context.MODE_PRIVATE)
+    val askedBefore = prefs.getBoolean(permission, false)
+    val canAsk = activity == null || !askedBefore ||
+        androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+    if (canAsk) {
+        prefs.edit().putBoolean(permission, true).apply()
+        launch(permission)
+    } else {
+        context.startActivity(
+            android.content.Intent(
+                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.fromParts("package", context.packageName, null),
+            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+}
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+

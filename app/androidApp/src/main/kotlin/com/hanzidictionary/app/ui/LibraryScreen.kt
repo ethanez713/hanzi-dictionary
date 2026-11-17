@@ -106,6 +106,7 @@ fun LibraryScreen(
 
     var refresh by remember { mutableIntStateOf(0) }
     var state by remember { mutableStateOf(LibraryState()) }
+    var loaded by remember { mutableStateOf(false) }
     var showNewList by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
     // The row menu's Delete sits right under "Set as active": confirm, as the list's own
@@ -155,6 +156,7 @@ fun LibraryScreen(
                 activity, streak, localDay(now, tz),
             )
         }
+        loaded = true
     }
 
     if (showNewList) {
@@ -231,7 +233,7 @@ fun LibraryScreen(
 
             if (state.lists.isEmpty()) {
                 Text(
-                    "No lists yet. Tap ＋ to create one.",
+                    if (loaded) "No lists yet. Tap ＋ to create one." else "Loading…",
                     color = eth.textFaint,
                     fontFamily = InstrumentSans,
                     fontSize = 13.sp,

@@ -112,6 +112,7 @@ fun ListDetailScreen(
     var refresh by remember { mutableIntStateOf(0) }
     var name by remember { mutableStateOf("") }
     var learning by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
+    var itemsLoaded by remember { mutableStateOf(false) }
     var archived by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var cardStates by remember { mutableStateOf<Map<String, CardState>>(emptyMap()) }
     var mastery by remember { mutableStateOf<Map<String, Mastery>>(emptyMap()) }
@@ -155,6 +156,7 @@ fun ListDetailScreen(
         cardStates = loaded.cardStates
         mastery = loaded.mastery
         addedAt = loaded.addedAt
+        itemsLoaded = true
     }
 
     /** "Archived Foo" for one, "Archived 3 items" for several. */
@@ -307,7 +309,7 @@ fun ListDetailScreen(
         },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            if (learning.isEmpty() && archived.isEmpty()) {
+            if (learning.isEmpty() && archived.isEmpty() && itemsLoaded) {
                 item {
                     Text(
                         "Nothing in this list yet. Swipe right on a character or word " +

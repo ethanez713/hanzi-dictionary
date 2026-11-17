@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -221,13 +222,25 @@ fun TriageScreen(
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
                 !loaded -> CenteredNote("Loading…", eth)
-                finished -> TriageDone(
-                    added = added,
-                    known = known,
-                    outOfWords = current == null && added < target,
-                    eth = eth,
-                    onDone = onDone,
-                )
+                finished -> {
+                    // Say where the words went: they go to the active list, which is not
+                    // always the deck that was on screen when "add new words" was tapped.
+                    val listName by produceState<String?>(null, added) {
+                        value = withContext(Dispatchers.IO) {
+                            app.studyRepository.activeListId()?.let { id ->
+                                app.studyRepository.lists().firstOrNull { it.id == id }?.name
+                            }
+                        }
+                    }
+                    TriageDone(
+                        added = added,
+                        known = known,
+                        outOfWords = current == null && added < target,
+                        listName = listName,
+                        eth = eth,
+                        onDone = onDone,
+                    )
+                }
                 current == null -> CenteredNote("Loading…", eth)
                 else -> Column(
                     Modifier.fillMaxSize(),
@@ -324,7 +337,7 @@ private fun SwipeHint(verb: String, effect: String, align: Alignment.Horizontal,
 }
 
 @Composable
-private fun TriageDone(added: Int, known: Int, outOfWords: Boolean, eth: EthanColors, onDone: () -> Unit) {
+private fun TriageDone(added: Int, known: Int, outOfWords: Boolean, listName: String?, eth: EthanColors, onDone: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -339,7 +352,8 @@ private fun TriageDone(added: Int, known: Int, outOfWords: Boolean, eth: EthanCo
             known > 0 -> "Nothing added."
             else -> "Your deck has plenty coming up — no new words needed yet."
         }
-        val message = if (known > 0) "$headline Marked $known as known." else headline
+        val where = if (added > 0 && listName != null) " They're in “$listName”." else ""
+        val message = (if (known > 0) "$headline Marked $known as known." else headline) + where
         Text(
             message,
             fontFamily = InstrumentSans,

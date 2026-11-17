@@ -75,6 +75,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -493,21 +495,32 @@ fun SearchScreen(
     // Characters and words are queried together so both sections land in the same frame:
     // if they raced, a words-first frame would put the words header at the top of the
     // LazyColumn and the character rows would then be inserted above the viewport.
-    val (results, wordHits) = produceState(
-        initialValue = emptyList<SearchResult>() to emptyList<WordHit>(),
+    // Carries the query it answers, so "No results" is said only about a finished search —
+    // not, as it was, while the first query was still running.
+    val (answered, results, wordHits) = produceState(
+        initialValue = Triple<String?, List<SearchResult>, List<WordHit>>(null, emptyList(), emptyList()),
         query, composeMode,
     ) {
         val q = query
         value = when {
-            q.isBlank() -> emptyList<SearchResult>() to emptyList()
+            q.isBlank() -> Triple(q, emptyList(), emptyList())
             composeMode && composeParts.isNotEmpty() -> withContext(Dispatchers.IO) {
-                repository.composeSearch(composeParts).filter { glyphPaint.hasGlyph(it.char) } to emptyList()
+                Triple(q, repository.composeSearch(composeParts).filter { glyphPaint.hasGlyph(it.char) }, emptyList())
             }
             else -> withContext(Dispatchers.IO) {
-                repository.search(q).filter { glyphPaint.hasGlyph(it.char) } to repository.searchWords(q)
+                Triple(q, repository.search(q).filter { glyphPaint.hasGlyph(it.char) }, repository.searchWords(q))
             }
         }
     }.value
+    // Opening a result puts the keyboard away: it otherwise sat over the lower results and the
+    // lower half of the sheet until dismissed by hand.
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    fun openResult(entry: LookupEntry) {
+        keyboard?.hide()
+        focus.clearFocus()
+        lookupStack.push(entry)
+    }
 
     val bulkCount = visibleFinds.orEmpty().count { it.glyphId in selected }
     Scaffold(
@@ -616,7 +629,7 @@ fun SearchScreen(
                         scope.launch { snackbar.snack("Archived $label") }
                     },
                     onUseClipboard = { onQueryChange(it) },
-                    onAllow = { permissionLauncher.launch(photoPermission) },
+                    onAllow = { requestOrOpenSettings(context, photoPermission) { permissionLauncher.launch(it) } },
                     onRescan = { rescans++ },
                     onAdd = ::triageAdd,
                     onDismiss = ::triageDismiss,
@@ -627,6 +640,13 @@ fun SearchScreen(
                     onToggle = ::toggleSelected,
                     onExitSelect = ::exitSelect,
                     onToggleSelectAll = ::toggleSelectAll,
+                )
+            } else if (answered != query) {
+                Text(
+                    "Searching…",
+                    modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+                    textAlign = TextAlign.Center,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else if (results.isEmpty() && wordHits.isEmpty()) {
                 Text(
@@ -653,7 +673,7 @@ fun SearchScreen(
                                 secondaryText = r.tradChar,
                                 pinyin = r.primaryPinyin,
                                 gloss = r.definition?.let { displayGloss(it) },
-                                onClick = { lookupStack.push(LookupEntry(glyphId = r.glyphId, displayText = r.char)) },
+                                onClick = { openResult(LookupEntry(glyphId = r.glyphId, displayText = r.char)) },
                             )
                         }
                         HorizontalDivider()
@@ -678,7 +698,7 @@ fun SearchScreen(
                                     pinyin = w.pinyin,
                                     gloss = w.gloss,
                                     glossLines = 1,
-                                    onClick = { lookupStack.push(LookupEntry(wordId = w.id, displayText = w.simp)) },
+                                    onClick = { openResult(LookupEntry(wordId = w.id, displayText = w.simp)) },
                                 )
                             }
                             HorizontalDivider()

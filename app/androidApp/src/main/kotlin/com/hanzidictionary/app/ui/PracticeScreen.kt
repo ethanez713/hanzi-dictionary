@@ -93,6 +93,7 @@ fun PracticeScreen(
     onEditList: (Long) -> Unit = {},
     onAddNewWords: (Int?) -> Unit = {},
     onFinalCheck: () -> Unit = {},
+    onChooseDeck: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as HanziApp
@@ -257,6 +258,9 @@ fun PracticeScreen(
                                 .clip(RoundedCornerShape(50.dp))
                                 .background(eth.surfaceAccentSoft)
                                 .border(1.dp, eth.orange200, RoundedCornerShape(50.dp))
+                                // The caret promised a picker and there was none: decks are
+                                // chosen in Library, so that is where the chip goes.
+                                .clickable(onClickLabel = "Choose a deck", onClick = onChooseDeck)
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                         ) {
                             Text(

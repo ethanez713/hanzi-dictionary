@@ -205,7 +205,7 @@ private fun RemindersSection(settings: AppSettings, eth: EthanColors) {
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
                         PackageManager.PERMISSION_GRANTED ->
-                        permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        requestOrOpenSettings(context, Manifest.permission.POST_NOTIFICATIONS) { permission.launch(it) }
                     else -> enable()
                 }
             },

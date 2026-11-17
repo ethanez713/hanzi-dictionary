@@ -338,6 +338,7 @@ fun AppRoot(
                         onEditList = { listId -> overlay = AppOverlay.ListEdit(listId) },
                         onAddNewWords = { batch -> overlay = AppOverlay.Triage(batch) },
                         onFinalCheck = { overlay = AppOverlay.FinalCheck },
+                        onChooseDeck = { selectedTab = Tab.LIBRARY },
                     )
                     if (studyLookupStack.isOpen) {
                         LookupSheet(
