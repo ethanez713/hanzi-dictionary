@@ -161,6 +161,52 @@ class HanziRepositoryTest {
     }
 
     @Test
+    fun aSoundSeriesIsGroupedBySyllableNearestFirst() {
+        val sound = repo.componentFamily("青").sound
+        val first = sound.first()
+        assertEquals("qing", first.label, "the component's own sound leads; got ${soundRange(sound)}")
+        assertEquals(SoundRelation.SAME, first.relation)
+        assertTrue(first.members.any { it.char == "请" } && first.members.any { it.char == "清" })
+        assertTrue(sound.any { it.label == "jing" }, "精/睛 are the series' second sound")
+
+        val all = sound.flatMap { it.members }
+        assertEquals(all.size, all.distinctBy { it.glyphId }.size, "one row per character")
+        assertTrue(all.all { it.pinyin != null }, "every common character has a reading")
+        assertNotNull(first.members.single { it.char == "请" }.word, "请 is known from a word")
+        for (g in sound) assertEquals(g.members.sortedWith(byFrequency), g.members, "commonest first within ${g.label}")
+    }
+
+    @Test
+    fun aMeaningFamilyPoolsEveryShapeOfTheRadical() {
+        val water = repo.componentFamily("氵")
+        assertEquals(setOf("氵", "水", "氺"), water.forms.toSet())
+        val all = water.meaning.flatMap { it.members }
+        assertTrue(all.any { it.char == "河" }, "河 carries 氵")
+        assertTrue(all.size >= 20, "氵 is one of the biggest families in HSK; got ${all.size}")
+        assertEquals(
+            all.map { it.glyphId }.toSet(),
+            repo.componentFamily("水").meaning.flatMap { it.members }.map { it.glyphId }.toSet(),
+            "asked for by either shape, it is the same family",
+        )
+    }
+
+    @Test
+    fun aMeaningPartWithSeveralUsesIsSplitByThem() {
+        // makemeahanzi's per-character hints: 木 tree/wood, 钅 metal/money, 阝 place/hill/city,
+        // 艹 plant/grass. They ride on role_hint claims, which a pack built before the family
+        // page existed doesn't have — that pack shows one plain list, and this skips.
+        val families = listOf("木", "钅", "阝", "艹").map { repo.componentFamily(it).meaning }
+        assumeTrue(
+            families.flatten().flatMap { it.members }.any { it.hint != null },
+            "pack has no role_hint claims; rebuild it (pipeline.build + pipeline.package)",
+        )
+        assertTrue(
+            families.any { groups -> groups.count { it.label != null } >= 2 },
+            "at least one of these should split; got ${families.map { g -> g.map { it.label to it.members.size } }}",
+        )
+    }
+
+    @Test
     fun sourcesArePresentForProvenance() {
         val sources = repo.sources()
         assertTrue(sources.any { it.id == "makemeahanzi" && it.license.contains("LGPL") })

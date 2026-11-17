@@ -571,6 +571,19 @@ def build() -> Path:
         (component, gloss, source, support, agreement)
         for component, (gloss, source, support, agreement) in sorted(role_glosses.items())
     ]
+    # Per-character role hints, attached after the override so they key to the component ids
+    # the shipped component_use rows carry — the meaning-family page groups a component's
+    # characters by these (月: moon vs flesh).
+    role_hints = radicals.role_hint_rows(
+        {cp: e.makemeahanzi for cp, e in entities.items() if e.makemeahanzi and cp in selected_set},
+        component_use_rows,
+    )
+    for gid, component, hint in role_hints:
+        claim_rows.append((
+            gid, "role_hint", json.dumps({"component": component, "hint": hint}, ensure_ascii=False),
+            "makemeahanzi", None, 0.6, manifests["makemeahanzi"]["retrieved_at"],
+        ))
+    print(f"  role_hint: {len(role_hints)} characters carry a per-character meaning hint")
     semantic_uses = collections.Counter(
         r[1] for r in component_use_rows if r[3] in ("semantic", "both")
     )

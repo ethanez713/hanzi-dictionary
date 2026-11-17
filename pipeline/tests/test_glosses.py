@@ -200,5 +200,45 @@ class SingleCharCedictDefs(unittest.TestCase):
         self.assertNotIn("项目", single_char_cedict_defs(self.dir))
 
 
+
+def use(char, component, function):
+    """A component_use row as build.py holds it: (gid, component, pos, function, …)."""
+    return (f"U+{ord(char):04X}", component, 0, function, None, None, "single_source")
+
+
+class RoleHintRows(unittest.TestCase):
+    """Per-character hints are what split a meaning family (月: moon vs flesh)."""
+
+    def rows(self, specs, uses):
+        return radicals.role_hint_rows({ord(ch): mmh(sem, hint) for ch, sem, hint in specs}, uses)
+
+    def test_hint_lands_on_the_named_meaning_part(self):
+        rows = self.rows([("期", "月", "moon")], [use("期", "月", "semantic"), use("期", "其", "phonetic")])
+        self.assertEqual(rows, [("U+671F", "月", "moon")])
+
+    def test_a_differently_spelled_part_still_gets_its_hint(self):
+        """makemeahanzi writes flesh-月 as ⺼; the pack's rows say 月. Same part."""
+        rows = self.rows([("脑", "⺼", "flesh")], [use("脑", "月", "semantic"), use("脑", "𡿺", "phonetic")])
+        self.assertEqual(rows, [("U+8111", "月", "flesh")])
+
+    def test_radical_family_matches_before_the_fallback(self):
+        rows = self.rows([("泉", "氵", "water")], [use("泉", "白", "semantic"), use("泉", "水", "semantic")])
+        self.assertEqual(rows, [("U+6CC9", "水", "water")])
+
+    def test_sources_disagreeing_about_the_meaning_part_yield_nothing(self):
+        """makemeahanzi names the part the pack calls the sound: its hint describes a role
+        the pack doesn't give that part, so attaching it to the other one would be a fiction."""
+        rows = self.rows([("问", "口", "mouth")], [use("问", "口", "phonetic"), use("问", "门", "semantic")])
+        self.assertEqual(rows, [])
+
+    def test_prose_hints_and_other_formation_types_are_skipped(self):
+        uses = [use("法", "氵", "semantic"), use("河", "氵", "semantic")]
+        rows = radicals.role_hint_rows({
+            ord("法"): mmh("氵", "water in a spirit level"),
+            ord("河"): mmh("氵", "water", kind="ideographic"),
+        }, uses)
+        self.assertEqual(rows, [])
+
+
 if __name__ == "__main__":
     unittest.main()

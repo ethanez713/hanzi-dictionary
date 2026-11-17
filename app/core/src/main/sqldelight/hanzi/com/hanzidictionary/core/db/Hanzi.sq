@@ -171,6 +171,39 @@ JOIN glyph g ON g.id = cu.glyph_id
 WHERE cu.component_id = :componentId
 ORDER BY (g.freq_rank IS NULL), g.freq_rank;
 
+-- The family page's pool: HSK characters built on any of :componentIds (a meaning part is
+-- asked for in all its shapes at once — 氵 水 氺), plus :keepId whatever its level so the
+-- character the reader came from is never missing from its own family. glyph.hsk is only
+-- ever set on simplified forms, so this is also what keeps 说 from being listed beside 說.
+-- wordRank is the corpus rank of the commonest word containing the character — the page's
+-- one ordering key — and anchorWordId the commonest multi-character one, shown beside it.
+-- The scalar subselects are COALESCEd because SQLDelight types them NOT NULL regardless.
+familyMembers:
+SELECT cu.glyph_id AS glyphId,
+       cu.component_id AS componentId,
+       cu.function AS function,
+       g.char AS char,
+       g.definition AS definition,
+       g.cedict_defs AS cedictDefs,
+       COALESCE((SELECT r.value FROM reading r WHERE r.glyph_id = g.id AND r.system = 'pinyin'
+                 ORDER BY (r.freq IS NULL), r.freq DESC LIMIT 1), '') AS pinyin,
+       COALESCE((SELECT MIN(w.freq_rank) FROM word_char wc JOIN word w ON w.id = wc.word_id
+                 WHERE wc.glyph_id = g.id), 0) AS wordRank,
+       COALESCE((SELECT w.id FROM word_char wc JOIN word w ON w.id = wc.word_id
+                 WHERE wc.glyph_id = g.id AND LENGTH(w.simp) > 1
+                 ORDER BY (w.freq_rank IS NULL), w.freq_rank, (w.hsk IS NULL), w.hsk,
+                          LENGTH(w.simp), w.id LIMIT 1), '') AS anchorWordId
+FROM component_use cu
+JOIN glyph g ON g.id = cu.glyph_id
+WHERE cu.component_id IN :componentIds
+  AND (g.hsk IS NOT NULL OR g.id = :keepId);
+
+-- What the meaning part lends each of :ids — makemeahanzi's per-character hint, as
+-- {"component": "月", "hint": "flesh"}. A pack built before these claims existed simply has
+-- none, and the meaning family falls back to one plain list.
+roleHintsFor:
+SELECT subject_id, value FROM claim WHERE predicate = 'role_hint' AND subject_id IN :ids;
+
 -- diff carries the shared component for kind='component' rows, and the shape encoding that
 -- vouched for a kind='shape' pair; NULL for kSpoofingVariant.
 confusablesFor:

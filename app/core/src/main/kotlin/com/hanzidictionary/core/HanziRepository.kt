@@ -592,6 +592,61 @@ class HanziRepository(
 
     /** Of [ids], the subset that exist as glyphs in the pack — used to drop dead links
      * (e.g. an OCR'd character outside the T1/T2 coverage) before showing them. */
+    /**
+     * The family page for [componentId]: the HSK characters built on it, grouped by the
+     * sounds it stands for and by the things it means (see ComponentFamily.kt for the rules).
+     * [originGlyphId] is the character the reader tapped through from; it is kept in the pool
+     * even when it has no HSK level.
+     *
+     * The sound side reads [componentId] alone — a sound part is one specific character — while
+     * the meaning side pools every shape of the radical, so 水 and 氵 are one family.
+     */
+    fun componentFamily(componentId: String, originGlyphId: String? = null): ComponentFamily {
+        val forms = componentForms(componentId)
+        val rows = db.hanziQueries.familyMembers(forms, originGlyphId ?: "").executeAsList()
+
+        val words = rows.map { it.anchorWordId }.filter { it.isNotEmpty() }.distinct().chunked(500)
+            .flatMap { db.hanziQueries.wordsByIds(it).executeAsList() }
+            .associateBy { it.id }
+        fun member(r: com.hanzidictionary.core.db.FamilyMembers, hint: String? = null) = FamilyMember(
+            glyphId = r.glyphId,
+            char = r.char,
+            pinyin = r.pinyin.ifEmpty { null },
+            // CC-CEDICT first, as everywhere else: Unihan's gloss is the classical one.
+            gloss = firstSenses(r.cedictDefs, 1) ?: r.definition?.let { firstSense(displayGloss(it)) },
+            word = words[r.anchorWordId]?.let { w -> FamilyWord(w.id, w.simp, w.pinyin, firstSenses(w.defs, 1)) },
+            wordRank = r.wordRank.takeIf { it > 0 },
+            hint = hint,
+        )
+
+        // A character can carry the same part twice (林 = 木 + 木): one row per character.
+        val soundRows = rows.filter { it.componentId == componentId && isSoundBearing(it.function) }
+            .distinctBy { it.glyphId }
+        val meaningRows = rows.filter { isMeaningBearing(it.function) }.distinctBy { it.glyphId }
+
+        val hints = meaningRows.map { it.glyphId }.chunked(500)
+            .flatMap { db.hanziQueries.roleHintsFor(it).executeAsList() }
+            .mapNotNull { claim ->
+                // {"component": …, "hint": …} flattens to [key, value, key, value].
+                val fields = parseSenses(claim.value_).chunked(2).filter { it.size == 2 }.associate { it[0] to it[1] }
+                val hint = fields["hint"]
+                if (hint != null && fields["component"] in forms) claim.subject_id to hint else null
+            }.toMap()
+
+        val ownGlyph = if (componentId.startsWith("ids:")) null
+        else db.hanziQueries.glyphByChar(componentId).executeAsList().firstOrNull()
+        val ownReadings = ownGlyph?.let { g ->
+            db.hanziQueries.readingsForGlyph(g.id).executeAsList().filter { it.system == "pinyin" }.map { it.value_ }
+        }.orEmpty()
+
+        return ComponentFamily(
+            forms = forms,
+            roleGloss = forms.firstNotNullOfOrNull { db.hanziQueries.componentGlossFor(it).executeAsOneOrNull() },
+            sound = soundSeries(ownReadings, soundRows.map { member(it) }),
+            meaning = meaningFamily(meaningRows.map { member(it, hints[it.glyphId]) }),
+        )
+    }
+
     fun existingGlyphIds(ids: Collection<String>): Set<String> {
         if (ids.isEmpty()) return emptySet()
         return db.hanziQueries.glyphsByIds(ids.toList()).executeAsList().map { it.id }.toSet()

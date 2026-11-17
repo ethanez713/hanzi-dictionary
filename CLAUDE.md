@@ -114,11 +114,18 @@ installed app upgrades in place. Schema version = number of `.sqm` files + 1.
   sheet. `isStaleSession` in `:core` (30 min, checked in `MainActivity.onStart`) clears the
   pin, the query, both lookup stacks and the overlay, and lands on Study. Intent handlers are
   declared *after* that reset effect in `AppRoot` so an arriving intent has the last word.
-- **A component card opens the component's *character* page, not its component page.** That's
-  what tapping 青 nearly always means. The component page (what else shares this part) is
-  reached from the plain footer links at the foot of an entry in the lookup sheet. Only a
-  combining form with no character of its own (氵) opens the component page directly.
-  `ComponentBreakdown.glyphId` is what makes the distinction.
+- **A component card opens the family of the job its part does in that character** — the sound
+  part of 请 opens 青's sound series, the meaning part opens 讠's meaning family
+  (`familyRoleOf` in `:core`; `LookupEntry.role`/`fromGlyphId` carry it). The component's own
+  character is the "Open character page" link at the head of that page; a part with no sound or
+  meaning role opens its character directly. Don't route the card back to the character page.
+- **The family page (`ComponentFamily.kt`) is a reading surface and ignores study state** — no
+  known-first ordering, no archive or deck markers. Members are HSK characters ordered by the
+  corpus rank of their commonest word, nothing else. Sound groups are toneless syllables;
+  meaning groups are makemeahanzi's per-character hints, which ship as `role_hint` claims
+  (`radicals.role_hint_rows`) because the Dong override replaces the claim that used to carry
+  them. A part with one meaning is one plain list — don't invent sub-uses. `HINT_SYNONYMS` is
+  for outright synonyms only (person/people), not real differences (tree/wood, heart/mind).
 - **A `DeckSource` is serialised with `android.net.Uri.encode`, not `URLEncoder`**
   (URLEncoder corrupts `+` in glyph ids like `U+597D`). See `enc`/`dec` in `AppRoot.kt`.
 - **The Dictionary tab's inbox feed keeps its scroll position in its own anchor**, not in `LazyListState`'s

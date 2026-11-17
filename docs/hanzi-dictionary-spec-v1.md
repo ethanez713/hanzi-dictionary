@@ -137,7 +137,7 @@ Known-item imports: HSK level picker and paste. Anki `.apkg` / Pleco export are 
 
 Tapping a component chip, word row, search result, or photo tile **pushes a level onto that tab's lookup sheet**. The sheet carries its own trail (好 › 女 › 妈) and, when a practice card is suspended under it, a chip back to that card. System back pops a trail level, then dismisses the sheet — it never leaves the tab. Settings, Archive, and the list editor are **overlays** above the tabs, not a fourth tab.
 
-A component chip opens the component's *character* entry, not its component page. The component page (what else shares this part) is reached from the plain footer links at the foot of an entry. Only a combining form with no character of its own (氵) opens the component page directly.
+A component chip opens the *family of the job the part is doing in that character*: the sound part of 请 opens 青's sound series, the meaning part opens 讠's meaning family. The component entry keeps an "Open character page" link at its head for when the character itself was wanted. A part with no sound or meaning role (好's 女 and 子) opens its own character entry instead.
 
 **Capture:** photo-library scanning — ML Kit Text Recognition v2 Chinese (unbundled, on-device) OCRs recent camera-roll photos (watermark-deduped, `READ_MEDIA_IMAGES` / `READ_EXTERNAL_STORAGE`) and surfaces found characters in the Dictionary tab's feed. Swipe right files a find into the active list; swipe left dismisses it. Plus: SEND-intent share target (one hanzi opens its entry, more prefills search), paste-on-open, system handwriting IME, component-compose search off the IDS index as a mode chip.
 
@@ -145,14 +145,17 @@ A component chip opens the component's *character* entry, not its component page
 
 **Character entry** (lookup sheet):
 1. Header — glyph, all pinyin readings (frequency order; extras as "also …"), TTS on the character, CC-CEDICT senses leading with Unihan `kDefinition` as fallback, freq/HSK/stroke line, **Add to list** + Archive.
-2. Breakdown chips — components color-coded by function, spoken names or readings, role gloss on meaning parts; tap → that component's character entry.
+2. Breakdown chips — components color-coded by function, spoken names or readings, role gloss on meaning parts; tap → that component's sound series or meaning family, by its role here.
 3. Formation / etymology claims, first sentence then expandable. A Wiktionary etymology that is a "Simplified from X" note is stored with X's etymology after it (or another traditional form's, if X has none).
 4. In words — containing words, corpus-frequency first; tap → word entry. Heteronyms keep a row per reading.
-5. Footer links — phonetic series of the sound part, and "X as a component".
+5. Footer link — "X as a component": what this character is itself a part of.
 
 **Word entry:** simp (and trad when it differs), pinyin, TTS, senses, Add to list / Archive, one chip per constituent character, Tatoeba/TED example sentences with in-sheet credit.
 
-**Component entry:** names + own readings, phonetic members ("sound series"), semantic members ("shares this meaning part"), link through to the component's own character entry when it has one. Positional variants (水/氵/氺) resolve in compose-search and on the breakdown.
+**Component entry (family page):** names + own readings, link through to the component's own character entry when it has one, then its two families. The side the reader tapped through for leads, expanded; the other waits collapsed under its heading.
+- *Sound series* — the HSK characters it lends its sound to, grouped by toneless syllable (青: qing, jing, cai), nearest to the component's own reading first, with one-off sounds gathered under "other sounds" and a one-line range above ("qing 5 · jing 3 · other 2").
+- *Meaning family* — the HSK characters it lends its meaning to, across every shape of the radical (水/氵/氺 are one family), grouped by makemeahanzi's per-character role hint when the part has more than one use (月: moon, flesh) and a single plain list when it has one.
+- Each row is the character, its reading, a short gloss and the commonest multi-character word it appears in (请 qǐng · to ask · 请问); the row opens the character, the word opens the word. Order is corpus frequency of the character's commonest word, and nothing else — the page ignores study state. A group shows its 8 commonest with "show all" behind a tap, and the character the reader came from is always visible and marked.
 
 **Practice card:** structure, not headings. Front is the glyph; revealed side is bands split by hairlines — answer, components, words, sentences. The glyph sits in a fixed zone and must not move when the card flips: revealed content only ever grows *below* it. That side scrolls and is meant to fill.
 

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -54,6 +53,15 @@ import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
 import com.hanzidictionary.app.widget.PracticeWidgetUpdater
 import com.hanzidictionary.core.CharacterPage
+import com.hanzidictionary.core.ComponentFamily
+import com.hanzidictionary.core.ComponentRole
+import com.hanzidictionary.core.FAMILY_GROUP_SHOWN
+import com.hanzidictionary.core.FamilyGroup
+import com.hanzidictionary.core.FamilyMember
+import com.hanzidictionary.core.SoundRelation
+import com.hanzidictionary.core.familyRoleOf
+import com.hanzidictionary.core.soundRange
+import com.hanzidictionary.core.visibleMembers
 import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.SentenceExample
 import com.hanzidictionary.core.StudyItem
@@ -67,12 +75,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** One level in the lookup sheet's trail. Exactly one of glyphId / wordId / componentId is
- * non-null. [componentId] is the bare component character (青, 女), not a "U+" id. */
+ * non-null. [componentId] is the bare component character (青, 女), not a "U+" id.
+ *
+ * A component level can say which of the part's jobs it was opened for ([role]) and from
+ * which character ([fromGlyphId]): the family page leads with that job and marks that
+ * character in it. Both are null for a component reached with no job in mind. */
 data class LookupEntry(
     val glyphId: String? = null,
     val wordId: String? = null,
     val componentId: String? = null,
     val displayText: String = glyphId ?: wordId ?: componentId ?: "…",
+    val role: ComponentRole? = null,
+    val fromGlyphId: String? = null,
 )
 
 /** Sheet state held per-tab: the trail plus the suspended card's display text.
@@ -329,6 +343,8 @@ private fun SheetContent(
     } else if (entry.componentId != null) {
         ComponentSheetContent(
             componentId = entry.componentId,
+            role = entry.role,
+            fromGlyphId = entry.fromGlyphId,
             repository = repository,
             tts = tts,
             eth = eth,
@@ -487,10 +503,20 @@ private fun CharacterSheetContent(
                             .background(eth.paper1)
                             .border(1.dp, eth.borderSubtle, RoundedCornerShape(5.dp))
                             .clickable {
+                                // A card opens the family of the job its part does here (the
+                                // sound series, or the meaning family). A part with no such job
+                                // opens its own character, or its page if it has no character.
                                 val gid = c.glyphId
-                                if (gid != null) {
-                                    val displayChar = c.displayChar ?: gid
-                                    onLookup(LookupEntry(glyphId = gid, displayText = displayChar))
+                                val role = familyRoleOf(c)
+                                if (role != null) {
+                                    onLookup(LookupEntry(
+                                        componentId = c.componentId, displayText = c.displayChar ?: c.componentId,
+                                        role = role, fromGlyphId = glyphId,
+                                    ))
+                                } else if (gid != null) {
+                                    onLookup(LookupEntry(glyphId = gid, displayText = c.displayChar ?: gid))
+                                } else if (c.navigable) {
+                                    onLookup(LookupEntry(componentId = c.componentId, displayText = c.displayChar ?: c.componentId))
                                 }
                             }
                             .padding(horizontal = 6.dp, vertical = 4.dp),
@@ -588,29 +614,16 @@ private fun CharacterSheetContent(
         }
         SentenceList(sentences, tts, eth)
 
-        // Footer links: component / phonetic-series pages (spec: "plain mono 11px links").
-        // Each carries the component id it opens (the bare char, not a "U+" id).
-        val componentLinks = buildList {
-            // The sound side this character belongs to, if it has a phonetic part.
-            p.breakdown.firstOrNull { isSoundBearing(it.function) }
-                ?.displayChar?.let { phon -> add("Sound series $phon" to phon) }
-            // What else this character is a part of.
-            add("${p.char} as a component" to p.char)
-        }
-        if (componentLinks.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                for ((label, componentId) in componentLinks) {
-                    Text(
-                        label,
-                        fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink,
-                        textDecoration = TextDecoration.Underline,
-                        modifier = Modifier.clickable {
-                            onLookup(LookupEntry(componentId = componentId, displayText = componentId))
-                        },
-                    )
-                }
-            }
-        }
+        // Footer link (spec: "plain mono 11px links"): what this character is itself a part
+        // of. The families its own parts belong to are a tap on the cards above.
+        Text(
+            "${p.char} as a component",
+            fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink,
+            textDecoration = TextDecoration.Underline,
+            modifier = Modifier.clickable {
+                onLookup(LookupEntry(componentId = p.char, displayText = p.char))
+            },
+        )
 
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
@@ -725,10 +738,18 @@ private fun SentenceList(sentences: List<SentenceExample>, tts: MandarinTts, eth
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * The component page: a part's family, sorted into the jobs it does.
+ *
+ * [role] is the job the reader tapped through for; that side leads and opens expanded, and
+ * the other waits collapsed under its heading. With no role (the "as a component" footer
+ * link) both are open, sound first.
+ */
 @Composable
 private fun ComponentSheetContent(
     componentId: String,
+    role: ComponentRole?,
+    fromGlyphId: String?,
     repository: HanziRepository,
     tts: MandarinTts,
     eth: EthanColors,
@@ -736,6 +757,9 @@ private fun ComponentSheetContent(
 ) {
     val page by produceState<com.hanzidictionary.core.ComponentPage?>(null, componentId) {
         value = withContext(Dispatchers.IO) { repository.componentPage(componentId) }
+    }
+    val family by produceState<ComponentFamily?>(null, componentId, fromGlyphId) {
+        value = withContext(Dispatchers.IO) { repository.componentFamily(componentId, fromGlyphId) }
     }
     val p = page ?: return
 
@@ -747,21 +771,30 @@ private fun ComponentSheetContent(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(p.char ?: componentId, fontSize = 60.sp, fontFamily = NotoCjk, color = eth.ink900)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val reading = p.ownReadings.firstOrNull { it.system == "pinyin" }?.value
-                if (reading != null) {
+                // A combining form is named, not pronounced (氵 = 三点水), exactly as on its card.
+                val label = componentLabel(p.char, p.ownReadings.firstOrNull { it.system == "pinyin" }?.value)
+                if (label != null) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(reading, fontFamily = PlexMono, fontSize = 19.sp, color = eth.ink900)
-                        if (tts.available && p.char != null) {
+                        Text(label.text, fontFamily = PlexMono, fontSize = 19.sp, color = eth.ink900)
+                        val char = p.char
+                        if (label.isReading && tts.available && char != null) {
                             Text("▶", fontSize = 11.sp, color = eth.textFaint,
-                                modifier = Modifier.clickable { tts.speak(p.char!!) })
+                                modifier = Modifier.clickable { tts.speak(char) })
                         }
                     }
                 }
                 p.definition?.let {
                     Text(it, fontSize = 14.sp, lineHeight = 19.sp, color = eth.ink700, fontFamily = InstrumentSans)
+                }
+                val otherForms = family?.forms.orEmpty().filter { it != componentId }
+                if (otherForms.isNotEmpty()) {
+                    Text(
+                        "also written ${otherForms.joinToString(" ")}",
+                        fontFamily = PlexMono, fontSize = 11.sp, color = eth.textFaint,
+                    )
                 }
                 if (p.glyphId != null) {
                     Text(
@@ -776,34 +809,179 @@ private fun ComponentSheetContent(
             }
         }
 
-        ComponentMemberSection("SOUND SERIES", p.phoneticMembers, eth, onLookup)
-        ComponentMemberSection("SHARES THIS MEANING PART", p.semanticMembers, eth, onLookup)
+        val f = family
+        if (f == null) {
+            Text("Loading…", color = eth.textFaint, fontFamily = InstrumentSans)
+        } else {
+            val sides = if (role == ComponentRole.MEANING) listOf(ComponentRole.MEANING, ComponentRole.SOUND)
+            else listOf(ComponentRole.SOUND, ComponentRole.MEANING)
+            for (side in sides) {
+                FamilySection(
+                    side = side,
+                    family = f,
+                    componentChar = p.char ?: componentId,
+                    startsOpen = role == null || role == side,
+                    fromGlyphId = fromGlyphId,
+                    eth = eth,
+                    onLookup = onLookup,
+                )
+            }
+            if (f.sound.isEmpty() && f.meaning.isEmpty()) {
+                Text(
+                    "No common characters are built on this part.",
+                    fontSize = 12.5.sp, color = eth.textMuted, fontFamily = InstrumentSans,
+                )
+            }
+        }
 
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** One side of a family — the sound series or the meaning family — under its eyebrow. */
 @Composable
-private fun ComponentMemberSection(
-    title: String,
-    members: List<com.hanzidictionary.core.SeriesMember>,
+private fun FamilySection(
+    side: ComponentRole,
+    family: ComponentFamily,
+    componentChar: String,
+    startsOpen: Boolean,
+    fromGlyphId: String?,
     eth: EthanColors,
     onLookup: (LookupEntry) -> Unit,
 ) {
-    if (members.isEmpty()) return
-    SheetEyebrow("$title · ${members.size}")
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (m in members) {
-            Box(
-                Modifier.clip(RoundedCornerShape(5.dp))
-                    .background(eth.paper1)
-                    .border(1.dp, eth.borderSubtle, RoundedCornerShape(5.dp))
-                    .clickable { onLookup(LookupEntry(glyphId = m.glyphId, displayText = m.char)) }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            ) {
-                Text(m.char, fontSize = 24.sp, fontFamily = NotoCjk, color = eth.ink900)
+    val sound = side == ComponentRole.SOUND
+    val groups = if (sound) family.sound else family.meaning
+    if (groups.isEmpty()) return
+    val total = groups.sumOf { it.members.size }
+    var open by remember(componentChar, side) { mutableStateOf(startsOpen) }
+    val tint = if (sound) eth.orange600 else eth.jade600
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.fillMaxWidth().clickable { open = !open }) {
+            SheetEyebrow(
+                (if (sound) "SOUND SERIES" else "MEANING FAMILY") + " · $total" + if (open) "" else "  ▼",
+            )
+        }
+        if (!open) return@Column
+
+        // The whole side in a line: the sounds the part stands for, or the one thing it means.
+        val single = groups.singleOrNull()
+        val summary = when {
+            sound -> soundRange(groups).takeIf { groups.size > 1 }
+            single != null -> (single.label ?: family.roleGloss)?.let { "as “$it”" }
+            else -> null
+        }
+        summary?.let {
+            Text(it, fontFamily = PlexMono, fontSize = 11.sp, color = eth.textMuted)
+        }
+
+        for (group in groups) {
+            // A side with one unnamed group is a plain list: a heading would only repeat the line above.
+            val heading = when {
+                group.leftovers -> if (sound) "other sounds" else "other uses"
+                sound || groups.size > 1 -> group.label
+                else -> null
             }
+            FamilyGroupBlock(
+                group = group,
+                heading = heading,
+                note = if (sound) relationNote(group.relation, componentChar) else null,
+                tint = tint,
+                // In the leftovers a row has to say for itself what it is; a sound row's pinyin
+                // already does, a meaning row needs its hint spelled out.
+                showHints = !sound && group.leftovers,
+                fromGlyphId = fromGlyphId,
+                eth = eth,
+                onLookup = onLookup,
+            )
+        }
+    }
+}
+
+private fun relationNote(relation: SoundRelation?, componentChar: String): String? = when (relation) {
+    SoundRelation.SAME -> "same as $componentChar"
+    SoundRelation.SAME_INITIAL -> "same start, new ending"
+    SoundRelation.RHYME -> "rhymes with $componentChar"
+    SoundRelation.DIFFERENT -> "sound has drifted"
+    null -> null
+}
+
+/** One use of the part — a syllable or a meaning — and its commonest characters. */
+@Composable
+private fun FamilyGroupBlock(
+    group: FamilyGroup,
+    heading: String?,
+    note: String?,
+    tint: Color,
+    showHints: Boolean,
+    fromGlyphId: String?,
+    eth: EthanColors,
+    onLookup: (LookupEntry) -> Unit,
+) {
+    var showAll by remember(group.label, group.members.size) { mutableStateOf(false) }
+    val rows = if (showAll) group.members else visibleMembers(group, FAMILY_GROUP_SHOWN, fromGlyphId)
+
+    Column {
+        if (heading != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text(heading, fontFamily = PlexMono, fontSize = 14.sp, color = tint, fontWeight = FontWeight.Medium)
+                note?.let { Text(it, fontFamily = InstrumentSans, fontSize = 11.5.sp, color = eth.textMuted) }
+                Spacer(Modifier.weight(1f))
+                Text("${group.members.size}", fontFamily = PlexMono, fontSize = 10.5.sp, color = eth.textFaint)
+            }
+        }
+        for (m in rows) {
+            FamilyMemberRow(m, isOrigin = m.glyphId == fromGlyphId, showHint = showHints, eth = eth, onLookup = onLookup)
+            HorizontalDivider(color = eth.inkRule)
+        }
+        if (group.members.size > rows.size) {
+            Text(
+                "show all ${group.members.size}",
+                fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable { showAll = true }.padding(vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/** 请 qǐng · to ask · 请问 — the character, and the word it is best known from. The row opens
+ * the character; the word on its right opens the word. */
+@Composable
+private fun FamilyMemberRow(
+    m: FamilyMember,
+    isOrigin: Boolean,
+    showHint: Boolean,
+    eth: EthanColors,
+    onLookup: (LookupEntry) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            // The character the reader came from, so they can see where it sits.
+            .background(if (isOrigin) eth.paper1 else Color.Transparent)
+            .clickable { onLookup(LookupEntry(glyphId = m.glyphId, displayText = m.char)) }
+            .padding(vertical = 5.dp, horizontal = if (isOrigin) 4.dp else 0.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(m.char, fontSize = 22.sp, color = eth.ink900, fontFamily = NotoCjk)
+        m.pinyin?.let { Text(it, fontFamily = PlexMono, fontSize = 12.sp, color = eth.ink700) }
+        Text(
+            listOfNotNull(m.hint?.takeIf { showHint }?.let { "[$it]" }, m.gloss).joinToString(" "),
+            Modifier.weight(1f), fontSize = 12.sp, color = eth.textMuted,
+            fontFamily = InstrumentSans, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        m.word?.let { w ->
+            Text(
+                w.simp, fontSize = 16.sp, color = eth.ink700, fontFamily = NotoCjk,
+                modifier = Modifier
+                    .clickable { onLookup(LookupEntry(wordId = w.id, displayText = w.simp)) }
+                    .padding(start = 8.dp),
+            )
         }
     }
 }

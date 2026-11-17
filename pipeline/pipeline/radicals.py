@@ -162,3 +162,45 @@ def vote_role_glosses(makemeahanzi_by_cp: dict[int, dict]) -> dict[str, tuple[st
     for component, gloss in CURATED_ROLE_GLOSSES.items():
         out[component] = (gloss, "curated", 0, 1.0)
     return out
+
+
+def role_hint_rows(
+    makemeahanzi_by_cp: dict[int, dict],
+    component_use_rows: list[tuple],
+) -> list[tuple[str, str, str]]:
+    """(glyph_id, component_id, hint): what the meaning part lends *this* character.
+
+    component_gloss keeps only each component's winning hint, which is right for a chip but
+    throws away the thing a meaning-family page is built from: 月 is "moon" in 期 and "flesh"
+    in 脑, and only the per-character hint says which. The Dong override also replaces the
+    makemeahanzi component_function claim (the only other place a hint lives) on exactly the
+    common characters, so the hints are re-attached here, keyed to the component id the
+    final component_use rows actually carry.
+
+    makemeahanzi and the pack don't always spell the part the same way (⺼ vs 月, 氵 vs 水),
+    so a hint lands on: the meaning-bearing component it names; else one in the same
+    radical family; else the character's only meaning-bearing component, provided the part
+    makemeahanzi names isn't some *other* component of the character (which would mean the
+    two sources disagree about which part carries the meaning)."""
+    parts_of: dict[str, list[tuple[str, str]]] = {}
+    for row in component_use_rows:
+        parts_of.setdefault(row[0], []).append((row[1], row[3]))
+
+    out: list[tuple[str, str, str]] = []
+    for cp, entry in makemeahanzi_by_cp.items():
+        etymology = entry.get("etymology") or {}
+        named = etymology.get("semantic")
+        hint = _role_hint(etymology)
+        if not named or not hint:
+            continue
+        gid = f"U+{cp:04X}"
+        parts = parts_of.get(gid, [])
+        meaning = [c for c, fn in parts if fn in ("semantic", "both")]
+        family = RADICAL_PARENT.get(named, named)
+        target = next((c for c in meaning if c == named), None) \
+            or next((c for c in meaning if RADICAL_PARENT.get(c, c) == family), None)
+        if target is None and len(meaning) == 1 and all(c != named for c, _ in parts):
+            target = meaning[0]
+        if target is not None:
+            out.append((gid, target, hint))
+    return out

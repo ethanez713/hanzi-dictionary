@@ -60,7 +60,7 @@ CREATE INDEX idx_component_use_component ON component_use(component_id);
 
 CREATE TABLE claim (
     subject_id  TEXT NOT NULL,     -- usually a glyph.id
-    predicate   TEXT NOT NULL,     -- component_function|original_meaning|formation_type|etymology_text|simplification_note
+    predicate   TEXT NOT NULL,     -- component_function|role_hint|original_meaning|formation_type|etymology_text|simplification_note
     value       TEXT NOT NULL,     -- JSON
     source_id   TEXT NOT NULL REFERENCES source(id),
     source_ref  TEXT,
