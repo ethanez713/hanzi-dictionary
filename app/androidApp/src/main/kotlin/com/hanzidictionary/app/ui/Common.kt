@@ -82,9 +82,14 @@ fun AppSnackbarHost(state: SnackbarHostState) {
  * action is only ever the undo for it. Undo has a deadline in any case — a few seconds after
  * a swipe you have moved on, and the bar is just occluding the next thing you're triaging.
  */
-suspend fun SnackbarHostState.snack(message: String, action: String? = null): Boolean =
-    showSnackbar(message, actionLabel = action, duration = SnackbarDuration.Short) ==
+suspend fun SnackbarHostState.snack(message: String, action: String? = null): Boolean {
+    // The newest message replaces the one showing rather than queueing behind it: a run of
+    // swipes otherwise left the bar naming a card several swipes back, and the Undo for the
+    // card just swiped seconds away.
+    currentSnackbarData?.dismiss()
+    return showSnackbar(message, actionLabel = action, duration = SnackbarDuration.Short) ==
         SnackbarResult.ActionPerformed
+}
 
 /** Corpus-frequency rank at/under which an item earns a "Common" badge on its page (rank
  * 1 = most frequent). Roughly the everyday-vocabulary band a beginner should prioritize. */

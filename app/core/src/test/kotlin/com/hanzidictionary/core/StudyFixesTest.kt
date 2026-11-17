@@ -115,4 +115,20 @@ class StudyFixesTest {
         study.addToList(study.createList("Saved", now), hao, now)
         assertEquals(listOf(seen), user.practiceQueue())
     }
+
+    @Test
+    fun aBulkArchiveUndoesOnlyWhatItChanged() {
+        val ni = StudyItem.character("U+4F60")
+        val word = StudyItem.word("w000123")
+        user.setKnown(ni.itemId, true)
+        val graded = study.grade(hao, Rating.GOOD, now = now)
+
+        val undos = study.archiveAll(listOf(hao, ni, word), now)
+        assertEquals(listOf(hao, word), undos.map { it.item }, "ni was archived already")
+        assertEquals(setOf(hao, ni, word), user.knownItems().toSet(), "words come back as words")
+
+        study.undoArchives(undos)
+        assertEquals(listOf(ni), user.knownItems())
+        assertEquals(graded, study.cardState(hao.itemId))
+    }
 }

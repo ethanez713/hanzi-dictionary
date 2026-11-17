@@ -351,8 +351,11 @@ fun AppRoot(
             ArchiveScreen(
                 userRepository = userRepository,
                 hskLevels = hskLevels,
-                onOpenCharacter = { gid ->
-                    dictLookupStack.push(LookupEntry(glyphId = gid))
+                onOpenItem = { item, text ->
+                    dictLookupStack.push(
+                        if (item.isWord) LookupEntry(wordId = item.itemId, displayText = text)
+                        else LookupEntry(glyphId = item.itemId, displayText = text),
+                    )
                     overlay = null
                     selectedTab = Tab.DICTIONARY
                 },

@@ -57,24 +57,49 @@ object PackManager {
     private fun ensureInstalled(context: Context) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val installed = prefs.getInt(KEY_INSTALLED_VERSION, -1)
-        val corePresent = context.getDatabasePath(CORE_DB).exists()
-        if (installed == BUNDLED_PACK_VERSION && corePresent) return
+        // Both files, at their full size: a pref saying "installed" beside a truncated or
+        // empty file (power lost just after a copy) opened as an empty dictionary for good.
+        if (installed == BUNDLED_PACK_VERSION && isIntact(context, CORE_DB) && isIntact(context, IDS_DB)) return
 
         copyAsset(context, CORE_DB)
         copyAsset(context, IDS_DB)
-        prefs.edit().putInt(KEY_INSTALLED_VERSION, BUNDLED_PACK_VERSION).apply()
+        prefs.edit().putInt(KEY_INSTALLED_VERSION, BUNDLED_PACK_VERSION).commit()
+    }
+
+    private fun isIntact(context: Context, name: String): Boolean {
+        val file = context.getDatabasePath(name)
+        if (!file.exists()) return false
+        // The assets are stored uncompressed, so their length is known without reading them.
+        // If that ever stops being true, fall back to "present and non-empty".
+        val expected = try {
+            context.assets.openFd(name).use { it.length }
+        } catch (e: Exception) {
+            -1L
+        }
+        return if (expected >= 0) file.length() == expected else file.length() > 0
     }
 
     private fun copyAsset(context: Context, name: String) {
         val dest = context.getDatabasePath(name)
         dest.parentFile?.mkdirs()
+        // Copy beside the target, flush it to disk, then rename over it: the installed pack
+        // is only ever replaced whole, and a missing asset can't destroy the working copy
+        // (the old code deleted it before finding out the asset wasn't there).
+        val tmp = File(dest.path + ".tmp")
+        context.assets.open(name).use { input ->
+            java.io.FileOutputStream(tmp).use { output ->
+                input.copyTo(output)
+                output.fd.sync()
+            }
+        }
         // A stale WAL/journal sidecar left by a previous install would be replayed
         // against the freshly copied file and read as corruption — drop them first.
-        for (suffix in listOf("", "-wal", "-shm", "-journal")) {
+        for (suffix in listOf("-wal", "-shm", "-journal")) {
             File(dest.path + suffix).delete()
         }
-        context.assets.open(name).use { input ->
-            dest.outputStream().use { output -> input.copyTo(output) }
+        if (!tmp.renameTo(dest)) {
+            dest.delete()
+            check(tmp.renameTo(dest)) { "could not install $name" }
         }
     }
 }

@@ -42,9 +42,16 @@ class MainActivity : ComponentActivity() {
         // read as one tall band of chrome.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.navigationBarColor = Color.TRANSPARENT
-        sharedText.value = extractSharedText(intent)
-        widgetOpensSheet.value = intent?.getBooleanExtra(PracticeWidgetProvider.EXTRA_PRACTICE_SHEET, true) ?: true
-        widgetItem.value = extractWidgetItem(intent)
+        // Only a genuinely new launch carries an errand. getIntent() stays the intent that first
+        // created the task, so reading it again on a rotation, a dark-mode switch or a restore
+        // after process death replayed the old widget card or share over whatever the user
+        // had moved on to. (onNewIntent covers every later arrival.)
+        val fromHistory = (intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
+        if (savedInstanceState == null && !fromHistory) {
+            sharedText.value = extractSharedText(intent)
+            widgetOpensSheet.value = intent?.getBooleanExtra(PracticeWidgetProvider.EXTRA_PRACTICE_SHEET, true) ?: true
+            widgetItem.value = extractWidgetItem(intent)
+        }
         val app = application as HanziApp
         setContent {
             // Reading the mode (Compose state) here makes a Settings change flip the theme

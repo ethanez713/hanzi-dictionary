@@ -208,14 +208,10 @@ fun PracticeScreen(
         val entry = state.current ?: return
         val label = summaries[entry.item.itemId]?.text ?: entry.item.itemId
         scope.launch {
-            withContext(Dispatchers.IO) {
-                app.userRepository.setKnown(entry.item.itemId, true, entry.item.kind)
-            }
+            val undo = withContext(Dispatchers.IO) { app.studyRepository.archive(entry.item) }
             PracticeWidgetUpdater.refresh(context)
             if (snackbar.snack("Archived $label — out of practice everywhere", action = "Undo")) {
-                withContext(Dispatchers.IO) {
-                    app.userRepository.setKnown(entry.item.itemId, false, entry.item.kind)
-                }
+                withContext(Dispatchers.IO) { app.studyRepository.undoArchive(undo) }
                 PracticeWidgetUpdater.refresh(context)
             }
         }

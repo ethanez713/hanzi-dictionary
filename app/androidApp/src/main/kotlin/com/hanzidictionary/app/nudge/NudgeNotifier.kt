@@ -251,9 +251,10 @@ internal object NudgeNotifier {
             action = ACTION_GRADE
             putExtra(EXTRA_RATING, rating.name)
             putExtra(EXTRA_ITEM, item.itemId)
-            // Extras don't distinguish PendingIntents; the data URI does — one per verb so the
-            // two gutters don't collapse onto a single intent (same trick as the widget).
-            data = Uri.parse("hanzi://nudge/grade/${rating.name}")
+            // Extras don't distinguish PendingIntents; the data URI does — one per verb *and
+            // card*. With one URI per verb, FLAG_UPDATE_CURRENT rewrote the shared intent's item
+            // to the next card before SystemUI redrew, and a quick second tap passed the check.
+            data = Uri.parse("hanzi://nudge/grade/${rating.name}/${Uri.encode(item.itemId)}")
         }
         return PendingIntent.getBroadcast(
             context,

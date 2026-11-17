@@ -29,6 +29,10 @@ class UserRepository(driver: SqlDriver) {
 
     fun knownIds(): Set<String> = q.allKnownIds().executeAsList().toSet()
 
+    /** Archived items with their kind — characters *and* words. Decode ids through this, never
+     * by assuming every id is a "U+" codepoint: an archived word's id is "w000123". */
+    fun knownItems(): List<StudyItem> = q.allKnown().executeAsList().map { StudyItem(it.item_id, it.kind) }
+
     fun knownCount(): Long = q.knownCount().executeAsOne()
 
     /** Bulk import (e.g. an HSK level or a pasted list). One transaction for speed. */

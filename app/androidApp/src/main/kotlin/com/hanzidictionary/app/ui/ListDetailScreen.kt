@@ -128,7 +128,10 @@ fun ListDetailScreen(
     var editing by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
 
-    // Back leaves edit mode first, rather than dropping the whole screen with a selection.
+    // Back leaves edit mode first, rather than dropping the whole screen with a selection;
+    // outside edit mode it closes the list. Without the second handler Back fell through to
+    // the activity and left the app.
+    BackHandler(enabled = !editing, onBack = onBack)
     BackHandler(enabled = editing) { editing = false; selected = emptySet() }
 
     LaunchedEffect(listId, refresh) {
@@ -161,16 +164,13 @@ fun ListDetailScreen(
     fun archive(items: List<ItemSummary>) {
         if (items.isEmpty()) return
         scope.launch {
-            withContext(Dispatchers.IO) {
-                for (i in items) app.userRepository.setKnown(i.item.itemId, true, i.item.kind)
-            }
+            // Each archive keeps what it discarded, so Undo puts every schedule back.
+            val undos = withContext(Dispatchers.IO) { items.map { app.studyRepository.archive(it.item) } }
             selected = emptySet()
             refresh++
             PracticeWidgetUpdater.refresh(context)
             if (snackbar.snack(describe("Archived", items), action = "Undo")) {
-                withContext(Dispatchers.IO) {
-                    for (i in items) app.userRepository.setKnown(i.item.itemId, false, i.item.kind)
-                }
+                withContext(Dispatchers.IO) { undos.forEach { app.studyRepository.undoArchive(it) } }
                 refresh++
                 PracticeWidgetUpdater.refresh(context)
             }

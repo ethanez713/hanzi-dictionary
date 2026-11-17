@@ -12,16 +12,28 @@ import com.hanzidictionary.core.PhotoRef
 /**
  * [ImageTextRecognizer] using ML Kit's on-device Chinese text recognizer. recognize() is
  * blocking (via Tasks.await) so it fits the synchronous core interface; PhotoScanner only
- * ever calls it from a background dispatcher. A photo that can't be read yields "" rather
- * than throwing, so one bad image doesn't abort a scan.
+ * ever calls it from a background dispatcher.
+ *
+ * Two kinds of failure, kept apart: a photo that can't be opened or decoded yields "" (move
+ * past it — retrying won't help), while the recognizer itself failing — the unbundled model
+ * still downloading on a fresh install is the usual case — yields null, so the scanner stops
+ * and comes back to this photo instead of writing the whole backlog off as text-free.
  */
 class MlKitTextRecognizer(private val context: Context) : ImageTextRecognizer {
     private val client = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
 
-    override fun recognize(photo: PhotoRef): String = try {
-        val image = InputImage.fromFilePath(context, Uri.parse(photo.id))
-        Tasks.await(client.process(image)).text
-    } catch (e: Exception) {
-        ""
+    override fun recognize(photo: PhotoRef): String? {
+        val image = try {
+            InputImage.fromFilePath(context, Uri.parse(photo.id))
+        } catch (e: Exception) {
+            return ""  // deleted, unreadable, or not an image
+        } catch (e: OutOfMemoryError) {
+            return ""  // too big to decode here; it won't get smaller on a retry
+        }
+        return try {
+            Tasks.await(client.process(image)).text
+        } catch (e: Exception) {
+            null
+        }
     }
 }

@@ -33,6 +33,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -73,6 +76,13 @@ import com.hanzidictionary.core.otherScript
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** The pages the sheet loaded most recently, so going back a level draws at once (and its
+ * saved scroll position lands on content rather than on an empty page that clamps it to 0).
+ * Read-only pack data, so nothing in it can go stale. */
+private val pageCache = object : LinkedHashMap<String, Any?>(16, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Any?>?) = size > 12
+}
 
 /** One level in the lookup sheet's trail. Exactly one of glyphId / wordId / componentId is
  * non-null. [componentId] is the bare component character (青, 女), not a "U+" id.
@@ -128,6 +138,7 @@ fun LookupSheet(
 
     val eth = EthanTheme.colors
     val snackbar = remember { SnackbarHostState() }
+    val pageStates = rememberSaveableStateHolder()
 
     // Back: pop one level, or dismiss if at depth 1
     BackHandler {
@@ -157,7 +168,16 @@ fun LookupSheet(
             HorizontalDivider(color = eth.inkRule)
 
             val entry = stack.trail.lastOrNull() ?: return@Column
-            SheetContent(entry, stack, repository, userRepository, tts, eth, snackbar)
+            // Each trail level gets its own state, keyed by its place in the trail. Without
+            // the key, two levels of the same kind (好 › 女, 青 › 氵) shared one composable
+            // and the new page showed the old one's sentences, scroll and expanded groups;
+            // with the saveable holder, going back a level returns to where you were on it.
+            val depth = stack.trail.lastIndex
+            key(depth, entry) {
+                pageStates.SaveableStateProvider("$depth:$entry") {
+                    SheetContent(entry, stack, repository, userRepository, tts, eth, snackbar)
+                }
+            }
         }
 
         // Add-to-list / archive confirmations float above the sheet's own scroll.
@@ -177,28 +197,47 @@ private fun rememberSheetActions(snackbar: SnackbarHostState): SheetActions {
         SheetActions(
             addToList = { item, label ->
                 scope.launch {
-                    val listName = withContext(Dispatchers.IO) {
+                    val (list, added) = withContext(Dispatchers.IO) {
                         val list = app.studyRepository.ensureActiveList()
-                        app.studyRepository.addToList(list.id, item)
-                        list.name
+                        list to app.studyRepository.addToListIfAbsent(list.id, item)
+                    }
+                    if (!added) {
+                        // Nothing changed, so there is nothing to undo — and an Undo here used to
+                        // remove the membership the item already had.
+                        snackbar.snack("$label is already in \"${list.name}\"")
+                        return@launch
                     }
                     PracticeWidgetUpdater.refresh(context)
-                    if (snackbar.snack("Added $label to \"$listName\"", action = "Undo")) {
-                        withContext(Dispatchers.IO) {
-                            app.studyRepository.activeListId()?.let {
-                                app.studyRepository.removeFromList(it, item.itemId)
-                            }
-                        }
+                    if (snackbar.snack("Added $label to \"${list.name}\"", action = "Undo")) {
+                        // The list it went into, even if the active list has changed since.
+                        withContext(Dispatchers.IO) { app.studyRepository.removeFromList(list.id, item.itemId) }
                         PracticeWidgetUpdater.refresh(context)
                     }
                 }
             },
-            archive = { item, label ->
+            archive = { item, label, onArchived ->
                 scope.launch {
-                    withContext(Dispatchers.IO) { app.userRepository.setKnown(item.itemId, true, item.kind) }
+                    val undo = withContext(Dispatchers.IO) { app.studyRepository.archive(item) }
+                    onArchived(true)
+                    if (undo.wasKnown) return@launch
                     PracticeWidgetUpdater.refresh(context)
                     if (snackbar.snack("Archived $label", action = "Undo")) {
-                        withContext(Dispatchers.IO) { app.userRepository.setKnown(item.itemId, false, item.kind) }
+                        withContext(Dispatchers.IO) { app.studyRepository.undoArchive(undo) }
+                        onArchived(false)
+                        PracticeWidgetUpdater.refresh(context)
+                    }
+                }
+            },
+            unarchive = { item, label, onArchived ->
+                scope.launch {
+                    // Un-archiving starts the item fresh (UserRepository.setKnown): the schedule
+                    // went when it was archived. Undo re-archives it, which loses nothing.
+                    withContext(Dispatchers.IO) { app.userRepository.setKnown(item.itemId, false, item.kind) }
+                    onArchived(false)
+                    PracticeWidgetUpdater.refresh(context)
+                    if (snackbar.snack("$label is back in practice", action = "Undo")) {
+                        withContext(Dispatchers.IO) { app.studyRepository.archive(item) }
+                        onArchived(true)
                         PracticeWidgetUpdater.refresh(context)
                     }
                 }
@@ -225,8 +264,42 @@ private fun MasteryLine(item: StudyItem, eth: EthanColors) {
 
 private class SheetActions(
     val addToList: (StudyItem, String) -> Unit,
-    val archive: (StudyItem, String) -> Unit,
+    /** Archives the item; [onArchived] hears the item's archive state after the tap and after any Undo. */
+    val archive: (item: StudyItem, label: String, onArchived: (Boolean) -> Unit) -> Unit,
+    /** Takes the item back out of the archive — the only way to, once an Archive's Undo has gone. */
+    val unarchive: (item: StudyItem, label: String, onArchived: (Boolean) -> Unit) -> Unit,
 )
+
+/**
+ * "+ Add to list" and Archive / Unarchive for an entry. The second button says what the item
+ * is: an archived item offers Unarchive, which is the way back from the archive once an
+ * Archive's Undo snackbar has gone (a mis-tapped Archive, or an "I know it" in triage).
+ */
+@Composable
+private fun StudyButtons(item: StudyItem, label: String, actions: SheetActions, eth: EthanColors) {
+    val app = LocalContext.current.applicationContext as HanziApp
+    var archived by remember(item.itemId) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(item.itemId) {
+        archived = withContext(Dispatchers.IO) { app.userRepository.isKnown(item.itemId) }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            onClick = { actions.addToList(item, label) },
+            colors = ButtonDefaults.buttonColors(containerColor = eth.accent, contentColor = eth.onAccent),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+            modifier = Modifier.height(30.dp),
+        ) { Text("+ Add to list", fontFamily = InstrumentSans, fontSize = 12.sp) }
+        val isArchived = archived ?: return@Row
+        OutlinedButton(
+            onClick = {
+                if (isArchived) actions.unarchive(item, label) { archived = it }
+                else actions.archive(item, label) { archived = it }
+            },
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+            modifier = Modifier.height(30.dp),
+        ) { Text(if (isArchived) "Unarchive" else "Archive", fontFamily = InstrumentSans, fontSize = 12.sp) }
+    }
+}
 
 @Composable
 private fun SheetHeader(stack: LookupStack, eth: EthanColors) {
@@ -366,8 +439,8 @@ private fun CharacterSheetContent(
     actions: SheetActions,
 ) {
     var loaded by remember(glyphId) { mutableStateOf(false) }
-    val page by produceState<CharacterPage?>(null, glyphId) {
-        value = withContext(Dispatchers.IO) { repository.characterPage(glyphId) }
+    val page by produceState(pageCache[glyphId] as CharacterPage?, glyphId) {
+        value = withContext(Dispatchers.IO) { repository.characterPage(glyphId) }.also { pageCache[glyphId] = it }
         loaded = true
     }
     LaunchedEffect(glyphId) {
@@ -455,22 +528,7 @@ private fun CharacterSheetContent(
                 // Study actions
                 val charItem = StudyItem.character(glyphId)
                 MasteryLine(charItem, eth)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { actions.addToList(charItem, p.char) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = eth.accent,
-                            contentColor = eth.onAccent,
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                        modifier = Modifier.height(30.dp),
-                    ) { Text("+ Add to list", fontFamily = InstrumentSans, fontSize = 12.sp) }
-                    OutlinedButton(
-                        onClick = { actions.archive(charItem, p.char) },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                        modifier = Modifier.height(30.dp),
-                    ) { Text("Archive", fontFamily = InstrumentSans, fontSize = 12.sp) }
-                }
+                StudyButtons(charItem, p.char, actions, eth)
             }
         }
 
@@ -609,7 +667,7 @@ private fun CharacterSheetContent(
         }
 
         // The same sentences the flashcard shows for this character.
-        val sentences by produceState(emptyList<SentenceExample>(), glyphId) {
+        val sentences by produceState(emptyList<SentenceExample>(), p.char) {
             value = withContext(Dispatchers.IO) { repository.cardSentences(p.char) }
         }
         SentenceList(sentences, tts, eth)
@@ -638,10 +696,20 @@ private fun WordSheetContent(
     onLookup: (LookupEntry) -> Unit,
     actions: SheetActions,
 ) {
-    val page by produceState<WordPage?>(null, wordId) {
-        value = withContext(Dispatchers.IO) { repository.wordPage(wordId) }
+    var loaded by remember(wordId) { mutableStateOf(false) }
+    val page by produceState(pageCache["w:$wordId"] as WordPage?, wordId) {
+        value = withContext(Dispatchers.IO) { repository.wordPage(wordId) }.also { pageCache["w:$wordId"] = it }
+        loaded = true
     }
-    val p = page ?: return
+    val p = page
+    if (p == null) {
+        // Say which: a blank sheet reads as broken either way.
+        Text(
+            if (loaded) "Not in the data pack." else "Loading…",
+            Modifier.padding(16.dp), color = eth.textFaint, fontFamily = InstrumentSans,
+        )
+        return
+    }
 
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
@@ -667,19 +735,7 @@ private fun WordSheetContent(
                 }
                 val wordItem = StudyItem.word(wordId)
                 MasteryLine(wordItem, eth)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { actions.addToList(wordItem, p.simp) },
-                        colors = ButtonDefaults.buttonColors(containerColor = eth.accent, contentColor = eth.onAccent),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                        modifier = Modifier.height(30.dp),
-                    ) { Text("+ Add to list", fontFamily = InstrumentSans, fontSize = 12.sp) }
-                    OutlinedButton(
-                        onClick = { actions.archive(wordItem, p.simp) },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                        modifier = Modifier.height(30.dp),
-                    ) { Text("Archive", fontFamily = InstrumentSans, fontSize = 12.sp) }
-                }
+                StudyButtons(wordItem, p.simp, actions, eth)
             }
         }
         if (p.chars.isNotEmpty()) {
@@ -755,11 +811,12 @@ private fun ComponentSheetContent(
     eth: EthanColors,
     onLookup: (LookupEntry) -> Unit,
 ) {
-    val page by produceState<com.hanzidictionary.core.ComponentPage?>(null, componentId) {
-        value = withContext(Dispatchers.IO) { repository.componentPage(componentId) }
+    val page by produceState(pageCache["c:$componentId"] as com.hanzidictionary.core.ComponentPage?, componentId) {
+        value = withContext(Dispatchers.IO) { repository.componentPage(componentId) }.also { pageCache["c:$componentId"] = it }
     }
-    val family by produceState<ComponentFamily?>(null, componentId, fromGlyphId) {
-        value = withContext(Dispatchers.IO) { repository.componentFamily(componentId, fromGlyphId) }
+    val familyKey = "f:$componentId:$fromGlyphId"
+    val family by produceState(pageCache[familyKey] as ComponentFamily?, componentId, fromGlyphId) {
+        value = withContext(Dispatchers.IO) { repository.componentFamily(componentId, fromGlyphId) }.also { pageCache[familyKey] = it }
     }
     val p = page ?: return
 
@@ -853,7 +910,7 @@ private fun FamilySection(
     val groups = if (sound) family.sound else family.meaning
     if (groups.isEmpty()) return
     val total = groups.sumOf { it.members.size }
-    var open by remember(componentChar, side) { mutableStateOf(startsOpen) }
+    var open by rememberSaveable(componentChar, side) { mutableStateOf(startsOpen) }
     val tint = if (sound) eth.orange600 else eth.jade600
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -918,7 +975,7 @@ private fun FamilyGroupBlock(
     eth: EthanColors,
     onLookup: (LookupEntry) -> Unit,
 ) {
-    var showAll by remember(group.label, group.members.size) { mutableStateOf(false) }
+    var showAll by rememberSaveable(group.label, group.members.size) { mutableStateOf(false) }
     val rows = if (showAll) group.members else visibleMembers(group, FAMILY_GROUP_SHOWN, fromGlyphId)
 
     Column {

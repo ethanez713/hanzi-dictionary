@@ -77,7 +77,11 @@ class NudgeReceiver : BroadcastReceiver() {
         val card = session.card ?: return
         if (tappedItem != null && tappedItem != card.item.itemId) return
 
-        app.studyRepository.grade(card.item, rating, StudyRepository.ORIGIN_NOTIFICATION)
+        // Archived since it was dealt: a grade would rebuild its schedule and overwrite the
+        // review row its archive memory is read from. Move on without grading.
+        if (!app.userRepository.isKnown(card.item.itemId)) {
+            app.studyRepository.grade(card.item, rating, StudyRepository.ORIGIN_NOTIFICATION)
+        }
         val next = nextNudgeSession(session, rating, nudgeDeck(app), { cardInfo(app, it) })
         // Nothing owed any more: the reminder is finished, not merely between cards.
         if (next.card == null) store.closeReminder()

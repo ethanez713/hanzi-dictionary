@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and below. Back up the user's own state (user.db, settings) and leave out the
+     content pack: it is reinstalled from the APK, and at its size it can push the backup over
+     the 25 MB quota, which fails the whole backup — user.db included. Device-local state that
+     would be wrong on another phone (the pack version, widget and reminder state) stays out. -->
+<full-backup-content>
+    <exclude domain="database" path="core.db" />
+    <exclude domain="database" path="ids.db" />
+    <exclude domain="sharedpref" path="pack.xml" />
+    <exclude domain="sharedpref" path="practice_widget.xml" />
+    <exclude domain="sharedpref" path="nudge.xml" />
+</full-backup-content>

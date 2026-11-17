@@ -300,10 +300,13 @@ fun SearchScreen(
     // row itself doesn't change — nothing leaves the results list when you save from it.
     fun fileAway(item: StudyItem, label: String) {
         scope.launch {
-            val list = withContext(Dispatchers.IO) {
-                app.studyRepository.ensureActiveList().also {
-                    app.studyRepository.addToList(it.id, item)
-                }
+            val (list, added) = withContext(Dispatchers.IO) {
+                val list = app.studyRepository.ensureActiveList()
+                list to app.studyRepository.addToListIfAbsent(list.id, item)
+            }
+            if (!added) {
+                snackbar.snack("$label is already in ${list.name}")
+                return@launch
             }
             photoFinds = photoFinds?.filterNot { it.glyphId == item.itemId }
             listRefresh++
@@ -330,16 +333,15 @@ fun SearchScreen(
     fun triageAdd(find: SearchResult) {
         scope.launch {
             val item = StudyItem.character(find.glyphId)
-            val list = withContext(Dispatchers.IO) {
-                app.studyRepository.ensureActiveList().also {
-                    app.studyRepository.addToList(it.id, item)
-                }
+            val (list, added) = withContext(Dispatchers.IO) {
+                val list = app.studyRepository.ensureActiveList()
+                list to app.studyRepository.addToListIfAbsent(list.id, item)
             }
             listRefresh++
             PracticeWidgetUpdater.refresh(context)
             pending = pending + (
                 find.glyphId to PendingTriage(AddAction) {
-                    withContext(Dispatchers.IO) {
+                    if (added) withContext(Dispatchers.IO) {
                         app.studyRepository.removeFromList(list.id, item.itemId)
                     }
                     listRefresh++
@@ -423,19 +425,17 @@ fun SearchScreen(
         if (items.isEmpty()) return
         beginBulk(items)
         scope.launch {
-            val list = withContext(Dispatchers.IO) {
-                app.studyRepository.ensureActiveList().also { list ->
-                    for (f in items) {
-                        app.studyRepository.addToList(list.id, StudyItem.character(f.glyphId))
-                    }
-                }
+            // Only what this tap actually added is undone; anything already in the list stays.
+            val (list, added) = withContext(Dispatchers.IO) {
+                val list = app.studyRepository.ensureActiveList()
+                list to items.filter { f -> app.studyRepository.addToListIfAbsent(list.id, StudyItem.character(f.glyphId)) }
             }
             photoFinds = loadPhotoFinds()
             listRefresh++
             PracticeWidgetUpdater.refresh(context)
             if (snackbar.snack(describeFinds("Added", items), "Undo")) {
                 withContext(Dispatchers.IO) {
-                    for (f in items) app.studyRepository.removeFromList(list.id, f.glyphId)
+                    for (f in added) app.studyRepository.removeFromList(list.id, f.glyphId)
                 }
                 photoFinds = loadPhotoFinds()
                 listRefresh++
@@ -449,15 +449,13 @@ fun SearchScreen(
         if (items.isEmpty()) return
         beginBulk(items)
         scope.launch {
-            withContext(Dispatchers.IO) {
-                for (f in items) app.userRepository.setKnown(f.glyphId, true, StudyItem.KIND_CHARACTER)
+            val undos = withContext(Dispatchers.IO) {
+                items.map { f -> app.studyRepository.archive(StudyItem.character(f.glyphId)) }
             }
             photoFinds = loadPhotoFinds()
             PracticeWidgetUpdater.refresh(context)
             if (snackbar.snack(describeFinds("Archived", items), "Undo")) {
-                withContext(Dispatchers.IO) {
-                    for (f in items) app.userRepository.setKnown(f.glyphId, false, StudyItem.KIND_CHARACTER)
-                }
+                withContext(Dispatchers.IO) { undos.forEach { app.studyRepository.undoArchive(it) } }
                 photoFinds = loadPhotoFinds()
                 PracticeWidgetUpdater.refresh(context)
             }

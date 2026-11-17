@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and above: the same rules as backup_rules.xml, for cloud backup and for
+     device-to-device transfer. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="core.db" />
+        <exclude domain="database" path="ids.db" />
+        <exclude domain="sharedpref" path="pack.xml" />
+        <exclude domain="sharedpref" path="practice_widget.xml" />
+        <exclude domain="sharedpref" path="nudge.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="core.db" />
+        <exclude domain="database" path="ids.db" />
+        <exclude domain="sharedpref" path="pack.xml" />
+        <exclude domain="sharedpref" path="practice_widget.xml" />
+        <exclude domain="sharedpref" path="nudge.xml" />
+    </device-transfer>
+</data-extraction-rules>

@@ -23,6 +23,8 @@ import com.hanzidictionary.core.widgetView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Home-screen flashcard (spec §17).
@@ -46,7 +48,10 @@ import kotlinx.coroutines.launch
 class PracticeWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, appWidgetIds: IntArray) {
-        for (id in appWidgetIds) applyAsync(context, id, WidgetEvent.Update, gradeRating = null)
+        // One goAsync() for the whole batch: it hands out its PendingResult once, so calling
+        // it per widget gave the second widget a null and crashed the app on every refresh
+        // once two widgets were placed.
+        applyAsync(context, appWidgetIds.toList(), WidgetEvent.Update, gradeRating = null)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -68,7 +73,12 @@ class PracticeWidgetProvider : AppWidgetProvider() {
                 val rating = intent.getStringExtra(EXTRA_RATING)
                     ?.let { runCatching { Rating.valueOf(it) }.getOrNull() }
                     ?: return
-                applyAsync(context, widgetId, WidgetEvent.Grade, rating)
+                // The card the gutter was drawn beside. A tap that arrives after the widget has
+                // moved on (a double tap, or an app poke that re-dealt) would otherwise grade a
+                // card the user never saw.
+                val shown = intent.getStringExtra(EXTRA_ITEM)
+                if (shown != null && shown != loadState(prefs(context), widgetId).card?.item?.itemId) return
+                applyAsync(context, listOf(widgetId), WidgetEvent.Grade, rating)
             }
         }
     }
@@ -87,41 +97,53 @@ class PracticeWidgetProvider : AppWidgetProvider() {
      * redraws. `goAsync` keeps the receiver alive across the SQLite work — well inside the
      * ~10s a broadcast receiver is allowed.
      */
-    private fun applyAsync(context: Context, widgetId: Int, event: WidgetEvent, gradeRating: Rating?) {
+    private fun applyAsync(context: Context, widgetIds: List<Int>, event: WidgetEvent, gradeRating: Rating?) {
         val pending = goAsync()
         val appContext = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val app = appContext as HanziApp
-                val prefs = prefs(appContext)
-                val prev = loadState(prefs, widgetId)
-
-                val gradedCard = prev.card
-                if (event == WidgetEvent.Grade && gradeRating != null && gradedCard != null) {
-                    app.studyRepository.grade(gradedCard.item, gradeRating, StudyRepository.ORIGIN_WIDGET)
+                // Serialised: two taps' coroutines interleaving could grade one card twice.
+                gradeLock.withLock {
+                    for (widgetId in widgetIds) apply(appContext as HanziApp, widgetId, event, gradeRating)
                 }
-
-                val activeId = app.studyRepository.activeListId()
-                val source = if (activeId != null) DeckSource.UserList(activeId) else DeckSource.Everything
-                val deck = app.studyRepository.deckFor(source, limit = 12)
-                val next = nextWidgetState(prev, event, deck, { cardInfo(app, it) })
-
-                val editor = prefs.edit()
-                saveState(editor, widgetId, next)
-                // Committed synchronously: render() reads nothing back, but the receiver may
-                // be torn down the moment goAsync() finishes, so the write must land first.
-                editor.commit()
-                render(appContext, widgetId, next)
             } finally {
                 pending.finish()
             }
         }
     }
 
+    private fun apply(app: HanziApp, widgetId: Int, event: WidgetEvent, gradeRating: Rating?) {
+        val prefs = prefs(app)
+        val prev = loadState(prefs, widgetId)
+
+        val gradedCard = prev.card
+        if (event == WidgetEvent.Grade && gradeRating != null && gradedCard != null &&
+            !app.userRepository.isKnown(gradedCard.item.itemId)
+        ) {
+            // Not if it was archived since it was dealt: a grade would rebuild a schedule for
+            // an archived item and overwrite the review row its archive memory is read from.
+            app.studyRepository.grade(gradedCard.item, gradeRating, StudyRepository.ORIGIN_WIDGET)
+        }
+
+        val activeId = app.studyRepository.activeListId()
+        val source = if (activeId != null) DeckSource.UserList(activeId) else DeckSource.Everything
+        val deck = app.studyRepository.deckFor(source, limit = 12)
+        val next = nextWidgetState(prev, event, deck, { cardInfo(app, it) })
+
+        val editor = prefs.edit()
+        saveState(editor, widgetId, next)
+        // Committed synchronously: render() reads nothing back, but the receiver may
+        // be torn down the moment goAsync() finishes, so the write must land first.
+        editor.commit()
+        render(app, widgetId, next)
+    }
+
     companion object {
         private const val ACTION_GRADE = "com.hanzidictionary.app.widget.GRADE"
         private const val ACTION_FLIP = "com.hanzidictionary.app.widget.FLIP"
         private const val EXTRA_RATING = "rating"
+        private const val EXTRA_ITEM = "item"
+        private val gradeLock = Mutex()
         private const val INVALID_ID = AppWidgetManager.INVALID_APPWIDGET_ID
         private const val PREFS = "practice_widget"
         private val FIELDS = listOf("item", "kind", "front", "answer", "revealed")
@@ -168,8 +190,9 @@ class PracticeWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_card, view.glyph)
             views.setTextViewText(R.id.widget_echo, view.detail)
 
-            views.setOnClickPendingIntent(R.id.zone_miss, gradeIntent(context, widgetId, Rating.AGAIN))
-            views.setOnClickPendingIntent(R.id.zone_knew, gradeIntent(context, widgetId, Rating.GOOD))
+            val shown = state.card?.item?.itemId
+            views.setOnClickPendingIntent(R.id.zone_miss, gradeIntent(context, widgetId, Rating.AGAIN, shown))
+            views.setOnClickPendingIntent(R.id.zone_knew, gradeIntent(context, widgetId, Rating.GOOD, shown))
             // Face-down → the middle flips the card; revealed or empty → it opens the app.
             val cardIntent =
                 if (view.cardTapOpensApp) openIntent(context, widgetId, state.card?.item)
@@ -193,14 +216,17 @@ class PracticeWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        private fun gradeIntent(context: Context, widgetId: Int, rating: Rating): PendingIntent {
+        private fun gradeIntent(context: Context, widgetId: Int, rating: Rating, item: String?): PendingIntent {
             val intent = Intent(context, PracticeWidgetProvider::class.java).apply {
                 action = ACTION_GRADE
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
                 putExtra(EXTRA_RATING, rating.name)
+                // The card this gutter was drawn beside, checked on arrival.
+                item?.let { putExtra(EXTRA_ITEM, it) }
                 // Extras alone don't distinguish PendingIntents; the data URI does — one per
-                // grade so the four gutter zones don't collapse onto a single intent.
-                data = android.net.Uri.parse("hanzi://widget/$widgetId/grade/${rating.name}")
+                // grade *and card*, so FLAG_UPDATE_CURRENT can't rewrite the item on an intent
+                // a tap already holds.
+                data = android.net.Uri.parse("hanzi://widget/$widgetId/grade/${rating.name}/${android.net.Uri.encode(item.orEmpty())}")
             }
             return PendingIntent.getBroadcast(
                 context,

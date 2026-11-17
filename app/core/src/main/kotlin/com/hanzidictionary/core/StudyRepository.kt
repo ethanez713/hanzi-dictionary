@@ -143,10 +143,19 @@ class StudyRepository(
         }
 
     /** Puts back exactly what [archive] replaced: the archive row as it was, and the schedule. */
-    fun undoArchive(undo: ArchiveUndo) {
+    fun undoArchive(undo: ArchiveUndo) = undoArchives(listOf(undo))
+
+    /** [archive] for many items in one transaction (a bulk edit, an HSK-level import). Only
+     * items not already archived come back, so an Undo touches exactly what the tap changed. */
+    fun archiveAll(items: Collection<StudyItem>, now: Long = System.currentTimeMillis()): List<ArchiveUndo> =
+        q.transactionWithResult { items.map { archive(it, now) }.filterNot { it.wasKnown } }
+
+    fun undoArchives(undos: Collection<ArchiveUndo>) {
         q.transaction {
-            if (!undo.wasKnown) q.deleteKnown(undo.item.itemId)
-            undo.card?.let { persistCard(it) }
+            for (undo in undos) {
+                if (!undo.wasKnown) q.deleteKnown(undo.item.itemId)
+                undo.card?.let { persistCard(it) }
+            }
         }
     }
 

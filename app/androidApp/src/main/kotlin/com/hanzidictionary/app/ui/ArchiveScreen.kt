@@ -42,8 +42,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
+import com.hanzidictionary.app.HanziApp
+import com.hanzidictionary.app.widget.PracticeWidgetUpdater
+import com.hanzidictionary.core.ItemSummary
+import com.hanzidictionary.core.StudyItem
 import com.hanzidictionary.core.UserRepository
-import com.hanzidictionary.core.charOfGlyphId
 import com.hanzidictionary.core.extractHanzi
 import com.hanzidictionary.core.glyphIdOfChar
 import kotlinx.coroutines.Dispatchers
@@ -64,26 +72,77 @@ import kotlinx.coroutines.withContext
 fun ArchiveScreen(
     userRepository: UserRepository,
     hskLevels: Map<Int, List<String>>,
-    onOpenCharacter: (String) -> Unit,
+    onOpenItem: (StudyItem, String) -> Unit,
     onBack: () -> Unit,
 ) {
     val eth = EthanTheme.colors
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val app = context.applicationContext as HanziApp
+    val snackbar = remember { SnackbarHostState() }
     BackHandler(onBack = onBack)
 
     var refresh by remember { mutableIntStateOf(0) }
-    var knownChars by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    // Characters *and* words: triage's "I know it" and a word card's Archive both archive words.
+    // Their ids are "w000123", so decoding every id as a codepoint crashed this screen.
+    var archived by remember { mutableStateOf<List<ItemSummary>>(emptyList()) }
     var knownIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var pasteText by remember { mutableStateOf("") }
+    var confirmImport by remember { mutableStateOf<Pair<String, List<String>>?>(null) }
 
     LaunchedEffect(refresh) {
-        val ids = withContext(Dispatchers.IO) { userRepository.knownIds() }
+        val (ids, summaries) = withContext(Dispatchers.IO) {
+            val items = userRepository.knownItems()
+            items.map { it.itemId }.toSet() to app.repository.itemSummaries(items)
+        }
         knownIds = ids
-        knownChars = ids.map { it to charOfGlyphId(it) }.sortedBy { it.second }
+        archived = summaries.sortedWith(compareBy({ it.item.isWord }, { it.text }))
+    }
+
+    /** Archives [ids] in one go, with an Undo that puts back every schedule it discarded. */
+    fun import(label: String, ids: List<String>) {
+        scope.launch {
+            val undos = withContext(Dispatchers.IO) {
+                app.studyRepository.archiveAll(ids.map { StudyItem.character(it) })
+            }
+            refresh++
+            PracticeWidgetUpdater.refresh(context)
+            if (undos.isEmpty()) {
+                snackbar.snack("Everything in $label was already archived")
+                return@launch
+            }
+            val noun = if (undos.size == 1) "character" else "characters"
+            if (snackbar.snack("Archived ${undos.size} $noun from $label", action = "Undo")) {
+                withContext(Dispatchers.IO) { app.studyRepository.undoArchives(undos) }
+                refresh++
+                PracticeWidgetUpdater.refresh(context)
+            }
+        }
+    }
+
+    confirmImport?.let { (label, ids) ->
+        val fresh = ids.count { it !in knownIds }
+        AlertDialog(
+            onDismissRequest = { confirmImport = null },
+            title = { Text("Archive $label?") },
+            text = {
+                Text(
+                    "$fresh ${if (fresh == 1) "character" else "characters"} will leave practice " +
+                        "everywhere and lose their schedules. You can undo this straight after.",
+                )
+            },
+            confirmButton = {
+                Button(onClick = { confirmImport = null; import(label, ids) }) { Text("Archive") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmImport = null }) { Text("Cancel") }
+            },
+        )
     }
 
     Scaffold(
         containerColor = eth.paper1,
+        snackbarHost = { AppSnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -114,8 +173,8 @@ fun ArchiveScreen(
         ) {
             Spacer(Modifier.height(6.dp))
             Text(
-                if (knownChars.size == 1) "1 character archived as known"
-                else "${knownChars.size} characters archived as known",
+                if (archived.size == 1) "1 item archived as known"
+                else "${archived.size} items archived as known",
                 fontFamily = InstrumentSans, fontWeight = FontWeight.Medium, fontSize = 15.sp, color = eth.textBody,
             )
             Text(
@@ -149,12 +208,9 @@ fun ArchiveScreen(
             SheetEyebrow("IMPORT WHAT YOU KNOW")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (level in hskLevels.keys.sorted()) {
-                    ImportChip(if (level == 7) "HSK 7-9" else "HSK $level", eth) {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { userRepository.importKnown(hskLevels[level].orEmpty()) }
-                            refresh++
-                        }
-                    }
+                    val label = if (level == 7) "HSK 7-9" else "HSK $level"
+                    // A whole level is hundreds of characters: confirm first, then offer Undo.
+                    ImportChip(label, eth) { confirmImport = label to hskLevels[level].orEmpty() }
                 }
             }
             OutlinedTextField(
@@ -166,26 +222,23 @@ fun ArchiveScreen(
             if (pasteText.isNotBlank()) {
                 ImportChip("Add pasted characters", eth) {
                     val ids = extractHanzi(pasteText).map { glyphIdOfChar(it) }
-                    scope.launch {
-                        withContext(Dispatchers.IO) { userRepository.importKnown(ids) }
-                        pasteText = ""
-                        refresh++
-                    }
+                    pasteText = ""
+                    import("the pasted text", ids)
                 }
             }
 
-            if (knownChars.isNotEmpty()) {
-                SheetEyebrow("ARCHIVED · ${knownChars.size}")
+            if (archived.isNotEmpty()) {
+                SheetEyebrow("ARCHIVED · ${archived.size}")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for ((glyphId, ch) in knownChars) {
+                    for (a in archived) {
                         Box(
                             Modifier.clip(RoundedCornerShape(5.dp))
                                 .background(eth.paper0)
                                 .border(1.dp, eth.borderSubtle, RoundedCornerShape(5.dp))
-                                .clickable { onOpenCharacter(glyphId) }
+                                .clickable { onOpenItem(a.item, a.text) }
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                         ) {
-                            Text(ch, fontSize = 24.sp, fontFamily = NotoCjk, color = eth.ink900)
+                            Text(a.text, fontSize = if (a.item.isWord) 20.sp else 24.sp, fontFamily = NotoCjk, color = eth.ink900)
                         }
                     }
                 }
