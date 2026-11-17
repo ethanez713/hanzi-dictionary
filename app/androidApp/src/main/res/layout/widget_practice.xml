@@ -49,10 +49,18 @@
         android:paddingStart="6dp"
         android:paddingEnd="6dp">
 
+        <!-- Shrinks to fit: a word of four or more characters was clipped at 38sp in a
+             three-cell widget, and graded unread. Autosize needs a bounded box, hence the
+             fixed height; it works in RemoteViews from API 26 (minSdk). -->
         <TextView
             android:id="@+id/widget_card"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:autoSizeMaxTextSize="38sp"
+            android:autoSizeMinTextSize="14sp"
+            android:autoSizeStepGranularity="2sp"
+            android:autoSizeTextType="uniform"
+            android:gravity="center"
             android:maxLines="1"
             android:textColor="@color/widget_text"
             android:textSize="38sp" />

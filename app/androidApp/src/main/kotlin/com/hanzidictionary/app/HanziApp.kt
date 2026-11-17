@@ -90,6 +90,11 @@ class HanziApp : Application() {
 
     /** Photo-library scanner bound to MediaStore + ML Kit. Built on demand (only after
      * the user grants photo permission and opens the photos screen). */
+    /** One photo scan at a time. Leaving the Dictionary tab cancels the screen's effect but
+     * not the blocking OCR under it, so returning used to start a second full pass over the
+     * same photos alongside the first. */
+    val scanLock = kotlinx.coroutines.sync.Mutex()
+
     fun createPhotoScanner(): PhotoScanner =
         PhotoScanner(
             source = MediaStorePhotoSource(this),

@@ -51,6 +51,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.sp
 import com.hanzidictionary.app.HanziApp
 import com.hanzidictionary.app.audio.MandarinTts
@@ -672,16 +676,35 @@ private fun CharacterSheetContent(
         }
         SentenceList(sentences, tts, eth)
 
-        // Footer link (spec: "plain mono 11px links"): what this character is itself a part
-        // of. The families its own parts belong to are a tap on the cards above.
-        Text(
-            "${p.char} as a component",
-            fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink,
-            textDecoration = TextDecoration.Underline,
-            modifier = Modifier.clickable {
-                onLookup(LookupEntry(componentId = p.char, displayText = p.char))
-            },
-        )
+        // Footer links (spec: "plain mono 11px links"): what this character is itself a part
+        // of, and — only when no card above carries it — its sound part's series. The cards
+        // show the first four parts; a fifth-place sound part would otherwise be unreachable.
+        val shownParts = p.breakdown.filter { it.displayChar != null }.take(4)
+        val soundPart = p.breakdown.firstOrNull { isSoundBearing(it.function) && it.navigable }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (soundPart != null && soundPart !in shownParts) {
+                val label = soundPart.displayChar ?: soundPart.componentId
+                Text(
+                    "Sound series $label",
+                    fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink,
+                    textDecoration = TextDecoration.Underline,
+                    modifier = Modifier.clickable {
+                        onLookup(LookupEntry(
+                            componentId = soundPart.componentId, displayText = label,
+                            role = ComponentRole.SOUND, fromGlyphId = glyphId,
+                        ))
+                    },
+                )
+            }
+            Text(
+                "${p.char} as a component",
+                fontFamily = PlexMono, fontSize = 11.sp, color = eth.textLink,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable {
+                    onLookup(LookupEntry(componentId = p.char, displayText = p.char))
+                },
+            )
+        }
 
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
@@ -914,7 +937,15 @@ private fun FamilySection(
     val tint = if (sound) eth.orange600 else eth.jade600
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(Modifier.fillMaxWidth().clickable { open = !open }) {
+        Box(
+            Modifier.fillMaxWidth()
+                // Read out as a control with its state, not as a bare "▼".
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (open) "Collapse" else "Expand",
+                ) { open = !open }
+                .semantics { stateDescription = if (open) "Expanded" else "Collapsed" },
+        ) {
             SheetEyebrow(
                 (if (sound) "SOUND SERIES" else "MEANING FAMILY") + " · $total" + if (open) "" else "  ▼",
             )
@@ -1018,9 +1049,11 @@ private fun FamilyMemberRow(
 ) {
     Row(
         Modifier.fillMaxWidth()
-            // The character the reader came from, so they can see where it sits.
+            // The character the reader came from, so they can see where it sits — shaded, and
+            // said aloud, since a shade alone says nothing to a screen reader.
             .background(if (isOrigin) eth.paper1 else Color.Transparent)
-            .clickable { onLookup(LookupEntry(glyphId = m.glyphId, displayText = m.char)) }
+            .clickable(onClickLabel = "Open ${m.char}") { onLookup(LookupEntry(glyphId = m.glyphId, displayText = m.char)) }
+            .semantics { if (isOrigin) stateDescription = "the character you came from" }
             .padding(vertical = 5.dp, horizontal = if (isOrigin) 4.dp else 0.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1033,12 +1066,18 @@ private fun FamilyMemberRow(
             fontFamily = InstrumentSans, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         m.word?.let { w ->
-            Text(
-                w.simp, fontSize = 16.sp, color = eth.ink700, fontFamily = NotoCjk,
-                modifier = Modifier
-                    .clickable { onLookup(LookupEntry(wordId = w.id, displayText = w.simp)) }
+            // Its own full-height target: a near miss on a 22dp word opened the character.
+            Box(
+                Modifier
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    .clickable(onClickLabel = "Open the word ${w.simp}") {
+                        onLookup(LookupEntry(wordId = w.id, displayText = w.simp))
+                    }
                     .padding(start = 8.dp),
-            )
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Text(w.simp, fontSize = 16.sp, color = eth.ink700, fontFamily = NotoCjk)
+            }
         }
     }
 }

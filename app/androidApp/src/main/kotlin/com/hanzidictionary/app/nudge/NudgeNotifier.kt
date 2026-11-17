@@ -84,6 +84,11 @@ internal object NudgeNotifier {
     @SuppressLint("MissingPermission") // guarded by canPost(); the permission itself is requested from Settings
     fun post(context: Context, title: String, session: NudgeSession, streakInTitle: Boolean) {
         if (!canPost(context)) return
+        // A live card never goes up over the open app. The checks upstream run before the
+        // slow first render (the font load), and a grade's re-post can land just after the app
+        // hid the reminder, so check again at the last moment. The reminder stays open in its
+        // store; leaving the app puts it back (reshowOnLeave).
+        if (session.card != null && (context.applicationContext as? HanziApp)?.inForeground == true) return
         ensureChannel(context)
         val card = session.card
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)

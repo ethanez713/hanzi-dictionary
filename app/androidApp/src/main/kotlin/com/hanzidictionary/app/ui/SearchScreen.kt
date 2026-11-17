@@ -107,6 +107,7 @@ import com.hanzidictionary.core.isTraditionalOnly
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -207,7 +208,9 @@ fun SearchScreen(
         // the writes already happened, so a triaged character simply doesn't come back.
         pending = emptyMap()
         withContext(Dispatchers.IO) {
-            app.createPhotoScanner().scanNewPhotos { done, total -> scanProgress = done to total }
+            app.scanLock.withLock {
+                app.createPhotoScanner().scanNewPhotos { done, total -> scanProgress = done to total }
+            }
         }
         photoFinds = loadPhotoFinds()
     }

@@ -167,6 +167,7 @@ def vote_role_glosses(makemeahanzi_by_cp: dict[int, dict]) -> dict[str, tuple[st
 def role_hint_rows(
     makemeahanzi_by_cp: dict[int, dict],
     component_use_rows: list[tuple],
+    stats: dict[str, int] | None = None,
 ) -> list[tuple[str, str, str]]:
     """(glyph_id, component_id, hint): what the meaning part lends *this* character.
 
@@ -181,7 +182,8 @@ def role_hint_rows(
     so a hint lands on: the meaning-bearing component it names; else one in the same
     radical family; else the character's only meaning-bearing component, provided the part
     makemeahanzi names isn't some *other* component of the character (which would mean the
-    two sources disagree about which part carries the meaning)."""
+    two sources disagree about which part carries the meaning). [stats] counts how each hint
+    was placed, so the build can print how much rests on that last, weakest rule."""
     parts_of: dict[str, list[tuple[str, str]]] = {}
     for row in component_use_rows:
         parts_of.setdefault(row[0], []).append((row[1], row[3]))
@@ -197,10 +199,18 @@ def role_hint_rows(
         parts = parts_of.get(gid, [])
         meaning = [c for c, fn in parts if fn in ("semantic", "both")]
         family = RADICAL_PARENT.get(named, named)
-        target = next((c for c in meaning if c == named), None) \
-            or next((c for c in meaning if RADICAL_PARENT.get(c, c) == family), None)
+        how = "named"
+        target = next((c for c in meaning if c == named), None)
+        if target is None:
+            how = "family"
+            target = next((c for c in meaning if RADICAL_PARENT.get(c, c) == family), None)
         if target is None and len(meaning) == 1 and all(c != named for c, _ in parts):
+            how = "fallback"
             target = meaning[0]
-        if target is not None:
+        if target is None:
+            how = "dropped"
+        else:
             out.append((gid, target, hint))
+        if stats is not None:
+            stats[how] = stats.get(how, 0) + 1
     return out
