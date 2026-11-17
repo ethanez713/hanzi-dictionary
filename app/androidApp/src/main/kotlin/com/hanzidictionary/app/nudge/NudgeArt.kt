@@ -118,6 +118,23 @@ internal fun RemoteViews.setArt(
     description: String? = null,
 ) {
     setImageViewBitmap(viewId, bitmap)
-    setInt(viewId, "setColorFilter", ContextCompat.getColor(context, color))
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        // Both modes' colours, chosen by SystemUI at inflation. A single int baked in at post
+        // time kept the old mode's ink after a scheduled light/dark switch re-inflated the
+        // reminder over the new mode's card colour — dark ink on a dark card, unreadable until
+        // the next re-post. The backgrounds already follow the mode (they are resources).
+        setColorInt(viewId, "setColorFilter", modeColor(context, color, night = false), modeColor(context, color, night = true))
+    } else {
+        setInt(viewId, "setColorFilter", ContextCompat.getColor(context, color))
+    }
     if (description != null) setContentDescription(viewId, description)
+}
+
+/** [color] as it resolves in light or dark mode, whatever mode the device is in now. */
+private fun modeColor(context: Context, @ColorRes color: Int, night: Boolean): Int {
+    val config = android.content.res.Configuration(context.resources.configuration).apply {
+        uiMode = (uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK.inv()) or
+            (if (night) android.content.res.Configuration.UI_MODE_NIGHT_YES else android.content.res.Configuration.UI_MODE_NIGHT_NO)
+    }
+    return ContextCompat.getColor(context.createConfigurationContext(config), color)
 }
