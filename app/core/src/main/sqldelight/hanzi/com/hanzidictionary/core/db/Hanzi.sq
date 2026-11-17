@@ -99,6 +99,17 @@ CREATE TABLE word_char (
     position INTEGER NOT NULL
 );
 
+-- Word ids used to be positional ("w000123", the n-th kept CC-CEDICT entry) and shifted
+-- whenever a rebuild changed the input. They are now derived from the entry itself; this
+-- maps each old positional id, as this build would have assigned it, to the new id, so an
+-- installed app can rewrite the ids stored in user.db once. Right only for a user.db written
+-- against a pack built from the same snapshots — which is why the switch should be built
+-- from the snapshots the installed pack came from.
+CREATE TABLE word_id_alias (
+    old_id TEXT PRIMARY KEY,
+    new_id TEXT NOT NULL
+);
+
 -- Example sentences (Tatoeba, CC BY 2.0 FR), keyed by the word's simplified form.
 -- Sentences judged unidiomatic are marked shown=0, never deleted, so the ranking stays
 -- auditable and undoing it is a change to sentencesForWord rather than a rebuild.
@@ -267,6 +278,10 @@ SELECT g.id, g.char, g.definition,
     COALESCE((SELECT r.value FROM reading r WHERE r.glyph_id = g.id AND r.system = 'pinyin'
      ORDER BY (r.freq IS NULL), r.freq DESC LIMIT 1), '') AS pinyin
 FROM glyph g WHERE g.id = :glyphId;
+
+-- The stable ids for positional word ids still stored in user.db (see word_id_alias).
+wordIdAliases:
+SELECT old_id, new_id FROM word_id_alias WHERE old_id IN :oldIds;
 
 wordById:
 SELECT * FROM word WHERE id = :id;

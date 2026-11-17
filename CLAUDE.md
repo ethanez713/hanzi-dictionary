@@ -50,6 +50,15 @@ fully replaces the old one.
 - **`app/androidApp/src/main/assets/*.db` are GITIGNORED** (rebuild them, don't commit them).
 - After changing pack *content or schema*, **bump `BUNDLED_PACK_VERSION` in `PackManager.kt`**
   so installed apps re-copy it.
+- **Word ids are content hashes** (`stable_word_id` in `build.py`: "w" + 12 hex of
+  simp|trad|pinyin), because user.db stores them and positional ids re-pointed every list and
+  schedule whenever a rebuild's input changed. The pack's `word_id_alias` maps the old positional
+  ids (as *this* build would have numbered them) to the new ones, and `migrateWordIds` rewrites
+  user.db once on pack open. That map is only right for a user.db written against a pack from the
+  same snapshots — so the first build with stable ids must use the snapshots the installed pack
+  came from; refresh CC-CEDICT only after that. Never hard-code a word id in a test.
+- The FTS tables use `tokenize="unicode61 remove_diacritics 2"`: the default folding leaves the
+  toned ü (ǖǘǚǜ) alone, and "nv"/"lv" then find nothing. `SearchTest` mirrors the definition.
 - Adding a **table/column to the pack** means editing **both** `pipeline/schema.sql` **and**
   the app's `Hanzi.sq` (keep them in sync), and adding the table to `core_tables` in
   `package.py`. `SCHEMA_USER_VERSION` stays **1** — the read-only pack has no migrations, so

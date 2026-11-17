@@ -76,6 +76,10 @@ def load_word_chars(conn: sqlite3.Connection, rows: list[tuple]) -> None:
     conn.executemany("INSERT INTO word_char VALUES (?,?,?)", rows)
 
 
+def load_word_id_aliases(conn: sqlite3.Connection, rows: list[tuple]) -> None:
+    conn.executemany("INSERT INTO word_id_alias VALUES (?,?)", rows)
+
+
 def load_component_glosses(conn: sqlite3.Connection, rows: list[tuple]) -> None:
     conn.executemany(
         "INSERT INTO component_gloss (component_id, gloss, source_id, support, agreement)"

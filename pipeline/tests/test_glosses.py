@@ -240,5 +240,31 @@ class RoleHintRows(unittest.TestCase):
         self.assertEqual(rows, [])
 
 
+
+class StableWordIds(unittest.TestCase):
+    """Word ids name the entry, so a rebuild from a different snapshot doesn't re-point them."""
+
+    def test_same_entry_same_id_wherever_it_sits(self):
+        from pipeline.build import stable_word_id
+        a = stable_word_id("你好", "你好", "ni3 hao3", set())
+        b = stable_word_id("你好", "你好", "ni3 hao3", {"wsomethingelse"})
+        self.assertEqual(a, b)
+        self.assertRegex(a, r"^w[0-9a-f]{12}$")
+
+    def test_never_looks_positional(self):
+        from pipeline.build import stable_word_id
+        import re
+        for i in range(500):
+            self.assertIsNone(re.fullmatch(r"w[0-9]{6}", stable_word_id(f"词{i}", f"詞{i}", "ci2", set())))
+
+    def test_an_exact_duplicate_entry_gets_a_suffix(self):
+        from pipeline.build import stable_word_id
+        taken: set[str] = set()
+        first = stable_word_id("头发", "頭髮", "tou2 fa5", taken)
+        second = stable_word_id("头发", "頭髮", "tou2 fa5", taken)
+        self.assertEqual(second, first + "-2")
+        self.assertNotEqual(stable_word_id("头发", "頭髮", "tou2 fa1", taken), first, "a different reading is a different word")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -104,6 +104,17 @@ CREATE TABLE word_char (
 );
 CREATE INDEX idx_word_char_glyph ON word_char(glyph_id);
 
+-- Word ids used to be positional ("w000123", the n-th kept CC-CEDICT entry) and shifted
+-- whenever a rebuild changed the input. They are now derived from the entry itself; this
+-- maps each old positional id, as this build would have assigned it, to the new id, so an
+-- installed app can rewrite the ids stored in user.db once. Right only for a user.db written
+-- against a pack built from the same snapshots — which is why the switch should be built
+-- from the snapshots the installed pack came from.
+CREATE TABLE word_id_alias (
+    old_id TEXT PRIMARY KEY,
+    new_id TEXT NOT NULL
+);
+
 -- Example sentences (Tatoeba, CC BY 2.0 FR), keyed by the word's simplified form so any
 -- word entry sharing that form finds them. A handful of short Mandarin sentences per word,
 -- each with an English translation where Tatoeba links one.

@@ -5,7 +5,9 @@ import com.hanzidictionary.core.userdb.UserDatabase
 import java.util.TimeZone
 import kotlin.random.Random
 
-/** A studiable item: a character ("U+597D") or a pack word ("w000123"). */
+/** A studiable item: a character ("U+597D") or a pack word ("w" + 12 hex digits, a hash of
+ * the CC-CEDICT entry; older user.db rows may still hold positional "w000123" ids until
+ * [migrateWordIds] rewrites them). */
 data class StudyItem(val itemId: String, val kind: String) {
     val isWord: Boolean get() = kind == KIND_WORD
 
@@ -141,6 +143,28 @@ class StudyRepository(
             q.deleteCardState(item.itemId)
             undo
         }
+
+    /** Word ids still in the old positional form ("w000123") anywhere in user.db. */
+    fun legacyWordIds(): Set<String> = q.legacyWordIds().executeAsList().toSet()
+
+    /**
+     * Rewrites stored word ids old → new everywhere user.db keeps one: archive, lists,
+     * schedules, review history, lookups and triage skips. One transaction, so a kill halfway
+     * leaves the old ids intact to be migrated next time rather than half the tables moved.
+     */
+    fun renameItemIds(renames: Map<String, String>) {
+        if (renames.isEmpty()) return
+        q.transaction {
+            for ((old, new) in renames) {
+                q.renameKnownItem(new, old)
+                q.renameListItem(new, old)
+                q.renameCardState(new, old)
+                q.renameReviewLog(new, old)
+                q.renameLookupEvent(new, old)
+                q.renamePref("$PREF_TRIAGE_SKIP$new", "$PREF_TRIAGE_SKIP$old")
+            }
+        }
+    }
 
     /** Puts back exactly what [archive] replaced: the archive row as it was, and the schedule. */
     fun undoArchive(undo: ArchiveUndo) = undoArchives(listOf(undo))
@@ -861,3 +885,18 @@ private data class NewestReview(
     val difficulty: Double?,
     val rowId: Long,
 )
+
+/**
+ * Carries user.db across the switch from positional to stable word ids: every positional id
+ * it still holds that the installed pack can map is rewritten to that pack's stable id.
+ * Run once the pack is installed and before anything reads list items. Costs one small query
+ * when there is nothing left to do. Returns how many ids it rewrote.
+ */
+fun migrateWordIds(hanzi: HanziRepository, study: StudyRepository): Int {
+    val legacy = study.legacyWordIds()
+    if (legacy.isEmpty()) return 0
+    val renames = hanzi.wordIdAliases(legacy)
+    study.renameItemIds(renames)
+    return renames.size
+}
+

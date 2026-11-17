@@ -50,7 +50,9 @@ class HanziRepositoryTest {
 
     @Test
     fun aWordPageKeepsEverySentenceTheCardCanShow() {
-        val page = repo.wordPage("w000015")
+        // Looked up by text: word ids are content hashes, so a hard-coded one names nothing.
+        val id = repo.searchWords("你好").first { it.simp == "你好" }.id
+        val page = repo.wordPage(id)
         assertNotNull(page)
         assertTrue(page.sentences.isNotEmpty())
         assertEquals(repo.sentencesFor(page.simp), page.sentences)

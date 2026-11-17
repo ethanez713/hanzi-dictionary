@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import re as _re_sent
 from pathlib import Path
@@ -84,7 +85,26 @@ def dedupe_readings(e: GlyphEntity) -> list[tuple[str, str, int | None]]:
     return [(system, value, freq) for (system, value), freq in seen.items()]
 
 
-def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[list[tuple], list[tuple]]:
+def stable_word_id(trad: str, simp: str, numbered: str, taken: set[str]) -> str:
+    """A word id that names the *entry*, not its row number.
+
+    Ids used to be positional ("w000123", the 123rd kept entry), so a rebuild from a newer
+    CC-CEDICT, or any change to which characters are selected, shifted every id after the
+    first insertion — and the lists, schedules and archive in user.db, which store these ids,
+    silently pointed at different words. A hash of the entry's own fields survives that. It
+    is 12 hex digits after "w", so it can never be mistaken for a positional id (six decimal
+    digits), which is what lets the app tell the two apart and migrate the old ones. The
+    rare exact-duplicate entry takes "-2", "-3" in file order."""
+    base = "w" + hashlib.sha1(f"{simp}|{trad}|{numbered}".encode("utf-8")).hexdigest()[:12]
+    wid, n = base, 1
+    while wid in taken:
+        n += 1
+        wid = f"{base}-{n}"
+    taken.add(wid)
+    return wid
+
+
+def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[list[tuple], list[tuple], list[tuple]]:
     """CC-CEDICT entries -> word/word_char rows (spec §7, M3.5). Only multi-character
     words whose every character is in the pack are kept, so word_char links always
     resolve; single-char entries are skipped (glyph.definition covers those).
@@ -98,13 +118,20 @@ def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[l
 
     word_rows: list[tuple] = []
     word_char_rows: list[tuple] = []
+    # Positional id -> stable id, so an installed app can carry user.db across the switch.
+    # The positional ids are computed exactly as the old builds did, which makes this map
+    # right for a user.db written against a pack built from the *same* snapshots.
+    alias_rows: list[tuple] = []
+    taken: set[str] = set()
     for trad, simp, numbered, defs in entries:
         if len(simp) < 2:
             continue
         gids = [f"U+{ord(ch):04X}" for ch in simp]
         if any(g not in glyph_ids for g in gids):
             continue
-        wid = f"w{len(word_rows) + 1:06d}"
+        legacy = f"w{len(word_rows) + 1:06d}"
+        wid = stable_word_id(trad, simp, numbered, taken)
+        alias_rows.append((legacy, wid))
         word_rows.append((
             wid, simp, trad,
             pinyin.cedict_pinyin(pinyin.neutralize_potential_bu(simp, numbered, known_words)),
@@ -112,7 +139,7 @@ def build_words(snapshot_paths: dict[str, Path], glyph_ids: set[str]) -> tuple[l
         ))
         for pos, g in enumerate(gids):
             word_char_rows.append((wid, g, pos))
-    return word_rows, word_char_rows
+    return word_rows, word_char_rows, alias_rows
 
 
 _OPUS_LATIN = _re_sent.compile(r"[A-Za-z]")
@@ -605,7 +632,7 @@ def build() -> Path:
         if d.from_glyph in selected_set and d.to_glyph in selected_set
     ]
 
-    word_rows, word_char_rows = build_words(snapshot_paths, glyph_ids={f"U+{cp:04X}" for cp in selected})
+    word_rows, word_char_rows, word_alias_rows = build_words(snapshot_paths, glyph_ids={f"U+{cp:04X}" for cp in selected})
 
     # Example sentences (Tatoeba) — resolved on its own so the SOURCES list that drives
     # normalize stays character-data only; its manifest still joins the source table.
@@ -718,6 +745,7 @@ def build() -> Path:
     load.load_confusables(conn, confusable_rows)
     load.load_words(conn, word_rows)
     load.load_word_chars(conn, word_char_rows)
+    load.load_word_id_aliases(conn, word_alias_rows)
     load.load_component_glosses(conn, component_gloss_rows)
     load.load_sentences(conn, sentence_rows)
     conn.commit()
@@ -727,7 +755,7 @@ def build() -> Path:
     print(f"  glyphs={len(glyph_rows)} ({sum(1 for r in glyph_rows if r[7])} with CC-CEDICT senses) readings={len(reading_rows)} decompositions={len(decomposition_rows)}")
     print(f"  component_use={len(component_use_rows)} claims={len(claim_rows)}")
     print(f"  variant_edges={len(variant_edge_rows)} phonetic_series={len(phonetic_series_rows)} confusables={len(confusable_rows)}")
-    print(f"  words={len(word_rows)} word_chars={len(word_char_rows)} sentences={len(sentence_rows)}")
+    print(f"  words={len(word_rows)} word_chars={len(word_char_rows)} word_id_aliases={len(word_alias_rows)} sentences={len(sentence_rows)}")
     print(f"  component_glosses={len(component_gloss_rows)}")
     return db_path
 

@@ -666,6 +666,15 @@ class HanziRepository(
         )
     }
 
+    /** Stable ids for the positional word ids in [oldIds]. Empty for a pack built before ids
+     * were stable — that pack still uses the positional ids, so there is nothing to map. */
+    fun wordIdAliases(oldIds: Collection<String>): Map<String, String> = try {
+        oldIds.chunked(500).flatMap { db.hanziQueries.wordIdAliases(it).executeAsList() }
+            .associate { it.old_id to it.new_id }
+    } catch (e: Exception) {
+        emptyMap()  // no word_id_alias table in this pack
+    }
+
     fun existingGlyphIds(ids: Collection<String>): Set<String> {
         if (ids.isEmpty()) return emptySet()
         return db.hanziQueries.glyphsByIds(ids.toList()).executeAsList().map { it.id }.toSet()

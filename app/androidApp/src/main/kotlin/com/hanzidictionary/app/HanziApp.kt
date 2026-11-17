@@ -12,6 +12,7 @@ import com.hanzidictionary.core.HanziRepository
 import com.hanzidictionary.core.PhotoScanner
 import com.hanzidictionary.core.StudyRepository
 import com.hanzidictionary.core.UserRepository
+import com.hanzidictionary.core.migrateWordIds
 import org.json.JSONObject
 
 class HanziApp : Application() {
@@ -23,7 +24,11 @@ class HanziApp : Application() {
         if (settings.nudgeEnabled) NudgeScheduler.sync(this, enabled = true)
     }
 
-    val repository: HanziRepository by lazy { PackManager.openRepository(this) }
+    // Opening the pack also carries user.db over to its word ids (see migrateWordIds): this is
+    // the first moment both are available, and it has to happen before anything reads lists.
+    val repository: HanziRepository by lazy {
+        PackManager.openRepository(this).also { migrateWordIds(it, studyRepository) }
+    }
 
     /**
      * The flashcard each surface is currently showing, held for the life of the *process*.

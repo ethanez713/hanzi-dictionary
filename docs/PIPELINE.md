@@ -118,6 +118,10 @@ erDiagram
         TEXT glyph_id FK
         INTEGER position
     }
+    word_id_alias {
+        TEXT old_id PK
+        TEXT new_id
+    }
     sentence {
         TEXT simp
         TEXT zh
@@ -149,7 +153,7 @@ erDiagram
 
 ### Structural fields merge; interpretations stay claims
 
-`merge.resolve_decomposition` walks a fixed order: cjkvi-ids ahead of makemeahanzi, and within cjkvi-ids a script-matching region tag ahead of an untagged row. A decomposition whose parts are all encoded characters wins over a higher-priority row that bottoms out in an unencoded shape (`is_navigable`), because the character page has to be able to open the part. Simplified/traditional edges are the union of Unihan and OpenCC, classified as `merger`, `systematic`, or `irregular (unclassified)`. Component function and etymology text are `claim` rows with a `source_id`. So is `role_hint`: makemeahanzi's one-word note on what the meaning part lends each character (`{"component": "月", "hint": "flesh"}`), re-keyed after the Dong override to the component id the shipped `component_use` row carries (`radicals.role_hint_rows`). The app's meaning-family page groups a component's characters by it. `merge.py` does not vote them into one value. The pack is wider, and a disagreement stays visible on `component_use.resolution`.
+`merge.resolve_decomposition` walks a fixed order: cjkvi-ids ahead of makemeahanzi, and within cjkvi-ids a script-matching region tag ahead of an untagged row. A decomposition whose parts are all encoded characters wins over a higher-priority row that bottoms out in an unencoded shape (`is_navigable`), because the character page has to be able to open the part. Simplified/traditional edges are the union of Unihan and OpenCC, classified as `merger`, `systematic`, or `irregular (unclassified)`. Component function and etymology text are `claim` rows with a `source_id`. So is `role_hint`: makemeahanzi's one-word note on what the meaning part lends each character (`{"component": "月", "hint": "flesh"}`), re-keyed after the Dong override to the component id the shipped `component_use` row carries (`radicals.role_hint_rows`). The app's meaning-family page groups a component's characters by it. `merge.py` does not vote them into one value. The pack is wider, and a disagreement stays visible on `component_use.resolution`. Word ids are a hash of the CC-CEDICT entry (`build.stable_word_id`), so they survive a rebuild from a newer snapshot; `word_id_alias` maps the old positional ids to them for the one-time migration of user.db.
 
 ### Snapshots are immutable and self-describing
 

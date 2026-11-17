@@ -131,4 +131,42 @@ class StudyFixesTest {
         assertEquals(listOf(ni), user.knownItems())
         assertEquals(graded, study.cardState(hao.itemId))
     }
+
+    @Test
+    fun positionalWordIdsMoveToStableOnesEverywhere() {
+        val old = StudyItem.word("w000123")
+        val unmapped = StudyItem.word("w000999")
+        val list = study.createList("Saved", now)
+        study.addToList(list, old, now)
+        study.addToList(list, unmapped, now)
+        study.grade(old, Rating.GOOD, now = now)
+        user.logLookup(old.itemId)
+        study.triage(old, TriageVerdict.SKIP, now)
+        val before = study.cardState(old.itemId)!!
+
+        val pack = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        com.hanzidictionary.core.db.HanziDatabase.Schema.create(pack)
+        pack.execute(null, "INSERT INTO word_id_alias VALUES ('w000123', 'wabc123def456')", 0)
+        val hanzi = HanziRepository(pack)
+
+        assertEquals(1, migrateWordIds(hanzi, study))
+        assertEquals(setOf("wabc123def456", "w000999"), study.itemsInList(list).map { it.itemId }.toSet())
+        assertEquals(before.copy(itemId = "wabc123def456"), study.cardState("wabc123def456"))
+        assertNull(study.cardState(old.itemId))
+        assertEquals(listOf("wabc123def456"), user.recentLookups())
+        assertEquals(1, study.reviewHistory(listOf("wabc123def456")).getValue("wabc123def456").size)
+        assertEquals(setOf("w000999"), study.legacyWordIds(), "an id the pack can't map is left alone")
+        assertEquals(0, migrateWordIds(hanzi, study), "and a second run has nothing to do")
+    }
+
+    @Test
+    fun aPackWithoutAliasesMigratesNothing() {
+        // A pack built before stable ids still uses the positional ones: they are correct as they are.
+        val list = study.createList("Saved", now)
+        study.addToList(list, StudyItem.word("w000123"), now)
+        val pack = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        pack.execute(null, "CREATE TABLE word (id TEXT PRIMARY KEY)", 0)
+        assertEquals(0, migrateWordIds(HanziRepository(pack), study))
+        assertEquals(listOf("w000123"), study.itemsInList(list).map { it.itemId })
+    }
 }
